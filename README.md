@@ -52,3 +52,5 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + GUI forthcoming.
 
 Disclaimer: I am not a cryptography expert. This is a usable product in its current state, but is also a learning experience for me and a work in progress. Do not use for private files if you think a skilled hacker is less than 100 feet from you and trying to intercept them.
+
+Licenses for third-party tools and libraries used can be found in the "3rd_party_licenses" folder.
