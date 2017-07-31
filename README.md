@@ -30,11 +30,11 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + Standalone binary, no installation required.
 
 # Compilation instructions:
-+ cd flyingcarpet
+`cd flyingcarpet`
 
-+ go get ./...
+`go get ./...`
 
-+ go build
+`go build`
 
 # Restrictions:
 + Disables your wireless internet connection while in use (does not apply to Windows when receiving)
