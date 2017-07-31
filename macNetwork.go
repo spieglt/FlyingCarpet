@@ -41,7 +41,7 @@ func (m *MacNetwork) startAdHoc(t *Transfer) {
 
 func (m *MacNetwork) joinAdHoc(t *Transfer) {
 	// to clear arp cache, open tcp sockets?
-	m.resetWifi(t)
+	// m.resetWifi(t)
 
 	wifiInterface := m.getWifiInterface()
 	fmt.Println("Looking for ad-hoc network...")
