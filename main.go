@@ -100,7 +100,7 @@ func main() {
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
-		fmt.Printf("Transfer password: %s\nPlease use this password to start transfer on sending end within 60 seconds.\n",t.Passphrase)
+		fmt.Printf("Transfer password: %s\nPlease use this password to start transfer on sending end.\n",t.Passphrase)
 		if runtime.GOOS == "windows" {
 			n = WindowsNetwork{Mode: "receiving"}
 		} else if runtime.GOOS == "darwin" {
