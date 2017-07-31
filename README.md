@@ -17,36 +17,36 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 *\[Enter password from Mac\]*
 
 # Features:
-+Cross-platform, Mac and Windows.
++ Cross-platform, Mac and Windows.
 
-+Speeds over 120mbps (with laptops close together).
++ Speeds over 120mbps (with laptops close together).
 
-+Does not use Bluetooth or your local network, just wireless chip to wireless chip.
++ Does not use Bluetooth or your local network, just wireless chip to wireless chip.
 
-+Files encrypted in transit.
++ Files encrypted in transit.
 
-+Large files supported.
++ Large files supported.
 
-+Standalone binary, no installation required.
++ Standalone binary, no installation required.
 
 # Compilation instructions:
-+cd flyingcarpet
++ cd flyingcarpet
 
-+go get ./...
++ go get ./...
 
-+go build
++ go build
 
 # Restrictions:
-+Disables your wireless internet connection while in use (does not apply to Windows when receiving)
++ Disables your wireless internet connection while in use (does not apply to Windows when receiving)
 
-+On Mac: May have to click Allow or enter username and password at prompt to join ad-hoc network.
++ On Mac: May have to click Allow or enter username and password at prompt to join ad-hoc network.
 
-+On Windows: May have to allow TCP listener through firewall
++ On Windows: May have to allow TCP listener through firewall
 
-+Windows laptop must support hosted networking. To find out if yours does, run `netsh wlan show drivers`. If the `Hosted network supported : ` line says `No`, you can't use this product. Known issue on Surface Pro 3 and later.
++ Windows laptop must support hosted networking. To find out if yours does, run `netsh wlan show drivers`. If the `Hosted network supported : ` line says `No`, you can't use this product. Known issue on Surface Pro 3 and later.
 
-+If you choose to receive a filename that is already present in your current directory, it will be overwritten.
++ If you choose to receive a filename that is already present in your current directory, it will be overwritten.
 
-+GUI forthcoming.
++ GUI forthcoming.
 
 Disclaimer: I am not a cryptographic expert. This is a usable product in its current state, but is also a learning experience for me and a work in progress. Do not use for private files if you think a skilled hacker is less than 100 feet from you and trying to intercept them.
