@@ -30,6 +30,8 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + Standalone binary, no installation required.
 
 # Compilation instructions:
+###(Ready-to-use x64 binaries in `/bin` as well)
+
 `cd flyingcarpet`
 
 `go get ./...`
