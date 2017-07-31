@@ -23,9 +23,9 @@ const FIND_MAC_TIMEOUT = 60
 func main() {
 
 	if len(os.Args) == 1 {
-		fmt.Println("Usage: flyingcarpet -send ./picture.jpg -peer mac")
+		fmt.Println("Usage (Windows): flyingcarpet.exe -send ./picture.jpg -peer mac")
 		fmt.Println("[Enter password from receiving end.]\n")
-		fmt.Println("Usage: flyingcarpet -receive ./newpicture.jpg -peer windows")
+		fmt.Println("Usage (Mac): ./flyingcarpet -receive ./newpicture.jpg -peer windows")
 		fmt.Println("[Enter password into sending end.]")
 		return
 	}
