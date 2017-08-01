@@ -134,7 +134,7 @@ func (w WindowsNetwork) connectToPeer(t *Transfer) {
 		w.startAdHoc(t)
 	} else if w.Mode == "sending" {
 		if !w.checkForFile(t) {
-			log.Fatal("Could not find file to send:",t.Filepath)
+			log.Fatal("Could not find file to send: ",t.Filepath)
 		}
 		if t.Peer == "windows" {
 			w.joinAdHoc(t)

@@ -118,6 +118,9 @@ func (m *MacNetwork) findWindows() (peerIP string) {
 
 func (m MacNetwork) connectToPeer(t *Transfer) {
 	if m.Mode == "sending" {
+		if !m.checkForFile(t) {
+			log.Fatal("Could not find file to send: ",t.Filepath)
+		}
 		m.joinAdHoc(t)
 		go m.stayOnAdHoc(t)
 		if t.Peer == "mac" {
@@ -147,6 +150,14 @@ func (m MacNetwork) stayOnAdHoc(t *Transfer) {
 			m.joinAdHoc(t)
 		}
 	}
+}
+
+func (m MacNetwork) checkForFile(t *Transfer) bool {
+	_,err := os.Stat(t.Filepath)
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 func (m *MacNetwork) runCommand(cmd string, errDesc string) (output string) {

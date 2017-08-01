@@ -15,7 +15,6 @@ import (
 	"time"
 )
 
-const SAMPLEFILE = "./sample.jpg"
 const DIAL_TIMEOUT = 60
 const JOIN_ADHOC_TIMEOUT = 60
 const FIND_MAC_TIMEOUT = 60
@@ -23,10 +22,7 @@ const FIND_MAC_TIMEOUT = 60
 func main() {
 
 	if len(os.Args) == 1 {
-		fmt.Println("Usage (Windows): flyingcarpet.exe -send ./picture.jpg -peer mac")
-		fmt.Println("[Enter password from receiving end.]\n")
-		fmt.Println("Usage (Mac): ./flyingcarpet -receive ./newpicture.jpg -peer windows")
-		fmt.Println("[Enter password into sending end.]")
+		printUsage()
 		return
 	}
 
@@ -42,24 +38,6 @@ func main() {
 
 	receiveChan := make(chan bool)
 	sendChan := make(chan bool)
-
-	if os.Args[1] == "dev" { // use localhost for dev
-		fmt.Println("TEST BRANCH")
-		t := Transfer{
-			Passphrase:  "testing123",
-			SSID:        "flyingCarpet_test",
-			Filepath:    "./outFile",
-			RecipientIP: "127.0.0.1",
-			Port:        port,
-		}
-		go t.receiveFile(receiveChan)
-		<-receiveChan
-		fmt.Println("listener up")
-		t.Filepath = SAMPLEFILE
-		t.sendFile(nil)
-		fmt.Println("done is", <-receiveChan)
-		return
-	}
 
 	if peer == "" || ( peer != "mac" && peer != "windows" ) {
 		log.Fatal("Must choose [ -peer mac ] or [ -peer windows ].")
@@ -116,6 +94,9 @@ func main() {
 		// wait for reception to finish
 		<-receiveChan
 		fmt.Println("Reception complete, resetting WiFi and exiting.")
+	} else {
+		printUsage()
+		return
 	}
 	n.resetWifi(&t)
 }
@@ -181,6 +162,14 @@ func getPassword() (pw string) {
 		panic(err)
 	}
 	pw = strings.TrimSpace(pw)
+	return
+}
+
+func printUsage() {
+	fmt.Println("\nUsage (Windows): flyingcarpet.exe -send ./picture.jpg -peer mac")
+	fmt.Println("[Enter password from receiving end.]\n")
+	fmt.Println("Usage (Mac): ./flyingcarpet -receive ./newpicture.jpg -peer windows")
+	fmt.Println("[Enter password into sending end.]\n")
 	return
 }
 
