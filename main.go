@@ -79,6 +79,7 @@ func main() {
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 		fmt.Printf("Transfer password: %s\nPlease use this password to start transfer on sending end.\n",t.Passphrase)
+
 		if runtime.GOOS == "windows" {
 			n = WindowsNetwork{Mode: "receiving"}
 		} else if runtime.GOOS == "darwin" {
@@ -88,7 +89,6 @@ func main() {
 
 		t.Filepath = inFile
 		go t.receiveFile(receiveChan)
-
 		// wait for listener to be up
 		<-receiveChan
 		// wait for reception to finish
@@ -102,15 +102,12 @@ func main() {
 }
 
 func (t *Transfer) receiveFile(receiveChan chan bool) {
-
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(t.Port))
-	fmt.Println("Listening on", ":"+strconv.Itoa(t.Port))
-
-	receiveChan <- true
-
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("Listening on", ":"+strconv.Itoa(t.Port))
+	receiveChan <- true
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -123,18 +120,17 @@ func (t *Transfer) receiveFile(receiveChan chan bool) {
 }
 
 func (t *Transfer) sendFile(sendChan chan bool) bool {
-
 	var conn net.Conn
 	var err error
-
 	for i := 0; i < DIAL_TIMEOUT; i++ {
 		err = nil
 		conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond * 10)
 		if err != nil {
-			fmt.Printf("Failed connection %d to %s, retrying: %s", i, t.RecipientIP, err)
+			fmt.Printf("\rFailed connection %2d to %s, retrying: %s", i, t.RecipientIP, err)
 			time.Sleep(time.Second * 1)
 			continue
 		} else {
+			fmt.Printf("\n")
 			t.Conn = conn
 			go t.chunkAndSend(sendChan)
 			return true

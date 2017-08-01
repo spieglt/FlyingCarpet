@@ -26,9 +26,6 @@ func (m *MacNetwork) startAdHoc(t *Transfer) {
 	}
 	defer os.Remove(tmpLoc)
 
-	// to clear arp cache, open tcp sockets?
-	m.resetWifi(t)
-
 	cmd := exec.Command(tmpLoc, t.SSID, t.Passphrase)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -40,9 +37,6 @@ func (m *MacNetwork) startAdHoc(t *Transfer) {
 }
 
 func (m *MacNetwork) joinAdHoc(t *Transfer) {
-	// to clear arp cache, open tcp sockets?
-	// m.resetWifi(t)
-
 	wifiInterface := m.getWifiInterface()
 	fmt.Println("Looking for ad-hoc network...")
 	timeout := JOIN_ADHOC_TIMEOUT
@@ -100,9 +94,9 @@ func (m *MacNetwork) findMac() (peerIP string) {
 		}
 		pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 		if pingErr != nil {
-			fmt.Printf("\rCould not find peer. Waiting %3d more seconds. %s",timeout,pingErr)
-			timeout -= 5
-			time.Sleep(time.Second * time.Duration(5))
+			fmt.Printf("\rCould not find peer. Waiting %2d more seconds. %s",timeout,pingErr)
+			timeout -= 2
+			time.Sleep(time.Second * time.Duration(2))
 			continue
 		}
 		peerIPs := string(pingBytes)
