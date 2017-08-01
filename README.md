@@ -41,9 +41,9 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 # Restrictions:
 + Disables your wireless internet connection while in use (does not apply to Windows when receiving)
 
-+ On Mac: May have to click Allow or enter username and password at prompt to join ad-hoc network.
++ On Mac: May have to click Allow or enter username and password at prompt to join ad-hoc network. (Clicking cancel may still work.)
 
-+ On Windows: Flying Carpet must be allowed through firewall if receiving (instructions here https://technet.microsoft.com/en-us/library/cc766312(v=ws.10).aspx under "To add an inbound rule for a program..."). It should also be run as administrator to enable clearing of the ARP cache.
++ On Windows: Must run as admin to receive files (to allow connection through firewall and clear ARP cache). 
 
 + Windows laptop must support hosted networking. To find out if yours does, run `netsh wlan show drivers`. If the `Hosted network supported : ` line says `No`, you can't use this product. Known issue on Surface Pro 3 and later.
 
