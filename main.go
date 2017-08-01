@@ -61,7 +61,7 @@ func main() {
 		return
 	}
 
-	if peer == "" {
+	if peer == "" || ( peer != "mac" && peer != "windows" ) {
 		log.Fatal("Must choose [ -peer mac ] or [ -peer windows ].")
 	}
 	t := Transfer{
@@ -148,11 +148,10 @@ func (t *Transfer) sendFile(sendChan chan bool) bool {
 
 	for i := 0; i < DIAL_TIMEOUT; i++ {
 		err = nil
-		conn, err = net.Dial("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port))
+		conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond * 10)
 		if err != nil {
-			fmt.Printf("Failed connection %d to %s, retrying.\n", i, t.RecipientIP)
-			fmt.Println(err)
-			time.Sleep(time.Second * time.Duration(1))
+			fmt.Printf("Failed connection %d to %s, retrying: %s", i, t.RecipientIP, err)
+			time.Sleep(time.Second * 1)
 			continue
 		} else {
 			t.Conn = conn

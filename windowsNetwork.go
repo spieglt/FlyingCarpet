@@ -12,6 +12,7 @@ import (
 
 func (w *WindowsNetwork) startAdHoc(t *Transfer) {
 	// fmt.Println(w.runCommand("netsh winsock reset", "Could not reset network adapter."))
+	w.stopAdHoc()
 	fmt.Println("SSID:", t.SSID)
 	fmt.Println(w.runCommand("netsh wlan set hostednetwork mode=allow ssid="+t.SSID+" key="+t.Passphrase,
 		"Could not set hosted network settings."))
@@ -129,8 +130,12 @@ func (w *WindowsNetwork) getWifiInterface() string {
 
 func (w WindowsNetwork) connectToPeer(t *Transfer) {
 	if w.Mode == "receiving" {
+		w.addFirewallRule()
 		w.startAdHoc(t)
 	} else if w.Mode == "sending" {
+		if !w.checkForFile(t) {
+			log.Fatal("Could not find file to send:",t.Filepath)
+		}
 		if t.Peer == "windows" {
 			w.joinAdHoc(t)
 			t.RecipientIP = w.findPeer()
@@ -143,13 +148,35 @@ func (w WindowsNetwork) connectToPeer(t *Transfer) {
 
 func (w WindowsNetwork) resetWifi(t *Transfer) {
 	if w.Mode == "receiving" || t.Peer == "mac" {
-		// stop ad hoc
+		w.deleteFirewallRule()
 		w.stopAdHoc()
 	} else {
 		w.runCommand("netsh wlan delete profile name=" + t.SSID, "Could not delete ad hoc profile.")
 		// rejoin previous wifi
 		fmt.Println(w.runCommand("netsh wlan connect name=" + w.PreviousSSID, "Could not join ad hoc network."))
 	}
+}
+
+func (w WindowsNetwork) addFirewallRule() {
+	fwStr := "netsh advfirewall firewall add rule name=flyingcarpet dir=in action=allow program=" +
+	"c:\\users\\theron\\desktop\\flyingcarpet\\flyingcarpet.exe enable=yes profile=any localport=3290 protocol=tcp"
+	_,err := exec.Command("powershell", "-c", fwStr).CombinedOutput()
+	if err != nil {
+		log.Fatal("Could not create firewall rule. You must run as administrator to receive.")
+	}
+}
+
+func (w WindowsNetwork) deleteFirewallRule() {
+	fwStr := "netsh advfirewall firewall delete rule name=flyingcarpet"
+	fmt.Println(w.runCommand(fwStr, "Could not delete firewall rule!"))
+}
+
+func (w WindowsNetwork) checkForFile(t *Transfer) bool {
+	_,err := os.Stat(t.Filepath)
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 func (w *WindowsNetwork) runCommand(cmd string, errDesc string) (output string) {
@@ -163,6 +190,7 @@ func (w *WindowsNetwork) runCommand(cmd string, errDesc string) (output string) 
 func (w *WindowsNetwork) teardown(t *Transfer) {
 	if w.Mode == "receiving" {
 		os.Remove(t.Filepath)
+		w.deleteFirewallRule()
 	}
 	w.resetWifi(t)
 }

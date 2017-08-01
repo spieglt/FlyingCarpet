@@ -119,6 +119,7 @@ func (m *MacNetwork) findWindows() (peerIP string) {
 func (m MacNetwork) connectToPeer(t *Transfer) {
 	if m.Mode == "sending" {
 		m.joinAdHoc(t)
+		go m.stayOnAdHoc(t)
 		if t.Peer == "mac" {
 			t.RecipientIP = m.findMac()
 		} else if t.Peer == "windows" {
@@ -137,6 +138,15 @@ func (m MacNetwork) resetWifi(t *Transfer) {
 	wifiInterface := m.getWifiInterface()
 	cmdString := "networksetup -setairportpower " + wifiInterface + " off && networksetup -setairportpower " + wifiInterface + " on"
 	fmt.Println(m.runCommand(cmdString,"Could not reset WiFi adapter."))
+}
+
+func (m MacNetwork) stayOnAdHoc(t *Transfer) {
+	for {
+		time.Sleep(time.Second * 1)
+		if m.getCurrentWifi() != t.SSID {
+			m.joinAdHoc(t)
+		}
+	}
 }
 
 func (m *MacNetwork) runCommand(cmd string, errDesc string) (output string) {
