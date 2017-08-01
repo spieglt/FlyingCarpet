@@ -43,7 +43,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + On Mac: May have to click Allow or enter username and password at prompt to join ad-hoc network. (Clicking cancel may still work.)
 
-+ On Windows: Must run as admin to receive files (to allow connection through firewall and clear ARP cache). 
++ On Windows: Must run as administrator to receive files (to allow connection through firewall and clear ARP cache). Right-click Command Prompt icon in Start menu and select "Run as administrator," or press Win+X, A. 
 
 + Windows laptop must support hosted networking. To find out if yours does, run `netsh wlan show drivers`. If the `Hosted network supported : ` line says `No`, you can't use this product. Known issue on Surface Pro 3 and later.
 
