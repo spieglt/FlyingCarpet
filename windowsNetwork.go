@@ -84,7 +84,7 @@ func (w *WindowsNetwork) joinAdHoc(t *Transfer) {
 		cmdStr := "netsh wlan connect name=" + t.SSID
 		_,cmdErr := exec.Command("powershell", "-c", cmdStr).CombinedOutput()
 		if cmdErr != nil {
-			fmt.Printf("\rFailed to find the ad hoc network. Trying for %3d more seconds. %s",timeout,cmdErr)
+			fmt.Printf("\rFailed to find the ad hoc network. Trying for %2d more seconds. %s",timeout,cmdErr)
 		}
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(5))

@@ -52,7 +52,7 @@ func (m *MacNetwork) joinAdHoc(t *Transfer) {
 		if timeout <= 0 {
 			log.Fatal("Could not find the ad hoc network within the timeout period. Exiting.")
 		}
-		fmt.Printf("\rFailed to join %s network. Trying for %3d more seconds.", t.SSID, timeout)
+		fmt.Printf("\rFailed to join %s network. Trying for %2d more seconds.", t.SSID, timeout)
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(5))
 		joinAdHocBytes, err = exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
