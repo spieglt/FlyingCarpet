@@ -130,6 +130,7 @@ func (m MacNetwork) connectToPeer(t *Transfer) {
 	} else if m.Mode == "receiving" {
 		if t.Peer == "windows" {
 			m.joinAdHoc(t)
+			m.stayOnAdHoc(t)
 		} else if t.Peer == "mac" {
 			m.startAdHoc(t)
 		}
