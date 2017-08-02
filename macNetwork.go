@@ -15,14 +15,17 @@ func (m *MacNetwork) startAdHoc(t *Transfer) {
 
 	data, err := Asset("static/adhocnet")
 	if err != nil {
-		panic(err)
+		m.teardown(t)
+		log.Fatal("Static file error")
 	}
 	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 	if err != nil {
-		panic(err)
+		m.teardown(t)
+		log.Fatal("Write error")
 	}
 	if _, err = outFile.Write(data); err != nil {
-		panic(err)
+		m.teardown(t)
+		log.Fatal("Write error")
 	}
 	defer os.Remove(tmpLoc)
 
@@ -30,9 +33,10 @@ func (m *MacNetwork) startAdHoc(t *Transfer) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Println(string(output))
-		panic(err)
+		m.teardown(t)
+		log.Fatal("Error creating ad hoc network")
 	}
-	fmt.Printf("startAdHoc: %s\n", output)
+	fmt.Printf("startAdHoc: %sSSID: %s\n", output, t.SSID)
 
 }
 
@@ -51,7 +55,8 @@ func (m *MacNetwork) joinAdHoc(t *Transfer) {
 		time.Sleep(time.Second * time.Duration(5))
 		joinAdHocBytes, err = exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
 		if err != nil {
-			panic(err)
+			m.teardown(t)
+			log.Fatal("Error joining ad hoc network.")
 		}
 	}
 	fmt.Printf("\n")
@@ -162,7 +167,7 @@ func (m *MacNetwork) runCommand(cmd string, errDesc string) (output string) {
 	return strings.TrimSpace(string(cmdBytes))
 }
 
-func (m *MacNetwork) teardown(t *Transfer) {
+func (m MacNetwork) teardown(t *Transfer) {
 	if m.Mode == "receiving" {
 		os.Remove(t.Filepath)
 	}

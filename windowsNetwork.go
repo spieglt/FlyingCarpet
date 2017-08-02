@@ -61,11 +61,13 @@ func (w *WindowsNetwork) joinAdHoc(t *Transfer) {
 	// write file
 	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 	if err != nil {
-		panic(err)
+		w.teardown(t)
+		log.Fatal("Write error")
 	}
 	data := []byte(xmlDoc)
 	if _, err = outFile.Write(data); err != nil {
-		panic(err)
+		w.teardown(t)
+		log.Fatal("Write error")
 	}
 	defer os.Remove(tmpLoc)
 
@@ -187,7 +189,7 @@ func (w *WindowsNetwork) runCommand(cmd string, errDesc string) (output string) 
 	return strings.TrimSpace(string(cmdBytes))
 }
 
-func (w *WindowsNetwork) teardown(t *Transfer) {
+func (w WindowsNetwork) teardown(t *Transfer) {
 	if w.Mode == "receiving" {
 		os.Remove(t.Filepath)
 		w.deleteFirewallRule()

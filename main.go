@@ -65,7 +65,7 @@ func main() {
 		}
 		n.connectToPeer(&t)
 
-		if connected := t.sendFile(sendChan); connected == false {
+		if connected := t.sendFile(sendChan, n); connected == false {
 			fmt.Println("Could not establish TCP connection with peer")
 			return
 		}
@@ -78,7 +78,9 @@ func main() {
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
-		fmt.Printf("Transfer password: %s\nPlease use this password to start transfer on sending end.\n",t.Passphrase)
+		fmt.Printf("=============================\n" +
+			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n" +
+			"=============================\n",t.Passphrase)
 
 		if runtime.GOOS == "windows" {
 			n = WindowsNetwork{Mode: "receiving"}
@@ -88,7 +90,7 @@ func main() {
 		n.connectToPeer(&t)
 
 		t.Filepath = inFile
-		go t.receiveFile(receiveChan)
+		go t.receiveFile(receiveChan, n)
 		// wait for listener to be up
 		<-receiveChan
 		// wait for reception to finish
@@ -101,25 +103,27 @@ func main() {
 	n.resetWifi(&t)
 }
 
-func (t *Transfer) receiveFile(receiveChan chan bool) {
+func (t *Transfer) receiveFile(receiveChan chan bool, n Network) {
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(t.Port))
 	if err != nil {
-		panic(err)
+		n.teardown(t)
+		log.Fatal("Could not listen on :",t.Port)
 	}
 	fmt.Println("Listening on", ":"+strconv.Itoa(t.Port))
 	receiveChan <- true
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			panic(err)
+			n.teardown(t)
+			log.Fatal("Error accepting connection on :",t.Port)
 		}
 		t.Conn = conn
 		fmt.Println("Connection accepted")
-		go t.receiveAndAssemble(receiveChan)
+		go t.receiveAndAssemble(receiveChan, n)
 	}
 }
 
-func (t *Transfer) sendFile(sendChan chan bool) bool {
+func (t *Transfer) sendFile(sendChan chan bool, n Network) bool {
 	var conn net.Conn
 	var err error
 	for i := 0; i < DIAL_TIMEOUT; i++ {
@@ -132,7 +136,7 @@ func (t *Transfer) sendFile(sendChan chan bool) bool {
 		} else {
 			fmt.Printf("\n")
 			t.Conn = conn
-			go t.chunkAndSend(sendChan)
+			go t.chunkAndSend(sendChan, n)
 			return true
 		}
 	}
@@ -155,7 +159,7 @@ func getPassword() (pw string) {
 	fmt.Print("Enter password from receiving end: ")
 	pw,err := reader.ReadString('\n')
 	if err != nil {
-		panic(err)
+		panic("Error getting password.")
 	}
 	pw = strings.TrimSpace(pw)
 	return
@@ -183,6 +187,7 @@ type Network interface {
 	connectToPeer(*Transfer)
 	getCurrentWifi() string
 	resetWifi(*Transfer)
+	teardown(*Transfer)
 }
 
 type WindowsNetwork struct {

@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"os"
 	"time"
@@ -12,13 +13,14 @@ import (
 
 const CHUNKSIZE = 1000000
 
-func (t *Transfer) chunkAndSend(sendChan chan bool) {
+func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 	start := time.Now()
 	defer t.Conn.Close()
 
 	file, err := os.Open(t.Filepath)
 	if err != nil {
-		panic(err)
+		n.teardown(t)
+		log.Fatal("Error opening out file.")
 	}
 	defer file.Close()
 
@@ -36,8 +38,9 @@ func (t *Transfer) chunkAndSend(sendChan chan bool) {
 		buffer := make([]byte, bufferSize)
 		bytesRead, err := file.Read(buffer)
 		if int64(bytesRead) != bufferSize {
+			n.teardown(t)
 			fmt.Printf("bytesRead: %d\nbufferSize: %d\n", bytesRead, bufferSize)
-			panic("error reading file into buffer, incorrect number of bytes")
+			log.Fatal("Error reading out file.")
 		}
 		bytesLeft -= bufferSize
 
@@ -48,13 +51,15 @@ func (t *Transfer) chunkAndSend(sendChan chan bool) {
 		chunkSize := int64(len(encryptedBuffer))
 		err = binary.Write(t.Conn, binary.BigEndian, chunkSize)
 		if err != nil {
-			panic(err)
+			n.teardown(t)
+			log.Fatal("Error writing chunk length.")
 		}
 
 		// send buffer
 		bytes, err := t.Conn.Write(encryptedBuffer)
 		if bytes != len(encryptedBuffer) {
-			panic("some bytes not sent!")
+			n.teardown(t)
+			log.Fatal("Send error.")
 		}
 
 		fmt.Printf("\rProgress: %3.0f%%", (float64(fileSize)-float64(bytesLeft))/float64(fileSize)*100)
@@ -66,14 +71,15 @@ func (t *Transfer) chunkAndSend(sendChan chan bool) {
 	return
 }
 
-func (t *Transfer) receiveAndAssemble(receiveChan chan bool) {
+func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 	start := time.Now()
 	defer t.Conn.Close()
 	os.Remove(t.Filepath)
 
 	outFile, err := os.OpenFile(t.Filepath, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
-		panic(err)
+		n.teardown(t)
+		log.Fatal("Error creating out file.")
 	}
 	defer outFile.Close()
 
@@ -85,7 +91,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool) {
 			fmt.Println("err:", err)
 		}
 		if chunkSize == 0 {
-			// fmt.Println("done receiving")
+			// done receiving
 			t.Conn.Close()
 			break
 		}
@@ -94,7 +100,8 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool) {
 		chunk := make([]byte, chunkSize)
 		bytesReceived, err := io.ReadFull(t.Conn, chunk)
 		if err != nil {
-			panic(err)
+			n.teardown(t)
+			log.Fatal("Error reading from stream.")
 		}
 		if int64(bytesReceived) != chunkSize {
 			fmt.Println("bytesReceived:", bytesReceived)
@@ -103,12 +110,10 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool) {
 
 		// decrypt and add to outfile
 		decryptedChunk := decrypt(chunk, t.Passphrase)
-		bytesWritten, err := outFile.Write(decryptedChunk)
+		_, err = outFile.Write(decryptedChunk)
 		if err != nil {
-			panic(err)
-		}
-		if bytesWritten != len(decryptedChunk) {
-			panic("not all decrypted bytes written to file!")
+			n.teardown(t)
+			log.Fatal("Error writing to out file.")
 		}
 	}
 	fmt.Println("Received file size: ", getSize(outFile))
