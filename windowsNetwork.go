@@ -160,8 +160,9 @@ func (w WindowsNetwork) resetWifi(t *Transfer) {
 }
 
 func (w WindowsNetwork) addFirewallRule() {
+	execPath,_ := os.Executable()
 	fwStr := "netsh advfirewall firewall add rule name=flyingcarpet dir=in action=allow program=" +
-	"c:\\users\\theron\\desktop\\flyingcarpet\\flyingcarpet.exe enable=yes profile=any localport=3290 protocol=tcp"
+	execPath + " enable=yes profile=any localport=3290 protocol=tcp"
 	_,err := exec.Command("powershell", "-c", fwStr).CombinedOutput()
 	if err != nil {
 		log.Fatal("Could not create firewall rule. You must run as administrator to receive.")
