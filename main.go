@@ -45,6 +45,7 @@ func main() {
 	t := Transfer{
 		Port:       port,
 		Peer:       peer,
+		AdHocChan:	make(chan bool),
 	}
 	var n Network
 
@@ -130,7 +131,7 @@ func (t *Transfer) sendFile(sendChan chan bool, n Network) bool {
 		err = nil
 		conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond * 10)
 		if err != nil {
-			fmt.Printf("\rFailed connection %2d to %s, retrying: %s", i, t.RecipientIP, err)
+			fmt.Printf("\rFailed connection %2d to %s, retrying.", i, t.RecipientIP)
 			time.Sleep(time.Second * 1)
 			continue
 		} else {
@@ -181,6 +182,7 @@ type Transfer struct {
 	Port        int
 	RecipientIP string
 	Peer        string
+	AdHocChan	chan bool
 }
 
 type Network interface {

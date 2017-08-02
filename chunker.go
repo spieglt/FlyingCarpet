@@ -64,10 +64,9 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 
 		fmt.Printf("\rProgress: %3.0f%%", (float64(fileSize)-float64(bytesLeft))/float64(fileSize)*100)
 	}
+	t.AdHocChan <- false
 	fmt.Printf("\nSending took %s\n", time.Since(start))
-	if sendChan != nil {
-		sendChan <- true
-	}
+	sendChan <- true
 	return
 }
 

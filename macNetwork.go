@@ -10,7 +10,7 @@ import (
 )
 
 func (m *MacNetwork) startAdHoc(t *Transfer) {
-	tmpLoc := "/tmp/adhocnet"
+	tmpLoc := "/private/tmp/adhocnet"
 	os.Remove(tmpLoc)
 
 	data, err := Asset("static/adhocnet")
@@ -21,7 +21,7 @@ func (m *MacNetwork) startAdHoc(t *Transfer) {
 	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 	if err != nil {
 		m.teardown(t)
-		log.Fatal("Write error")
+		log.Fatal("Error creating temp file")
 	}
 	if _, err = outFile.Write(data); err != nil {
 		m.teardown(t)
@@ -144,9 +144,14 @@ func (m MacNetwork) resetWifi(t *Transfer) {
 
 func (m MacNetwork) stayOnAdHoc(t *Transfer) {
 	for {
-		time.Sleep(time.Second * 1)
-		if m.getCurrentWifi() != t.SSID {
-			m.joinAdHoc(t)
+		select {
+		case <- t.AdHocChan:
+			return
+		default:
+			time.Sleep(time.Second * 4)
+			if m.getCurrentWifi() != t.SSID {
+				m.joinAdHoc(t)
+			}
 		}
 	}
 }
