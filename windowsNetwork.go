@@ -148,6 +148,7 @@ func (w WindowsNetwork) connectToPeer(t *Transfer) {
 			w.joinAdHoc(t)
 			t.RecipientIP = w.findPeer()
 		} else if t.Peer == "mac" {
+			w.addFirewallRule()
 			w.startAdHoc(t)
 			t.RecipientIP = w.findPeer()
 		}
@@ -171,6 +172,7 @@ func (w WindowsNetwork) addFirewallRule() {
 		log.Fatal("Failed to get executable path.")
 	}
 	execPath = execPath + os.Args[0]
+	fmt.Println(execPath)
 	fwStr := "netsh advfirewall firewall add rule name=flyingcarpet dir=in action=allow program=" +
 	execPath + " enable=yes profile=any localport=3290 protocol=tcp"
 	_,err = exec.Command("powershell", "-c", fwStr).CombinedOutput()
