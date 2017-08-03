@@ -149,10 +149,10 @@ func (m MacNetwork) stayOnAdHoc(t *Transfer) {
 		case <- t.AdHocChan:
 			return
 		default:
-			time.Sleep(time.Second * 1)
 			if m.getCurrentWifi() != t.SSID {
 				m.joinAdHoc(t)
 			}
+			time.Sleep(time.Second * 1)
 		}
 	}
 }
