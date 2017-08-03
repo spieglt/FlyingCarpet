@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 	"log"
+	"path/filepath"
 	"regexp"
 	"time"
 )
@@ -165,10 +166,14 @@ func (w WindowsNetwork) resetWifi(t *Transfer) {
 }
 
 func (w WindowsNetwork) addFirewallRule() {
-	execPath,_ := os.Executable()
+	execPath,err := filepath.Abs(".\\")
+	if err != nil {
+		log.Fatal("Failed to get executable path.")
+	}
+	execPath = execPath + os.Args[0]
 	fwStr := "netsh advfirewall firewall add rule name=flyingcarpet dir=in action=allow program=" +
 	execPath + " enable=yes profile=any localport=3290 protocol=tcp"
-	_,err := exec.Command("powershell", "-c", fwStr).CombinedOutput()
+	_,err = exec.Command("powershell", "-c", fwStr).CombinedOutput()
 	if err != nil {
 		log.Fatal("Could not create firewall rule. You must run as administrator to receive. (Press Win+X and then A to start an administrator command prompt.)")
 	}
