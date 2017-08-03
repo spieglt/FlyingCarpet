@@ -171,7 +171,7 @@ func (w WindowsNetwork) addFirewallRule() {
 	if err != nil {
 		log.Fatal("Failed to get executable path.")
 	}
-	execPath = execPath + os.Args[0]
+	execPath = execPath + "\\" + os.Args[0]
 	fmt.Println(execPath)
 	fwStr := "netsh advfirewall firewall add rule name=flyingcarpet dir=in action=allow program=" +
 	execPath + " enable=yes profile=any localport=3290 protocol=tcp"
