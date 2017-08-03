@@ -146,7 +146,7 @@ func (t *Transfer) sendFile(sendChan chan bool, n Network) bool {
 }
 
 func generatePassword() string {
-	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	const chars = "0123456789abcdefghijkmnopqrstuvwxyzABCDEFGHIJKLMNPQRSTUVWXYZ"
 	rand.Seed(time.Now().UTC().UnixNano())
 	pwBytes := make([]byte, 8)
 	for i := range pwBytes {

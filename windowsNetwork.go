@@ -16,6 +16,11 @@ func (w *WindowsNetwork) startAdHoc(t *Transfer) {
 	fmt.Println("SSID:", t.SSID)
 	fmt.Println(w.runCommand("netsh wlan set hostednetwork mode=allow ssid="+t.SSID+" key="+t.Passphrase,
 		"Could not set hosted network settings."))
+	_, err := exec.Command("netsh", "wlan", "start", "hostednetwork").CombinedOutput()
+	if err != nil {
+		w.teardown(t)
+		log.Fatal("Could not start hosted network. This computer's wireless card/driver may not support it. ", err)
+	}
 	fmt.Println(w.runCommand("netsh wlan start hostednetwork", "Could not start hosted network."))
 }
 
@@ -165,7 +170,7 @@ func (w WindowsNetwork) addFirewallRule() {
 	execPath + " enable=yes profile=any localport=3290 protocol=tcp"
 	_,err := exec.Command("powershell", "-c", fwStr).CombinedOutput()
 	if err != nil {
-		log.Fatal("Could not create firewall rule. You must run as administrator to receive.")
+		log.Fatal("Could not create firewall rule. You must run as administrator to receive. (Press Win+X and then A to start an administrator command prompt.)")
 	}
 }
 
