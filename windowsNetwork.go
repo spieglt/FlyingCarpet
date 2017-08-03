@@ -198,7 +198,6 @@ func (w *WindowsNetwork) runCommand(cmd string, errDesc string) (output string) 
 func (w WindowsNetwork) teardown(t *Transfer) {
 	if w.Mode == "receiving" {
 		os.Remove(t.Filepath)
-		w.deleteFirewallRule()
 	}
 	w.resetWifi(t)
 }
