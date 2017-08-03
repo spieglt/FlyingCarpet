@@ -120,9 +120,10 @@ func (w *WindowsNetwork) findPeer() (peerIP string) {
 		peerIP = w.runCommand("$(arp -a -N "+ifAddr+" | Select-String -Pattern '(?<ip>192\\.168\\.173\\.\\d{1,3})' | Select-String -NotMatch '(?<nm>("+
 			ifAddr+"|192.168.173.255)\\s)').Matches.Value",
 			"Could not get peer IP.")
-		fmt.Println("peer IP:", peerIP)
+		fmt.Printf("\rpeer IP: %s", peerIP)
 		time.Sleep(time.Second * time.Duration(2))
 	}
+	fmt.Printf("\n")
 	return
 }
 
@@ -167,12 +168,11 @@ func (w WindowsNetwork) resetWifi(t *Transfer) {
 }
 
 func (w WindowsNetwork) addFirewallRule() {
-	execPath,err := filepath.Abs(".\\")
+	execPath,err := filepath.Abs(".")
 	if err != nil {
 		log.Fatal("Failed to get executable path.")
 	}
 	execPath = execPath + "\\" + os.Args[0]
-	fmt.Println(execPath)
 	fwStr := "netsh advfirewall firewall add rule name=flyingcarpet dir=in action=allow program=" +
 	execPath + " enable=yes profile=any localport=3290 protocol=tcp"
 	_,err = exec.Command("powershell", "-c", fwStr).CombinedOutput()
