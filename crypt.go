@@ -8,7 +8,6 @@ import (
 
 func encrypt(chunk []byte, passphrase string) (encrypted []byte) {
 
-	// KDF goes here. How to transmit random salt to receiving end?
 	var key [32]byte
 	copy(key[:], passphrase)
 
