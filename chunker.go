@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"os"
 	"runtime"
 	"time"
@@ -29,13 +28,12 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 	fmt.Printf("File size: %d\n", fileSize)
 	fmt.Printf("MD5 hash: %x\n", getHash(t.Filepath))
 
-	// problem with using this this way? https://mrekucci.blogspot.com/2015/07/dont-abuse-mathmax-mathmin.html
-	numChunks := uint64(math.Ceil(float64(fileSize) / float64(CHUNKSIZE)))
+	numChunks := ceil(fileSize, CHUNKSIZE)
 
 	bytesLeft := fileSize
-	var i uint64
+	var i int64
 	for i = 0; i < numChunks; i++ {
-		bufferSize := int64(math.Min(float64(CHUNKSIZE), float64(bytesLeft)))
+		bufferSize := min(CHUNKSIZE, bytesLeft)
 		buffer := make([]byte, bufferSize)
 		bytesRead, err := file.Read(buffer)
 		if int64(bytesRead) != bufferSize {
@@ -144,4 +142,17 @@ func getHash(filepath string) (md5hash []byte) {
 	}
 	md5hash = hash.Sum(nil)
 	return
+}
+
+
+func ceil(x,y int64) int64 {
+	if x % y != 0 {
+		return ((x/y) + 1)
+	}
+	return x/y
+}
+
+func min(x,y int64) int64 {
+	if x < y { return x }
+	return y
 }

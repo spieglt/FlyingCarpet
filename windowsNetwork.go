@@ -179,6 +179,7 @@ func (w WindowsNetwork) addFirewallRule() {
 	if err != nil {
 		log.Fatal("Could not create firewall rule. You must run as administrator to receive. (Press Win+X and then A to start an administrator command prompt.)")
 	}
+	fmt.Println("Firewall rule created.")
 }
 
 func (w WindowsNetwork) deleteFirewallRule() {
