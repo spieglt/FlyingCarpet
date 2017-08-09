@@ -147,6 +147,8 @@ func (m MacNetwork) stayOnAdHoc(t *Transfer) {
 	for {
 		select {
 		case <- t.AdHocChan:
+			fmt.Println("Stopping ad hoc connection.")
+			t.AdHocChan <- true
 			return
 		default:
 			if m.getCurrentWifi() != t.SSID {

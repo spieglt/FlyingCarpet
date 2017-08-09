@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const CHUNKSIZE = 1000000
+const CHUNKSIZE = 1000000	// 1MB
 
 func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 	start := time.Now()
@@ -65,6 +65,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 	}
 	if runtime.GOOS == "darwin" {
 		t.AdHocChan <- false
+		<- t.AdHocChan
 	}
 	fmt.Printf("\nSending took %s\n", time.Since(start))
 	sendChan <- true
@@ -119,7 +120,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 	fmt.Println("Received file size: ", getSize(outFile))
 	fmt.Printf("Received file hash: %x\n", getHash(t.Filepath))
 	fmt.Printf("Receiving took %s\n", time.Since(start))
-	speed := (float64(getSize(outFile)*8) / 1000000) / float64(time.Since(start)/1000000000)
+	speed := (float64(getSize(outFile)*8) / 1000000) / (float64(time.Since(start))/1000000000)
 	fmt.Printf("Speed: %.2fmbps\n", speed)
 	// signal main that it's okay to return
 	receiveChan <- true
