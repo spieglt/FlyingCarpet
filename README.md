@@ -25,7 +25,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + Files encrypted in transit.
 
-+ Large files supported.
++ Large files supported (<10MB RAM usage while transferring a 4.5GB file).
 
 + Standalone binary, no installation required.
 
