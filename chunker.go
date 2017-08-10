@@ -63,6 +63,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 
 		fmt.Printf("\rProgress: %3.0f%%", (float64(fileSize)-float64(bytesLeft))/float64(fileSize)*100)
 	}
+	fmt.Printf("\n")
 	if runtime.GOOS == "darwin" {
 		t.AdHocChan <- false
 		<- t.AdHocChan
