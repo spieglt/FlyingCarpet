@@ -51,8 +51,6 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + After a successful transfer, Flying Carpet will attempt to rejoin you to your previous wireless networks. If there is an error midway through the process, this may fail.
 
-+ GUI forthcoming.
-
 Disclaimer: I am not a cryptography expert. This is a usable product in its current state, but is also an experiment and a work in progress. Do not use for private files if you think a skilled attacker is less than 100 feet from you and trying to intercept them.
 
 Licenses for third-party tools and libraries used can be found in the "3rd_party_licenses" folder.
@@ -62,3 +60,13 @@ Licenses for third-party tools and libraries used can be found in the "3rd_party
 ![](pictures/macDemo.png)
 
 ![](pictures/winDemo.png)
+
+# Planned features
+
++ Ubuntu support
+
++ GUI
+
++ On Windows, add support for WiFi Direct API so that chips/drivers without support for ad hoc (IBSS) hosted networks can use Flying Carpet (applies to Surface 3 Pro and later and some other newer Windows 10 PCs).
+
+I will not have much time to work on this until mid-October, so it may be until November that progress is made on these items. If you've used Flying Carpet, please tell me whether it worked or not. I have had very little testing and feedback so far. Thank you for your interest!
