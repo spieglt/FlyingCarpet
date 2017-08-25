@@ -1,1 +1,3 @@
 ui/electron/node_modules
+.DS_Store
+flyingcarpet*
