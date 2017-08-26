@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -20,6 +21,8 @@ const JOIN_ADHOC_TIMEOUT = 60
 const FIND_MAC_TIMEOUT = 60
 
 func main() {
+
+	startGui()
 
 	if len(os.Args) == 1 {
 		printUsage()
@@ -172,6 +175,37 @@ func printUsage() {
 	fmt.Println("Usage (Mac): ./flyingcarpet -receive ./newpicture.jpg -peer windows")
 	fmt.Println("[Enter password into sending end.]\n")
 	return
+}
+
+func startGui() {
+	path := "./FlyingCarpetWithStoryboard.app.zip"
+	data, err := Asset("static/FlyingCarpetWithStoryboard.app.zip")
+	if err != nil {
+		log.Fatal("Static file error")
+	}
+	outFile, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0744)
+	if err != nil {
+		log.Fatal("Error creating GUI file")
+	}
+	if _, err = outFile.Write(data); err != nil {
+		log.Fatal("Write error")
+	}
+
+	cmd := exec.Command("unzip", path)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Println(string(output))
+		log.Fatal("Error unzipping GUI file")
+	}
+
+	cmd = exec.Command("open","./FlyingCarpetWithStoryboard.app")
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		fmt.Println(string(output))
+		log.Fatal("Error running GUI.")
+	}
+	fmt.Println("%s",output)
+
 }
 
 type Transfer struct {
