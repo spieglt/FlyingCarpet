@@ -2,3 +2,6 @@ notes
 flyingcarpet
 .DS_Store
 static
+ui/
+xcuserdata
+*.xcworkspace 
