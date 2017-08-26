@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Flying Carpet</title>
+  </head>
+  <body>
+    <h1>Flying Carpet</h1>
+    <!-- All of the Node.js APIs are available in this renderer process. -->
+    <form id="configForm" onsubmit="return false">
+      Peer OS:
+      <fieldset id="osGroup">
+          <input type="radio" value="macOS" name="osGroup">macOS <br>
+          <input type="radio" value="Windows" name="osGroup">Windows <br>
+      </fieldset><br>
+      Mode:
+      <fieldset id="modeGroup">
+          <input type="radio" value="Sending" name="modeGroup">Sending <br>
+          <input type="radio" value="Receiving" name="modeGroup">Receiving <br>
+      </fieldset><br>
+      <div id="sendForm" style="display:none">
+        <input type="file" id="inputFile" style="display:none">
+        <button id="fileButton">Choose File</button>
+        <div id="fileLabel"></div>
+      </div>
+      <div id="receiveForm" style="display:none">
+        <input type="file" id="folderChooser" style="display:none" webkitdirectory><br>
+        <button id="folderButton">Choose Folder</button>
+        Enter file name: <span contenteditable="true" type="text" id="outputFile" style="max-width: 500px; border: solid 1px black; min-width:100px; padding: 5px; display: inline-block;"></span>
+      </div><br>
+      <button id="startButton">Start</button>
+    </form><br>
+    <div id="errorDiv" style="color:red"></div>
+  </body>
+
+  <script>
+    // You can also require other files to run in this process
+    require('./renderer.js');
+  </script>
+</html>
+

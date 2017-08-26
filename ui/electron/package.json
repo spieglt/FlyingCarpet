@@ -1,0 +1,13 @@
+{
+  "name": "Flying Carpet",
+  "version": "1.0.0",
+  "description": "Encrypted, peer-to-peer file transfer over ad hoc wifi.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "Theron Spiegl",
+  "devDependencies": {
+    "electron": "~1.6.2"
+  }
+}
