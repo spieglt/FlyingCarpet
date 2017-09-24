@@ -9,11 +9,11 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
+	"github.com/dontpanic92/wxGo/wx"
 )
 
 const DIAL_TIMEOUT = 60
@@ -22,7 +22,13 @@ const FIND_MAC_TIMEOUT = 60
 
 func main() {
 
-	startGui()
+	fmt.Println("hey")
+	//showGui()
+	wx1 := wx.NewApp()
+    f := showGui()
+    f.Show()
+    wx1.MainLoop()
+    f.Destroy()
 
 	if len(os.Args) == 1 {
 		printUsage()
@@ -177,34 +183,56 @@ func printUsage() {
 	return
 }
 
-func startGui() {
-	path := "./FlyingCarpetWithStoryboard.app.zip"
-	data, err := Asset("static/FlyingCarpetWithStoryboard.app.zip")
-	if err != nil {
-		log.Fatal("Static file error")
-	}
-	outFile, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0744)
-	if err != nil {
-		log.Fatal("Error creating GUI file")
-	}
-	if _, err = outFile.Write(data); err != nil {
-		log.Fatal("Write error")
-	}
+func showGui() ControlDialog {
 
-	cmd := exec.Command("unzip", path)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Println(string(output))
-		log.Fatal("Error unzipping GUI file")
-	}
+	fmt.Println("hey")
+    f := ControlDialog{}
+    f.Dialog = wx.NewDialog(wx.NullWindow, -1, "Flying Carpet")
+    
+    f.SetSizeHints( wx.DefaultSize, wx.DefaultSize )
+		
+    bSizer2 := wx.NewBoxSizer( wx.HORIZONTAL )
+    bSizer3 := wx.NewBoxSizer( wx.VERTICAL )
+    
+    bSizerBottom := wx.NewBoxSizer( wx.VERTICAL )
+    bSizerTotal := wx.NewBoxSizer( wx.VERTICAL )
 
-	cmd = exec.Command("open","./FlyingCarpetWithStoryboard.app")
-	output, err = cmd.CombinedOutput()
-	if err != nil {
-		fmt.Println(string(output))
-		log.Fatal("Error running GUI.")
-	}
-	fmt.Println("%s",output)
+    radiobox1 := wx.NewRadioBox( f, wx.ID_ANY, "Peer OS", wx.DefaultPosition, wx.DefaultSize, []string{"macOS", "Windows"}, 1, wx.HORIZONTAL )
+    radiobox1.SetSelection( 0 )
+    bSizer3.Add( radiobox1, 0, wx.ALL|wx.EXPAND, 5 )
+    
+    textCtrl2 := wx.NewTextCtrl( f, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, 0)
+    bSizer3.Add( textCtrl2, 0, wx.ALL|wx.EXPAND, 5 )
+
+    bSizer2.Add( bSizer3, 1, wx.EXPAND, 5 )
+    bSizer4 := wx.NewBoxSizer( wx.VERTICAL )
+
+    radiobox2 := wx.NewRadioBox(f, wx.ID_ANY, "Mode", wx.DefaultPosition, wx.DefaultSize, []string{"Send", "Receive"}, 1, wx.HORIZONTAL )
+    bSizer4.Add( radiobox2, 1, wx.ALL|wx.EXPAND, 5 )
+
+    
+    button5 := wx.NewButton( f, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
+    bSizerBottom.Add( button5, 0, wx.ALL|wx.EXPAND, 5 )
+    
+
+    bSizer2.Add( bSizer4, 1, wx.EXPAND, 5 )
+
+    bSizerTotal.Add( bSizer2, 1, wx.EXPAND, 5 )
+    bSizerTotal.Add( bSizerBottom, 1, wx.EXPAND, 5 )
+    wx.Bind(f, wx.EVT_BUTTON, func(e wx.Event) {
+        fd := wx.NewFileDialogT(wx.NullWindow, "Select Files", "", "", "*", wx.FD_MULTIPLE, wx.DefaultPosition, wx.DefaultSize, "Open")
+        if fd.ShowModal() != wx.ID_CANCEL {
+            list := make([]string, 0)
+            fd.GetFilenames(&list)
+        }
+    }, button5.GetId())
+    
+    f.SetSizer( bSizerTotal )
+    f.Layout()
+    
+    f.Centre( wx.BOTH )
+    
+    return f
 
 }
 
@@ -233,4 +261,8 @@ type WindowsNetwork struct {
 
 type MacNetwork struct {
 	Mode string // sending or receiving
+}
+
+type ControlDialog struct {
+    wx.Dialog
 }
