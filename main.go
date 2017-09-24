@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 	"github.com/dontpanic92/wxGo/wx"
+	"os/user"
 )
 
 const DIAL_TIMEOUT = 60
@@ -21,14 +22,12 @@ const JOIN_ADHOC_TIMEOUT = 60
 const FIND_MAC_TIMEOUT = 60
 
 func main() {
-
-	fmt.Println("hey")
-	//showGui()
+	
 	wx1 := wx.NewApp()
-    f := showGui()
-    f.Show()
-    wx1.MainLoop()
-    f.Destroy()
+	f := showGui()
+	f.Show()
+	wx1.MainLoop()
+	f.Destroy()
 
 	if len(os.Args) == 1 {
 		printUsage()
@@ -185,54 +184,105 @@ func printUsage() {
 
 func showGui() ControlDialog {
 
-	fmt.Println("hey")
-    f := ControlDialog{}
-    f.Dialog = wx.NewDialog(wx.NullWindow, -1, "Flying Carpet")
-    
-    f.SetSizeHints( wx.DefaultSize, wx.DefaultSize )
-		
-    bSizer2 := wx.NewBoxSizer( wx.HORIZONTAL )
-    bSizer3 := wx.NewBoxSizer( wx.VERTICAL )
-    
-    bSizerBottom := wx.NewBoxSizer( wx.VERTICAL )
-    bSizerTotal := wx.NewBoxSizer( wx.VERTICAL )
+	f := ControlDialog{}
+	f.Dialog = wx.NewDialog(wx.NullWindow, -1, "Flying Carpet")
+	
+	f.SetSizeHints( wx.DefaultSize, wx.DefaultSize )
+	
+	// radio buttons box
+	radioSizer := wx.NewBoxSizer( wx.HORIZONTAL )
 
-    radiobox1 := wx.NewRadioBox( f, wx.ID_ANY, "Peer OS", wx.DefaultPosition, wx.DefaultSize, []string{"macOS", "Windows"}, 1, wx.HORIZONTAL )
-    radiobox1.SetSelection( 0 )
-    bSizer3.Add( radiobox1, 0, wx.ALL|wx.EXPAND, 5 )
-    
-    textCtrl2 := wx.NewTextCtrl( f, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, 0)
-    bSizer3.Add( textCtrl2, 0, wx.ALL|wx.EXPAND, 5 )
+	// peer os box
+	peerSizer := wx.NewBoxSizer( wx.VERTICAL )
+	radiobox1 := wx.NewRadioBox( f, wx.ID_ANY, "Peer OS", wx.DefaultPosition, wx.DefaultSize, []string{"macOS", "Windows"}, 1, wx.HORIZONTAL )
+	// radiobox1.SetSelection( 0 )
+	peerSizer.Add( radiobox1, 1, wx.ALL|wx.EXPAND, 5 )
+	
+	// bottom half and big container
+	bSizerBottom := wx.NewBoxSizer( wx.VERTICAL )
+	bSizerTotal := wx.NewBoxSizer( wx.VERTICAL )
 
-    bSizer2.Add( bSizer3, 1, wx.EXPAND, 5 )
-    bSizer4 := wx.NewBoxSizer( wx.VERTICAL )
+	// file selection box
+	fileSizer := wx.NewBoxSizer( wx.HORIZONTAL )
+	sendButton := wx.NewButton(f, wx.ID_ANY, "Select File", wx.DefaultPosition, wx.DefaultSize, 0)
+	sendButton.Hide()
+	receiveButton := wx.NewButton(f, wx.ID_ANY, "Select Folder", wx.DefaultPosition, wx.DefaultSize, 0)
+	receiveButton.Hide()
+	fileBox := wx.NewTextCtrl( f, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, 0)
+	fileBox.Hide()
+	fileSizer.Add( sendButton, 0, wx.ALL|wx.EXPAND, 5 )
+	fileSizer.Add( receiveButton, 0, wx.ALL|wx.EXPAND, 5 )
+	fileSizer.Add( fileBox, 1, wx.ALL|wx.EXPAND, 5 )
+	
+	bSizerBottom.Add(fileSizer, 0, wx.ALL|wx.EXPAND, 5 )
 
-    radiobox2 := wx.NewRadioBox(f, wx.ID_ANY, "Mode", wx.DefaultPosition, wx.DefaultSize, []string{"Send", "Receive"}, 1, wx.HORIZONTAL )
-    bSizer4.Add( radiobox2, 1, wx.ALL|wx.EXPAND, 5 )
+	radioSizer.Add( peerSizer, 1, wx.EXPAND, 5 )
+	modeSizer := wx.NewBoxSizer( wx.VERTICAL )
 
-    
-    button5 := wx.NewButton( f, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
-    bSizerBottom.Add( button5, 0, wx.ALL|wx.EXPAND, 5 )
-    
+	radiobox2 := wx.NewRadioBox(f, wx.ID_ANY, "Mode", wx.DefaultPosition, wx.DefaultSize, []string{"Send", "Receive"}, 1, wx.HORIZONTAL )
+	modeSizer.Add( radiobox2, 1, wx.ALL|wx.EXPAND, 5 )
 
-    bSizer2.Add( bSizer4, 1, wx.EXPAND, 5 )
+	
+	button5 := wx.NewButton( f, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
+	bSizerBottom.Add( button5, 0, wx.ALL|wx.EXPAND, 5 )
+	
 
-    bSizerTotal.Add( bSizer2, 1, wx.EXPAND, 5 )
-    bSizerTotal.Add( bSizerBottom, 1, wx.EXPAND, 5 )
-    wx.Bind(f, wx.EVT_BUTTON, func(e wx.Event) {
-        fd := wx.NewFileDialogT(wx.NullWindow, "Select Files", "", "", "*", wx.FD_MULTIPLE, wx.DefaultPosition, wx.DefaultSize, "Open")
-        if fd.ShowModal() != wx.ID_CANCEL {
-            list := make([]string, 0)
-            fd.GetFilenames(&list)
-        }
-    }, button5.GetId())
-    
-    f.SetSizer( bSizerTotal )
-    f.Layout()
-    
-    f.Centre( wx.BOTH )
-    
-    return f
+	radioSizer.Add( modeSizer, 1, wx.EXPAND, 5 )
+
+	bSizerTotal.Add( radioSizer, 1, wx.EXPAND, 5 )
+	bSizerTotal.Add( bSizerBottom, 1, wx.EXPAND, 5 )
+	// wx.Bind(f, wx.EVT_BUTTON, func(e wx.Event) {
+	// 	fd := wx.NewFileDialogT(wx.NullWindow, "Select Files", "", "", "*", wx.FD_MULTIPLE, wx.DefaultPosition, wx.DefaultSize, "Open")
+	// 	if fd.ShowModal() != wx.ID_CANCEL {
+	// 		list := make([]string, 0)
+	// 		fd.GetFilenames(&list)
+	// 	}
+	// }, button5.GetId())
+
+	// mode button action
+	wx.Bind(f, wx.EVT_RADIOBOX, func(e wx.Event) {
+		if radiobox2.GetSelection() == 0 {
+			receiveButton.Hide()
+			sendButton.Show()
+		} else if radiobox2.GetSelection() == 1 {
+			sendButton.Hide()
+			receiveButton.Show()
+		}
+		fileBox.Show()
+		f.Layout()
+	}, radiobox2.GetId())
+
+	// send button action
+	wx.Bind(f, wx.EVT_BUTTON, func(e wx.Event) {
+		fd := wx.NewFileDialogT(wx.NullWindow, "Select Files", "", "", "*", wx.FD_OPEN, wx.DefaultPosition, wx.DefaultSize, "Open")
+		if fd.ShowModal() != wx.ID_CANCEL {
+			filename := fd.GetPath()
+			fileBox.SetValue(filename)
+		}
+	}, sendButton.GetId())
+
+	// receive button action
+	wx.Bind(f, wx.EVT_BUTTON, func(e wx.Event) {
+		fd := wx.NewDirDialogT(wx.NullWindow, "Select Folder", "Open", wx.DD_DEFAULT_STYLE, wx.DefaultPosition, wx.DefaultSize)
+
+		usr, err := user.Current()
+		if err != nil {
+			log.Fatal( err )
+		}
+		fd.SetPath(usr.HomeDir)
+
+		if fd.ShowModal() != wx.ID_CANCEL {
+			folder := fd.GetPath()
+			fileBox.SetValue(folder + string(os.PathSeparator) + "file.out")
+		}
+	}, receiveButton.GetId())
+	
+	f.SetSizer( bSizerTotal )
+	f.Layout()
+	
+	f.Centre( wx.BOTH )
+	
+	return f
 
 }
 
@@ -264,5 +314,5 @@ type MacNetwork struct {
 }
 
 type ControlDialog struct {
-    wx.Dialog
+	wx.Dialog
 }
