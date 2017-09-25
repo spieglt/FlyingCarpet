@@ -182,10 +182,10 @@ func printUsage() {
 	return
 }
 
-func showGui() ControlDialog {
+func showGui() *MainFrame {
 
-	f := ControlDialog{}
-	f.Dialog = wx.NewDialog(wx.NullWindow, -1, "Flying Carpet")
+	f := &MainFrame{}
+	f.Frame = wx.NewFrame(wx.NullWindow, wx.ID_ANY, "Flying Carpet")
 	
 	f.SetSizeHints( wx.DefaultSize, wx.DefaultSize )
 	
@@ -200,16 +200,15 @@ func showGui() ControlDialog {
 	
 	// bottom half and big container
 	bSizerBottom := wx.NewBoxSizer( wx.VERTICAL )
+	// bSizerBottom.SetMinSize(200,200)
 	bSizerTotal := wx.NewBoxSizer( wx.VERTICAL )
 
 	// file selection box
 	fileSizer := wx.NewBoxSizer( wx.HORIZONTAL )
 	sendButton := wx.NewButton(f, wx.ID_ANY, "Select File", wx.DefaultPosition, wx.DefaultSize, 0)
-	sendButton.Hide()
 	receiveButton := wx.NewButton(f, wx.ID_ANY, "Select Folder", wx.DefaultPosition, wx.DefaultSize, 0)
 	receiveButton.Hide()
-	fileBox := wx.NewTextCtrl( f, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, 0)
-	fileBox.Hide()
+	fileBox := wx.NewTextCtrl( f, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, 0 )
 	fileSizer.Add( sendButton, 0, wx.ALL|wx.EXPAND, 5 )
 	fileSizer.Add( receiveButton, 0, wx.ALL|wx.EXPAND, 5 )
 	fileSizer.Add( fileBox, 1, wx.ALL|wx.EXPAND, 5 )
@@ -221,23 +220,19 @@ func showGui() ControlDialog {
 
 	radiobox2 := wx.NewRadioBox(f, wx.ID_ANY, "Mode", wx.DefaultPosition, wx.DefaultSize, []string{"Send", "Receive"}, 1, wx.HORIZONTAL )
 	modeSizer.Add( radiobox2, 1, wx.ALL|wx.EXPAND, 5 )
-
 	
-	button5 := wx.NewButton( f, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
-	bSizerBottom.Add( button5, 0, wx.ALL|wx.EXPAND, 5 )
+	startButton := wx.NewButton( f, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
+	bSizerBottom.Add( startButton, 0, wx.ALL|wx.EXPAND, 5 )
+	txt := "here's a line\nand another\nand another\nand another\nand another\nand another\nand another\nand another\nand another\nand another\nand another\nand another"
+	outputBox := wx.NewTextCtrl( f, wx.ID_ANY, txt, wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE | wx.TE_READONLY )
 	
+	bSizerBottom.Add( outputBox, 1, wx.ALL|wx.EXPAND, 5 )
+	outputBox.SetSize(200,200);
 
 	radioSizer.Add( modeSizer, 1, wx.EXPAND, 5 )
 
-	bSizerTotal.Add( radioSizer, 1, wx.EXPAND, 5 )
+	bSizerTotal.Add( radioSizer, 0, wx.EXPAND, 5 )
 	bSizerTotal.Add( bSizerBottom, 1, wx.EXPAND, 5 )
-	// wx.Bind(f, wx.EVT_BUTTON, func(e wx.Event) {
-	// 	fd := wx.NewFileDialogT(wx.NullWindow, "Select Files", "", "", "*", wx.FD_MULTIPLE, wx.DefaultPosition, wx.DefaultSize, "Open")
-	// 	if fd.ShowModal() != wx.ID_CANCEL {
-	// 		list := make([]string, 0)
-	// 		fd.GetFilenames(&list)
-	// 	}
-	// }, button5.GetId())
 
 	// mode button action
 	wx.Bind(f, wx.EVT_RADIOBOX, func(e wx.Event) {
@@ -248,7 +243,6 @@ func showGui() ControlDialog {
 			sendButton.Hide()
 			receiveButton.Show()
 		}
-		fileBox.Show()
 		f.Layout()
 	}, radiobox2.GetId())
 
@@ -313,6 +307,11 @@ type MacNetwork struct {
 	Mode string // sending or receiving
 }
 
-type ControlDialog struct {
-	wx.Dialog
+// type ControlDialog struct {
+// 	wx.Dialog
+// }
+
+type MainFrame struct {
+	wx.Frame
+	menuBar wx.MenuBar
 }
