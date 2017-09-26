@@ -24,10 +24,10 @@ const FIND_MAC_TIMEOUT = 60
 func main() {
 	
 	wx1 := wx.NewApp()
-	f := showGui()
+	f := newGui()
 	f.Show()
 	wx1.MainLoop()
-	f.Destroy()
+	return
 
 	if len(os.Args) == 1 {
 		printUsage()
@@ -182,12 +182,12 @@ func printUsage() {
 	return
 }
 
-func showGui() *MainFrame {
+func newGui() *MainFrame {
 
 	f := &MainFrame{}
 	f.Frame = wx.NewFrame(wx.NullWindow, wx.ID_ANY, "Flying Carpet")
 	
-	f.SetSizeHints( wx.DefaultSize, wx.DefaultSize )
+	f.SetSize(400,400)
 	
 	// radio buttons box
 	radioSizer := wx.NewBoxSizer( wx.HORIZONTAL )
@@ -270,6 +270,13 @@ func showGui() *MainFrame {
 			fileBox.SetValue(folder + string(os.PathSeparator) + "file.out")
 		}
 	}, receiveButton.GetId())
+
+	// start button action
+	wx.Bind(f, wx.EVT_BUTTON, func(e wx.Event) {
+		pd := newPasswordDialog()
+		pd.Show()
+		// pd.Destroy()
+	}, startButton.GetId())
 	
 	f.SetSizer( bSizerTotal )
 	f.Layout()
@@ -278,6 +285,24 @@ func showGui() *MainFrame {
 	
 	return f
 
+}
+
+func newPasswordDialog() *PasswordDialog {
+	pd := &PasswordDialog{}
+	pd.Dialog = wx.NewDialog()
+	pd.SetSizeHints( wx.DefaultSize, wx.DefaultSize )
+	total := wx.NewBoxSizer(wx.VERTICAL)
+	pwBox := wx.NewTextCtrl( pd, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, 0)
+	submitButton := wx.NewButton(pd, wx.ID_ANY, "Submit", wx.DefaultPosition, wx.DefaultSize, 0)
+	total.Add(pwBox, 0, wx.ALL|wx.EXPAND, 5)
+	total.Add(submitButton, 0, wx.ALL|wx.EXPAND, 5)
+
+	pd.SetSizer(total)
+	pd.Layout()
+	pd.Centre(wx.BOTH)
+	pd.Show()
+	pd.Destroy()
+	return pd
 }
 
 type Transfer struct {
@@ -307,9 +332,9 @@ type MacNetwork struct {
 	Mode string // sending or receiving
 }
 
-// type ControlDialog struct {
-// 	wx.Dialog
-// }
+type PasswordDialog struct {
+	wx.Dialog
+}
 
 type MainFrame struct {
 	wx.Frame
