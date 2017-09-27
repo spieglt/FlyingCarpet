@@ -274,8 +274,9 @@ func newGui() *MainFrame {
 	// start button action
 	wx.Bind(f, wx.EVT_BUTTON, func(e wx.Event) {
 		pd := newPasswordDialog()
-		pd.Show()
-		// pd.Destroy()
+		pd.ShowModal()
+		pd.Destroy()
+		// newPasswordDialog()
 	}, startButton.GetId())
 	
 	f.SetSizer( bSizerTotal )
@@ -289,7 +290,7 @@ func newGui() *MainFrame {
 
 func newPasswordDialog() *PasswordDialog {
 	pd := &PasswordDialog{}
-	pd.Dialog = wx.NewDialog()
+	pd.Dialog = wx.NewDialog(wx.NullWindow, -1, "Enter Password")
 	pd.SetSizeHints( wx.DefaultSize, wx.DefaultSize )
 	total := wx.NewBoxSizer(wx.VERTICAL)
 	pwBox := wx.NewTextCtrl( pd, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, 0)
@@ -300,8 +301,8 @@ func newPasswordDialog() *PasswordDialog {
 	pd.SetSizer(total)
 	pd.Layout()
 	pd.Centre(wx.BOTH)
-	pd.Show()
-	pd.Destroy()
+	// pd.Show()
+	// pd.Destroy()
 	return pd
 }
 
