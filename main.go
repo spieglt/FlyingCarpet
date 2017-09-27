@@ -223,8 +223,7 @@ func newGui() *MainFrame {
 	
 	startButton := wx.NewButton( f, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
 	bSizerBottom.Add( startButton, 0, wx.ALL|wx.EXPAND, 5 )
-	txt := "here's a line\nand another\nand another\nand another\nand another\nand another\nand another\nand another\nand another\nand another\nand another\nand another"
-	outputBox := wx.NewTextCtrl( f, wx.ID_ANY, txt, wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE | wx.TE_READONLY )
+	outputBox := wx.NewTextCtrl( f, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE | wx.TE_READONLY )
 	
 	bSizerBottom.Add( outputBox, 1, wx.ALL|wx.EXPAND, 5 )
 	outputBox.SetSize(200,200);
@@ -273,37 +272,22 @@ func newGui() *MainFrame {
 
 	// start button action
 	wx.Bind(f, wx.EVT_BUTTON, func(e wx.Event) {
-		pd := newPasswordDialog()
-		pd.ShowModal()
-		pd.Destroy()
-		// newPasswordDialog()
+		pd := wx.NewPasswordEntryDialog(f, "enter pw", "", "", wx.OK|wx.CANCEL, wx.DefaultPosition)
+		ret := pd.ShowModal()
+		if ret == wx.ID_OK {
+			outputBox.AppendText("\n" + pd.GetValue() + "\nret: " + strconv.Itoa(ret))
+			// run program
+		} else {
+			outputBox.AppendText("\nPassword entry was cancelled!")
+		}
 	}, startButton.GetId())
 	
 	f.SetSizer( bSizerTotal )
 	f.Layout()
-	
 	f.Centre( wx.BOTH )
 	
 	return f
 
-}
-
-func newPasswordDialog() *PasswordDialog {
-	pd := &PasswordDialog{}
-	pd.Dialog = wx.NewDialog(wx.NullWindow, -1, "Enter Password")
-	pd.SetSizeHints( wx.DefaultSize, wx.DefaultSize )
-	total := wx.NewBoxSizer(wx.VERTICAL)
-	pwBox := wx.NewTextCtrl( pd, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, 0)
-	submitButton := wx.NewButton(pd, wx.ID_ANY, "Submit", wx.DefaultPosition, wx.DefaultSize, 0)
-	total.Add(pwBox, 0, wx.ALL|wx.EXPAND, 5)
-	total.Add(submitButton, 0, wx.ALL|wx.EXPAND, 5)
-
-	pd.SetSizer(total)
-	pd.Layout()
-	pd.Centre(wx.BOTH)
-	// pd.Show()
-	// pd.Destroy()
-	return pd
 }
 
 type Transfer struct {
@@ -331,10 +315,6 @@ type WindowsNetwork struct {
 
 type MacNetwork struct {
 	Mode string // sending or receiving
-}
-
-type PasswordDialog struct {
-	wx.Dialog
 }
 
 type MainFrame struct {
