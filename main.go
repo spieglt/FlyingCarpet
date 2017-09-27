@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"crypto/md5"
-	"flag"
 	"fmt"
-	"log"
+	// "log"
 	"math/rand"
 	"net"
 	"os"
@@ -17,53 +15,30 @@ import (
 	"os/user"
 )
 
+// Change later
+var OutputBox wx.TextCtrl
+
 const DIAL_TIMEOUT = 60
 const JOIN_ADHOC_TIMEOUT = 60
 const FIND_MAC_TIMEOUT = 60
 
-func main() {
-	
+func main() {	
 	wx1 := wx.NewApp()
 	f := newGui()
 	f.Show()
 	wx1.MainLoop()
 	return
+}
 
-	if len(os.Args) == 1 {
-		printUsage()
-		return
-	}
-
-	var p_outFile = flag.String("send", "", "File to be sent.")
-	var p_inFile = flag.String("receive", "", "Destination path of file to be received.")
-	var p_port = flag.Int("port", 3290, "TCP port to use (must match on both ends).")
-	var p_peer = flag.String("peer", "", "Use \"-peer mac\" or \"-peer windows\" to match the other computer.")
-	flag.Parse()
-	outFile := *p_outFile
-	inFile := *p_inFile
-	port := *p_port
-	peer := *p_peer
-
+func (t *Transfer) mainRoutine(mode string) {
 	receiveChan := make(chan bool)
 	sendChan := make(chan bool)
-
-	if peer == "" || ( peer != "mac" && peer != "windows" ) {
-		log.Fatal("Must choose [ -peer mac ] or [ -peer windows ].")
-	}
-	t := Transfer{
-		Port:       port,
-		Peer:       peer,
-		AdHocChan:	make(chan bool),
-	}
 	var n Network
 
-	// sending
-	if outFile != "" && inFile == "" {
-		t.Passphrase = getPassword()
+	if mode == "send" {
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
-		t.Filepath = outFile
 
 		if runtime.GOOS == "windows" {
 			w := WindowsNetwork{Mode: "sending"}
@@ -72,62 +47,61 @@ func main() {
 		} else if runtime.GOOS == "darwin" {
 			n = MacNetwork{Mode: "sending"}
 		}
-		n.connectToPeer(&t)
+		n.connectToPeer(t)
 
 		if connected := t.sendFile(sendChan, n); connected == false {
-			fmt.Println("Could not establish TCP connection with peer")
+			OutputBox.AppendText("\nCould not establish TCP connection with peer")
 			return
 		}
 		<-sendChan
-		fmt.Println("Send complete, resetting WiFi and exiting.")
+		OutputBox.AppendText("\nSend complete, resetting WiFi and exiting.")
 
-	//receiving
-	} else if inFile != "" && outFile == "" {
+	} else if mode == "receive" {
 		t.Passphrase = generatePassword()
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
-		fmt.Printf("=============================\n" +
+		OutputBox.AppendText(fmt.Sprintf("=============================\n" +
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n" +
-			"=============================\n",t.Passphrase)
+			"=============================\n",t.Passphrase))
 
 		if runtime.GOOS == "windows" {
 			n = WindowsNetwork{Mode: "receiving"}
 		} else if runtime.GOOS == "darwin" {
 			n = MacNetwork{Mode: "receiving"}
 		}
-		n.connectToPeer(&t)
+		n.connectToPeer(t)
 
-		t.Filepath = inFile
 		go t.receiveFile(receiveChan, n)
 		// wait for listener to be up
 		<-receiveChan
 		// wait for reception to finish
 		<-receiveChan
-		fmt.Println("Reception complete, resetting WiFi and exiting.")
+		OutputBox.AppendText("\nReception complete, resetting WiFi and exiting.")
 	} else {
-		printUsage()
 		return
 	}
-	n.resetWifi(&t)
+	n.resetWifi(t)
 }
 
 func (t *Transfer) receiveFile(receiveChan chan bool, n Network) {
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(t.Port))
 	if err != nil {
 		n.teardown(t)
-		log.Fatal("Could not listen on :",t.Port)
+		OutputBox.AppendText(fmt.Sprintf("\nCould not listen on :%d",t.Port))
+		return
 	}
-	fmt.Println("Listening on", ":"+strconv.Itoa(t.Port))
+	OutputBox.AppendText("\nListening on :" + strconv.Itoa(t.Port))
 	receiveChan <- true
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			n.teardown(t)
-			log.Fatal("Error accepting connection on :",t.Port)
+			OutputBox.AppendText(fmt.Sprintf("\nError accepting connection on :%d",t.Port))
+			return
 		}
 		t.Conn = conn
-		fmt.Println("Connection accepted")
+		OutputBox.AppendText("\nConnection accepted")
 		go t.receiveAndAssemble(receiveChan, n)
 	}
 }
@@ -135,21 +109,23 @@ func (t *Transfer) receiveFile(receiveChan chan bool, n Network) {
 func (t *Transfer) sendFile(sendChan chan bool, n Network) bool {
 	var conn net.Conn
 	var err error
+	OutputBox.AppendText("\n")
 	for i := 0; i < DIAL_TIMEOUT; i++ {
 		err = nil
 		conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond * 10)
 		if err != nil {
-			fmt.Printf("\rFailed connection %2d to %s, retrying.", i, t.RecipientIP)
+			OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n"), OutputBox.GetLastPosition(), 
+				fmt.Sprintf("\nFailed connection %2d to %s, retrying.", i, t.RecipientIP))
 			time.Sleep(time.Second * 1)
 			continue
 		} else {
-			fmt.Printf("\n")
+			OutputBox.AppendText("\n")
 			t.Conn = conn
 			go t.chunkAndSend(sendChan, n)
 			return true
 		}
 	}
-	fmt.Printf("Waited %d seconds, no connection. Exiting.", DIAL_TIMEOUT)
+	OutputBox.AppendText(fmt.Sprintf("Waited %d seconds, no connection. Exiting.", DIAL_TIMEOUT))
 	return false
 }
 
@@ -161,25 +137,6 @@ func generatePassword() string {
 		pwBytes[i] = chars[rand.Intn(len(chars))]
 	}
 	return string(pwBytes)
-}
-
-func getPassword() (pw string) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter password from receiving end: ")
-	pw,err := reader.ReadString('\n')
-	if err != nil {
-		panic("Error getting password.")
-	}
-	pw = strings.TrimSpace(pw)
-	return
-}
-
-func printUsage() {
-	fmt.Println("\nUsage (Windows): flyingcarpet.exe -send ./picture.jpg -peer mac")
-	fmt.Println("[Enter password from receiving end.]\n")
-	fmt.Println("Usage (Mac): ./flyingcarpet -receive ./newpicture.jpg -peer windows")
-	fmt.Println("[Enter password into sending end.]\n")
-	return
 }
 
 func newGui() *MainFrame {
@@ -195,12 +152,10 @@ func newGui() *MainFrame {
 	// peer os box
 	peerSizer := wx.NewBoxSizer( wx.VERTICAL )
 	radiobox1 := wx.NewRadioBox( f, wx.ID_ANY, "Peer OS", wx.DefaultPosition, wx.DefaultSize, []string{"macOS", "Windows"}, 1, wx.HORIZONTAL )
-	// radiobox1.SetSelection( 0 )
 	peerSizer.Add( radiobox1, 1, wx.ALL|wx.EXPAND, 5 )
 	
 	// bottom half and big container
 	bSizerBottom := wx.NewBoxSizer( wx.VERTICAL )
-	// bSizerBottom.SetMinSize(200,200)
 	bSizerTotal := wx.NewBoxSizer( wx.VERTICAL )
 
 	// file selection box
@@ -224,7 +179,9 @@ func newGui() *MainFrame {
 	startButton := wx.NewButton( f, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
 	bSizerBottom.Add( startButton, 0, wx.ALL|wx.EXPAND, 5 )
 	outputBox := wx.NewTextCtrl( f, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE | wx.TE_READONLY )
-	
+	OutputBox = outputBox
+	OutputBox.AppendText("Welcome to Flying Carpet!")
+
 	bSizerBottom.Add( outputBox, 1, wx.ALL|wx.EXPAND, 5 )
 	outputBox.SetSize(200,200);
 
@@ -260,7 +217,7 @@ func newGui() *MainFrame {
 
 		usr, err := user.Current()
 		if err != nil {
-			log.Fatal( err )
+			panic("Could not get user")
 		}
 		fd.SetPath(usr.HomeDir)
 
@@ -272,13 +229,50 @@ func newGui() *MainFrame {
 
 	// start button action
 	wx.Bind(f, wx.EVT_BUTTON, func(e wx.Event) {
-		pd := wx.NewPasswordEntryDialog(f, "enter pw", "", "", wx.OK|wx.CANCEL, wx.DefaultPosition)
-		ret := pd.ShowModal()
-		if ret == wx.ID_OK {
-			outputBox.AppendText("\n" + pd.GetValue() + "\nret: " + strconv.Itoa(ret))
-			// run program
-		} else {
-			outputBox.AppendText("\nPassword entry was cancelled!")
+		mode, peer := "", ""
+		if radiobox2.GetSelection() == 0 {
+			mode = "send"
+		} else if radiobox2.GetSelection() == 1 {
+			mode = "receive"
+		}
+		if radiobox1.GetSelection() == 0 {
+			peer = "mac"
+		} else if radiobox1.GetSelection() == 1 {
+			peer = "windows"
+		}
+
+		t := Transfer{
+			Filepath:   fileBox.GetValue(),
+			Port:       3290,
+			Peer:       peer,
+			AdHocChan:	make(chan bool),
+		}
+
+		if mode == "send" {
+			pd := wx.NewPasswordEntryDialog(f, "Enter password from receiving end:", "", "", wx.OK|wx.CANCEL, wx.DefaultPosition)
+			ret := pd.ShowModal()
+			if ret == wx.ID_OK {
+				_,err := os.Stat(t.Filepath)
+				if err == nil {
+					startButton.Enable(false)
+					outputBox.AppendText("\nEntered password: " + pd.GetValue())
+					t.Passphrase = pd.GetValue()
+					pd.Destroy()
+					go t.mainRoutine(mode)
+				} else {
+					outputBox.AppendText("\nCould not find output file.")	
+				}
+			} else {
+				outputBox.AppendText("\nPassword entry was cancelled.")
+			}
+		} else if mode == "receive" {
+			_,err := os.Stat(t.Filepath)
+			if err != nil {
+				startButton.Enable(false)
+				go t.mainRoutine(mode)	
+			} else {
+				outputBox.AppendText("\nError: destination file already exists.")
+			}
 		}
 	}, startButton.GetId())
 	
@@ -298,7 +292,7 @@ type Transfer struct {
 	Port        int
 	RecipientIP string
 	Peer        string
-	AdHocChan	chan bool
+	AdHocChan   chan bool
 }
 
 type Network interface {

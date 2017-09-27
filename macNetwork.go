@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	// "log"
 	"os"
 	"os/exec"
 	"strings"
@@ -16,16 +16,19 @@ func (m *MacNetwork) startAdHoc(t *Transfer) {
 	data, err := Asset("static/adhocnet")
 	if err != nil {
 		m.teardown(t)
-		log.Fatal("Static file error")
+		OutputBox.AppendText("\nStatic file error")
+		return
 	}
 	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 	if err != nil {
 		m.teardown(t)
-		log.Fatal("Error creating temp file")
+		OutputBox.AppendText("\nError creating temp file")
+		return
 	}
 	if _, err = outFile.Write(data); err != nil {
 		m.teardown(t)
-		log.Fatal("Write error")
+		OutputBox.AppendText("\nWrite error")
+		return
 	}
 	defer os.Remove(tmpLoc)
 
@@ -34,7 +37,8 @@ func (m *MacNetwork) startAdHoc(t *Transfer) {
 	if err != nil {
 		fmt.Println(string(output))
 		m.teardown(t)
-		log.Fatal("Error creating ad hoc network")
+		OutputBox.AppendText("\nError creating ad hoc network")
+		return
 	}
 	fmt.Printf("startAdHoc: %sSSID: %s\n", output, t.SSID)
 
@@ -42,21 +46,25 @@ func (m *MacNetwork) startAdHoc(t *Transfer) {
 
 func (m *MacNetwork) joinAdHoc(t *Transfer) {
 	wifiInterface := m.getWifiInterface()
-	fmt.Println("Looking for ad-hoc network...")
+	OutputBox.AppendText("\nLooking for ad-hoc network...")
 	timeout := JOIN_ADHOC_TIMEOUT
 	joinAdHocStr := "networksetup -setairportnetwork " + wifiInterface + " " + t.SSID + " " + t.Passphrase
 	joinAdHocBytes, err := exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
+	OutputBox.AppendText("\n")
 	for len(joinAdHocBytes) != 0 {
 		if timeout <= 0 {
-			log.Fatal("Could not find the ad hoc network within the timeout period. Exiting.")
+			OutputBox.AppendText("\nCould not find the ad hoc network within the timeout period. Exiting.")
+			return
 		}
-		fmt.Printf("\rFailed to join %s network. Trying for %2d more seconds.", t.SSID, timeout)
+		OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n"), OutputBox.GetLastPosition(), 
+			fmt.Sprintf("\nFailed to join %s network. Trying for %2d more seconds.", t.SSID, timeout))
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(5))
 		joinAdHocBytes, err = exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
 		if err != nil {
 			m.teardown(t)
-			log.Fatal("Error joining ad hoc network.")
+			OutputBox.AppendText("\nError joining ad hoc network.")
+			return
 		}
 	}
 	fmt.Printf("\n")
@@ -76,11 +84,13 @@ func (m *MacNetwork) getWifiInterface() string {
 func (m *MacNetwork) findMac() (peerIP string) {
 	timeout := FIND_MAC_TIMEOUT
 	var currentIP string
+	OutputBox.AppendText("\n")
 	for currentIP == "" {
 		currentIPString := "ipconfig getifaddr " + m.getWifiInterface()
 		currentIPBytes, err := exec.Command("sh", "-c", currentIPString).CombinedOutput()
 		if err != nil {
-			fmt.Printf("\rWaiting for self-assigned IP... %s", err)
+			OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n"), OutputBox.GetLastPosition(), 
+				fmt.Sprintf("\nWaiting for self-assigned IP... %s", err))
 			time.Sleep(time.Second * time.Duration(1))
 			continue
 		}
@@ -93,13 +103,16 @@ func (m *MacNetwork) findMac() (peerIP string) {
 		"grep --line-buffered -vE '169.254.255.255' | " + // exclude broadcast address
 		"grep -vE '" + currentIP + "'" // exclude current IP
 
+	OutputBox.AppendText("\n")
 	for peerIP == "" {
 		if timeout <= 0 {
-			log.Fatal("Could not find the peer computer within the timeout period. Exiting.")
+			OutputBox.AppendText("\nCould not find the peer computer within the timeout period. Exiting.")
+			return
 		}
 		pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 		if pingErr != nil {
-			fmt.Printf("\rCould not find peer. Waiting %2d more seconds. %s",timeout,pingErr)
+			OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n"), OutputBox.GetLastPosition(), 
+				fmt.Sprintf("\nCould not find peer. Waiting %2d more seconds. %s",timeout,pingErr))
 			timeout -= 2
 			time.Sleep(time.Second * time.Duration(2))
 			continue
@@ -118,7 +131,8 @@ func (m *MacNetwork) findWindows() (peerIP string) {
 func (m MacNetwork) connectToPeer(t *Transfer) {
 	if m.Mode == "sending" {
 		if !m.checkForFile(t) {
-			log.Fatal("Could not find file to send: ",t.Filepath)
+			OutputBox.AppendText(fmt.Sprintf("\nCould not find file to send: %s",t.Filepath))
+			return
 		}
 		m.joinAdHoc(t)
 		go m.stayOnAdHoc(t)
@@ -147,7 +161,7 @@ func (m MacNetwork) stayOnAdHoc(t *Transfer) {
 	for {
 		select {
 		case <- t.AdHocChan:
-			fmt.Println("Stopping ad hoc connection.")
+			OutputBox.AppendText("\nStopping ad hoc connection.")
 			t.AdHocChan <- true
 			return
 		default:
