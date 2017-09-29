@@ -103,7 +103,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 		var chunkSize int64
 		err := binary.Read(t.Conn, binary.BigEndian, &chunkSize)
 		if err != nil {
-			OutputBox.AppendText(fmt.Sprintf("\nerr:", err))
+			OutputBox.AppendText(fmt.Sprintf("\nerr: %s", err.Error()))
 		}
 		if chunkSize == 0 {
 			// done receiving
@@ -136,10 +136,10 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 		}
 	}
 	OutputBox.AppendText(fmt.Sprintf("\nReceived file size: %d", getSize(outFile)))
-	OutputBox.AppendText(fmt.Sprintf("Received file hash: %x\n", getHash(t.Filepath)))
-	OutputBox.AppendText(fmt.Sprintf("Receiving took %s\n", time.Since(start)))
+	OutputBox.AppendText(fmt.Sprintf("\nReceived file hash: %x", getHash(t.Filepath)))
+	OutputBox.AppendText(fmt.Sprintf("\nReceiving took %s", time.Since(start)))
 	speed := (float64(getSize(outFile)*8) / 1000000) / (float64(time.Since(start))/1000000000)
-	OutputBox.AppendText(fmt.Sprintf("Speed: %.2fmbps\n", speed))
+	OutputBox.AppendText(fmt.Sprintf("\nSpeed: %.2fmbps", speed))
 	// signal main that it's okay to return
 	receiveChan <- true
 }

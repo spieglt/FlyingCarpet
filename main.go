@@ -74,7 +74,7 @@ func (t *Transfer) mainRoutine(mode string) {
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
-		OutputBox.AppendText(fmt.Sprintf("=============================\n" +
+		OutputBox.AppendText(fmt.Sprintf("\n=============================\n" +
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n" +
 			"=============================\n",t.Passphrase))
 
