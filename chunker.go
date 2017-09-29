@@ -22,6 +22,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 	if err != nil {
 		n.teardown(t)
 		OutputBox.AppendText("\nError opening out file. Please quit and restart Flying Carpet.")
+		sendChan <- false
 		return
 	}
 	defer file.Close()
@@ -43,6 +44,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 			n.teardown(t)
 			OutputBox.AppendText(fmt.Sprintf("bytesRead: %d\nbufferSize: %d\n", bytesRead, bufferSize))
 			OutputBox.AppendText("\nError reading out file. Please quit and restart Flying Carpet.")
+			sendChan <- false
 			return
 		}
 		bytesLeft -= bufferSize
@@ -56,6 +58,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 		if err != nil {
 			n.teardown(t)
 			OutputBox.AppendText("\nError writing chunk length. Please quit and restart Flying Carpet.")
+			sendChan <- false
 			return
 		}
 
@@ -64,9 +67,10 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 		if bytes != len(encryptedBuffer) {
 			n.teardown(t)
 			OutputBox.AppendText("\nSend error. Please quit and restart Flying Carpet.")
+			sendChan <- false
 			return
 		}
-		OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n"), OutputBox.GetLastPosition(), 
+		OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n") + 1, OutputBox.GetLastPosition(), 
 			fmt.Sprintf("\nProgress: %3.0f%%", (float64(fileSize)-float64(bytesLeft))/float64(fileSize)*100))
 		// fmt.Printf("\rProgress: %3.0f%%", (float64(fileSize)-float64(bytesLeft))/float64(fileSize)*100)
 	}
@@ -89,6 +93,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 	if err != nil {
 		n.teardown(t)
 		OutputBox.AppendText("\nError creating out file. Please quit and restart Flying Carpet.")
+		receiveChan <- false
 		return
 	}
 	defer outFile.Close()
@@ -112,6 +117,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 		if err != nil {
 			n.teardown(t)
 			OutputBox.AppendText("\nError reading from stream. Please quit and restart Flying Carpet.")
+			receiveChan <- false
 			return
 		}
 		if int64(bytesReceived) != chunkSize {
@@ -125,6 +131,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 		if err != nil {
 			n.teardown(t)
 			OutputBox.AppendText("\nError writing to out file. Please quit and restart Flying Carpet.")
+			receiveChan <- false
 			return
 		}
 	}

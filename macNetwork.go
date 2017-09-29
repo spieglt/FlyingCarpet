@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func (m *MacNetwork) startAdHoc(t *Transfer) {
+func (m *MacNetwork) startAdHoc(t *Transfer) bool {
 	tmpLoc := "/private/tmp/adhocnet"
 	os.Remove(tmpLoc)
 
@@ -17,18 +17,18 @@ func (m *MacNetwork) startAdHoc(t *Transfer) {
 	if err != nil {
 		m.teardown(t)
 		OutputBox.AppendText("\nStatic file error")
-		return
+		return false
 	}
 	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 	if err != nil {
 		m.teardown(t)
 		OutputBox.AppendText("\nError creating temp file")
-		return
+		return false
 	}
 	if _, err = outFile.Write(data); err != nil {
 		m.teardown(t)
 		OutputBox.AppendText("\nWrite error")
-		return
+		return false
 	}
 	defer os.Remove(tmpLoc)
 
@@ -38,13 +38,13 @@ func (m *MacNetwork) startAdHoc(t *Transfer) {
 		fmt.Println(string(output))
 		m.teardown(t)
 		OutputBox.AppendText("\nError creating ad hoc network")
-		return
+		return false
 	}
 	fmt.Printf("startAdHoc: %sSSID: %s\n", output, t.SSID)
-
+	return true
 }
 
-func (m *MacNetwork) joinAdHoc(t *Transfer) {
+func (m *MacNetwork) joinAdHoc(t *Transfer) bool {
 	wifiInterface := m.getWifiInterface()
 	OutputBox.AppendText("\nLooking for ad-hoc network...")
 	timeout := JOIN_ADHOC_TIMEOUT
@@ -53,10 +53,10 @@ func (m *MacNetwork) joinAdHoc(t *Transfer) {
 	OutputBox.AppendText("\n")
 	for len(joinAdHocBytes) != 0 {
 		if timeout <= 0 {
-			OutputBox.AppendText("\nCould not find the ad hoc network within the timeout period. Exiting.")
-			return
+			OutputBox.AppendText("\nCould not find the ad hoc network within the timeout period.")
+			return false
 		}
-		OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n"), OutputBox.GetLastPosition(), 
+		OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n") + 1, OutputBox.GetLastPosition(), 
 			fmt.Sprintf("\nFailed to join %s network. Trying for %2d more seconds.", t.SSID, timeout))
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(5))
@@ -64,10 +64,11 @@ func (m *MacNetwork) joinAdHoc(t *Transfer) {
 		if err != nil {
 			m.teardown(t)
 			OutputBox.AppendText("\nError joining ad hoc network.")
-			return
+			return false
 		}
 	}
 	fmt.Printf("\n")
+	return true
 }
 
 func (m MacNetwork) getCurrentWifi() (SSID string) {
@@ -81,7 +82,7 @@ func (m *MacNetwork) getWifiInterface() string {
 	return m.runCommand(getInterfaceString, "Could not get wifi interface.")
 }
 
-func (m *MacNetwork) findMac() (peerIP string) {
+func (m *MacNetwork) findMac() (peerIP string, success bool) {
 	timeout := FIND_MAC_TIMEOUT
 	var currentIP string
 	OutputBox.AppendText("\n")
@@ -89,7 +90,7 @@ func (m *MacNetwork) findMac() (peerIP string) {
 		currentIPString := "ipconfig getifaddr " + m.getWifiInterface()
 		currentIPBytes, err := exec.Command("sh", "-c", currentIPString).CombinedOutput()
 		if err != nil {
-			OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n"), OutputBox.GetLastPosition(), 
+			OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n") + 1, OutputBox.GetLastPosition(), 
 				fmt.Sprintf("\nWaiting for self-assigned IP... %s", err))
 			time.Sleep(time.Second * time.Duration(1))
 			continue
@@ -106,12 +107,12 @@ func (m *MacNetwork) findMac() (peerIP string) {
 	OutputBox.AppendText("\n")
 	for peerIP == "" {
 		if timeout <= 0 {
-			OutputBox.AppendText("\nCould not find the peer computer within the timeout period. Exiting.")
-			return
+			OutputBox.AppendText("\nCould not find the peer computer within the timeout period.")
+			return "", false
 		}
 		pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 		if pingErr != nil {
-			OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n"), OutputBox.GetLastPosition(), 
+			OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n") + 1, OutputBox.GetLastPosition(), 
 				fmt.Sprintf("\nCould not find peer. Waiting %2d more seconds. %s",timeout,pingErr))
 			timeout -= 2
 			time.Sleep(time.Second * time.Duration(2))
@@ -121,6 +122,7 @@ func (m *MacNetwork) findMac() (peerIP string) {
 		peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
 	}
 	fmt.Printf("\nPeer IP found: %s\n",peerIP)
+	success = true
 	return
 }
 
@@ -128,27 +130,32 @@ func (m *MacNetwork) findWindows() (peerIP string) {
 	return "192.168.173.1"
 }
 
-func (m MacNetwork) connectToPeer(t *Transfer) {
+func (m MacNetwork) connectToPeer(t *Transfer) bool {
 	if m.Mode == "sending" {
 		if !m.checkForFile(t) {
 			OutputBox.AppendText(fmt.Sprintf("\nCould not find file to send: %s",t.Filepath))
-			return
+			return false
 		}
-		m.joinAdHoc(t)
+		if !m.joinAdHoc(t) { return false }
 		go m.stayOnAdHoc(t)
 		if t.Peer == "mac" {
-			t.RecipientIP = m.findMac()
+			var ok bool
+			t.RecipientIP, ok = m.findMac()
+			if !ok {
+				return false
+			}
 		} else if t.Peer == "windows" {
 			t.RecipientIP = m.findWindows()
 		}
 	} else if m.Mode == "receiving" {
 		if t.Peer == "windows" {
-			m.joinAdHoc(t)
+			if !m.joinAdHoc(t) { return false }
 			go m.stayOnAdHoc(t)
 		} else if t.Peer == "mac" {
-			m.startAdHoc(t)
+			if !m.startAdHoc(t) { return false }
 		}
 	}
+	return true
 }
 
 func (m MacNetwork) resetWifi(t *Transfer) {

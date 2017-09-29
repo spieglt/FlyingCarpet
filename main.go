@@ -17,12 +17,13 @@ import (
 
 // Change later
 var OutputBox wx.TextCtrl
+var StartButton wx.Button
 
 const DIAL_TIMEOUT = 60
 const JOIN_ADHOC_TIMEOUT = 60
 const FIND_MAC_TIMEOUT = 60
 
-func main() {	
+func main() {
 	wx1 := wx.NewApp()
 	f := newGui()
 	f.Show()
@@ -47,13 +48,25 @@ func (t *Transfer) mainRoutine(mode string) {
 		} else if runtime.GOOS == "darwin" {
 			n = MacNetwork{Mode: "sending"}
 		}
-		n.connectToPeer(t)
-
-		if connected := t.sendFile(sendChan, n); connected == false {
-			OutputBox.AppendText("\nCould not establish TCP connection with peer")
+		if !n.connectToPeer(t) {
+			StartButton.Enable(true)
+			OutputBox.AppendText("\nExiting mainRoutine.")
 			return
 		}
-		<-sendChan
+
+		if connected := t.sendFile(sendChan, n); connected == false {
+			StartButton.Enable(true)
+			OutputBox.AppendText("\nCould not establish TCP connection with peer. Exiting mainRoutine.")
+			return
+		}
+		OutputBox.AppendText("\nConnected")
+		sendSuccess := <-sendChan
+		if !sendSuccess {
+			StartButton.Enable(true)
+			OutputBox.AppendText("\nExiting mainRoutine.")
+			return
+		}
+		StartButton.Enable(true)
 		OutputBox.AppendText("\nSend complete, resetting WiFi and exiting.")
 
 	} else if mode == "receive" {
@@ -70,16 +83,28 @@ func (t *Transfer) mainRoutine(mode string) {
 		} else if runtime.GOOS == "darwin" {
 			n = MacNetwork{Mode: "receiving"}
 		}
-		n.connectToPeer(t)
+		if !n.connectToPeer(t) {
+			StartButton.Enable(true)
+			OutputBox.AppendText("\nExiting mainRoutine.")
+			return
+		}
 
 		go t.receiveFile(receiveChan, n)
 		// wait for listener to be up
-		<-receiveChan
+		listenerIsUp := <-receiveChan
+		if !listenerIsUp {
+			StartButton.Enable(true)
+			OutputBox.AppendText("\nExiting mainRoutine.")
+			return
+		}
 		// wait for reception to finish
-		<-receiveChan
+		receiveSuccess := <-receiveChan
+		if !receiveSuccess {
+			StartButton.Enable(true)
+			OutputBox.AppendText("\nExiting mainRoutine.")
+			return
+		}
 		OutputBox.AppendText("\nReception complete, resetting WiFi and exiting.")
-	} else {
-		return
 	}
 	n.resetWifi(t)
 }
@@ -89,6 +114,7 @@ func (t *Transfer) receiveFile(receiveChan chan bool, n Network) {
 	if err != nil {
 		n.teardown(t)
 		OutputBox.AppendText(fmt.Sprintf("\nCould not listen on :%d",t.Port))
+		receiveChan <- false
 		return
 	}
 	OutputBox.AppendText("\nListening on :" + strconv.Itoa(t.Port))
@@ -98,6 +124,7 @@ func (t *Transfer) receiveFile(receiveChan chan bool, n Network) {
 		if err != nil {
 			n.teardown(t)
 			OutputBox.AppendText(fmt.Sprintf("\nError accepting connection on :%d",t.Port))
+			receiveChan <- false
 			return
 		}
 		t.Conn = conn
@@ -114,23 +141,22 @@ func (t *Transfer) sendFile(sendChan chan bool, n Network) bool {
 		err = nil
 		conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond * 10)
 		if err != nil {
-			OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n"), OutputBox.GetLastPosition(), 
+			OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n") + 1, OutputBox.GetLastPosition(), 
 				fmt.Sprintf("\nFailed connection %2d to %s, retrying.", i, t.RecipientIP))
 			time.Sleep(time.Second * 1)
 			continue
-		} else {
-			OutputBox.AppendText("\n")
-			t.Conn = conn
-			go t.chunkAndSend(sendChan, n)
-			return true
 		}
+		OutputBox.AppendText("\nSuccessfully dialed peer.")
+		t.Conn = conn
+		go t.chunkAndSend(sendChan, n)
+		return true
 	}
-	OutputBox.AppendText(fmt.Sprintf("Waited %d seconds, no connection. Exiting.", DIAL_TIMEOUT))
+	OutputBox.AppendText(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT))
 	return false
 }
 
 func generatePassword() string {
-	const chars = "0123456789abcdefghijkmnopqrstuvwxyzABCDEFGHIJKLMNPQRSTUVWXYZ"
+	const chars = "0123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
 	rand.Seed(time.Now().UTC().UnixNano())
 	pwBytes := make([]byte, 8)
 	for i := range pwBytes {
@@ -177,6 +203,7 @@ func newGui() *MainFrame {
 	modeSizer.Add( radiobox2, 1, wx.ALL|wx.EXPAND, 5 )
 	
 	startButton := wx.NewButton( f, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
+	StartButton = startButton
 	bSizerBottom.Add( startButton, 0, wx.ALL|wx.EXPAND, 5 )
 	outputBox := wx.NewTextCtrl( f, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE | wx.TE_READONLY )
 	OutputBox = outputBox
@@ -296,7 +323,7 @@ type Transfer struct {
 }
 
 type Network interface {
-	connectToPeer(*Transfer)
+	connectToPeer(*Transfer) bool
 	getCurrentWifi() string
 	resetWifi(*Transfer)
 	teardown(*Transfer)
