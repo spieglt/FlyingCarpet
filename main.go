@@ -10,7 +10,6 @@ import (
 	"os/user"
 	"runtime"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -32,12 +31,15 @@ func main() {
 }
 
 func (t *Transfer) mainRoutine(mode string) {
+
+	threadEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
+	threadEvent.SetString("Hey")
+	t.Frame.QueueEvent(threadEvent)
+
 	startButtonEvent := wx.NewThreadEvent(wx.EVT_THREAD, START_BUTTON_ENABLE)
 	receiveChan := make(chan bool)
 	sendChan := make(chan bool)
 	var n Network
-
-	threadEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 
 	if mode == "send" {
 		pwBytes := md5.Sum([]byte(t.Passphrase))
@@ -223,7 +225,6 @@ func newGui() *MainFrame {
 	modeSizer.Add(radiobox2, 1, wx.ALL|wx.EXPAND, 5)
 
 	startButton := wx.NewButton(mf, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
-	StartButton = startButton
 	bSizerBottom.Add(startButton, 0, wx.ALL|wx.EXPAND, 5)
 	outputBox := wx.NewTextCtrl(mf, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE|wx.TE_READONLY)
 	outputBox.AppendText("Welcome to Flying Carpet!")
@@ -296,7 +297,7 @@ func newGui() *MainFrame {
 			Port:      3290,
 			Peer:      peer,
 			AdHocChan: make(chan bool),
-			Frame:     &mf,
+			Frame:     mf,
 		}
 
 		if mode == "send" {
@@ -308,7 +309,7 @@ func newGui() *MainFrame {
 					startButton.Enable(false)
 					outputBox.AppendText("\nEntered password: " + pd.GetValue())
 					t.Passphrase = pd.GetValue()
-					pd.Destroy()
+					// pd.Destroy()
 					go t.mainRoutine(mode)
 				} else {
 					outputBox.AppendText("\nCould not find output file.")

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/dontpanic92/wxGo/wx"
 	"os"
 	"os/exec"
 	"strings"
@@ -157,7 +158,7 @@ func (m MacNetwork) connectToPeer(t *Transfer) bool {
 		go m.stayOnAdHoc(t)
 		if t.Peer == "mac" {
 			var ok bool
-			t.RecipientIP, ok = m.findMac()
+			t.RecipientIP, ok = m.findMac(t)
 			if !ok {
 				return false
 			}
@@ -183,11 +184,12 @@ func (m MacNetwork) resetWifi(t *Transfer) {
 	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	wifiInterface := m.getWifiInterface()
 	cmdString := "networksetup -setairportpower " + wifiInterface + " off && networksetup -setairportpower " + wifiInterface + " on"
-	outputEvent.SetString(runCommand(cmdString))
+	outputEvent.SetString(m.runCommand(cmdString))
 	t.Frame.QueueEvent(outputEvent)
 }
 
 func (m MacNetwork) stayOnAdHoc(t *Transfer) {
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	for {
 		select {
 		case <-t.AdHocChan:
@@ -212,7 +214,7 @@ func (m MacNetwork) checkForFile(t *Transfer) bool {
 	return true
 }
 
-func (m *MacNetwork) runCommand(cmd string, errDesc string) (output string) {
+func (m *MacNetwork) runCommand(cmd string) (output string) {
 	cmdBytes, err := exec.Command("sh", "-c", cmd).CombinedOutput()
 	if err != nil {
 		return err.Error()

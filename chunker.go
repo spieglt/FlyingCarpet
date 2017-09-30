@@ -4,10 +4,10 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"fmt"
+	"github.com/dontpanic92/wxGo/wx"
 	"io"
 	"os"
 	"runtime"
-	"strings"
 	"time"
 )
 
@@ -82,7 +82,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 			return
 		}
 		percentDone := (fileSize - bytesLeft) / fileSize
-		progressEvent.SetInt(percentDone)
+		progressEvent.SetInt(int(percentDone))
 		t.Frame.QueueEvent(progressEvent)
 	}
 	if runtime.GOOS == "darwin" {
@@ -96,6 +96,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 }
 
 func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	start := time.Now()
 	defer t.Conn.Close()
 	os.Remove(t.Filepath)

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/dontpanic92/wxGo/wx"
 	"os"
 	"os/exec"
 	"regexp"
@@ -11,10 +12,10 @@ import (
 )
 
 func (w *WindowsNetwork) startAdHoc(t *Transfer) bool {
-	outputEvent := NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	outputEvent.SetString(w.runCommand("netsh winsock reset"))
 	t.Frame.QueueEvent(outputEvent)
-	w.stopAdHoc()
+	w.stopAdHoc(t)
 	outputEvent.SetString("SSID: " + t.SSID)
 	t.Frame.QueueEvent(outputEvent)
 	outputEvent.SetString(w.runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Passphrase))
@@ -29,14 +30,14 @@ func (w *WindowsNetwork) startAdHoc(t *Transfer) bool {
 	return true
 }
 
-func (w *WindowsNetwork) stopAdHoc() {
-	outputEvent := NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
+func (w *WindowsNetwork) stopAdHoc(t *Transfer) {
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	outputEvent.SetString(w.runCommand("netsh wlan stop hostednetwork"))
 	t.Frame.QueueEvent(outputEvent)
 }
 
 func (w *WindowsNetwork) joinAdHoc(t *Transfer) bool {
-	outputEvent := NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	tmpLoc := ".\\adhoc.xml"
 
 	// make doc
@@ -106,7 +107,7 @@ func (w *WindowsNetwork) joinAdHoc(t *Transfer) bool {
 		cmdSlice := strings.Split(cmdStr, " ")
 		_, cmdErr := exec.Command(cmdSlice[0], cmdSlice[1:]...).CombinedOutput()
 		if cmdErr != nil {
-			outputEvent.SetString("Failed to find the ad hoc network. Trying for %2d more seconds. %s", timeout, cmdErr)
+			outputEvent.SetString(fmt.Sprintf("Failed to find the ad hoc network. Trying for %2d more seconds. %s", timeout, cmdErr))
 			t.Frame.QueueEvent(outputEvent)
 		}
 		timeout -= 5
@@ -117,12 +118,12 @@ func (w *WindowsNetwork) joinAdHoc(t *Transfer) bool {
 	return true
 }
 
-func (w *WindowsNetwork) findPeer() (peerIP string) {
-	outputEvent := NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
+func (w *WindowsNetwork) findPeer(t *Transfer) (peerIP string) {
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	ipPattern, _ := regexp.Compile("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}")
 
 	// clear arp cache
-	w.runCommand("arp -d *", "Could not clear arp cache.")
+	w.runCommand("arp -d *")
 
 	// get ad hoc ip
 	var ifAddr string
@@ -165,8 +166,7 @@ func (w *WindowsNetwork) findPeer() (peerIP string) {
 }
 
 func (w WindowsNetwork) getCurrentWifi() (SSID string) {
-	SSID = w.runCommand("$(netsh wlan show interfaces | Select-String -Pattern 'Profile *: (?<profile>.*)').Matches.Groups[1].Value.Trim()",
-		"Could not get current SSID.")
+	SSID = w.runCommand("$(netsh wlan show interfaces | Select-String -Pattern 'Profile *: (?<profile>.*)').Matches.Groups[1].Value.Trim()")
 	return
 }
 
@@ -175,9 +175,9 @@ func (w *WindowsNetwork) getWifiInterface() string {
 }
 
 func (w WindowsNetwork) connectToPeer(t *Transfer) bool {
-	outputEvent := NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	if w.Mode == "receiving" {
-		if !w.addFirewallRule() {
+		if !w.addFirewallRule(t) {
 			return false
 		}
 		if !w.startAdHoc(t) {
@@ -193,9 +193,9 @@ func (w WindowsNetwork) connectToPeer(t *Transfer) bool {
 			if !w.joinAdHoc(t) {
 				return false
 			}
-			t.RecipientIP = w.findPeer()
+			t.RecipientIP = w.findPeer(t)
 		} else if t.Peer == "mac" {
-			if !w.addFirewallRule() {
+			if !w.addFirewallRule(t) {
 				return false
 			}
 			if !w.startAdHoc(t) {
@@ -203,26 +203,27 @@ func (w WindowsNetwork) connectToPeer(t *Transfer) bool {
 			}
 			outputEvent.SetString("Ad hoc started, running findPeer")
 			t.Frame.QueueEvent(outputEvent)
-			t.RecipientIP = w.findPeer()
+			t.RecipientIP = w.findPeer(t)
 		}
 	}
 	return true
 }
 
 func (w WindowsNetwork) resetWifi(t *Transfer) {
-	outputEvent := NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	if w.Mode == "receiving" || t.Peer == "mac" {
-		w.deleteFirewallRule()
-		w.stopAdHoc()
+		w.deleteFirewallRule(t)
+		w.stopAdHoc(t)
 	} else {
-		w.runCommand("netsh wlan delete profile name="+t.SSID, "Could not delete ad hoc profile.")
+		w.runCommand("netsh wlan delete profile name="+t.SSID)
 		// rejoin previous wifi
 		outputEvent.SetString(w.runCommand("netsh wlan connect name=" + w.PreviousSSID))
 		t.Frame.QueueEvent(outputEvent)
 	}
 }
 
-func (w WindowsNetwork) addFirewallRule() bool {
+func (w WindowsNetwork) addFirewallRule(t *Transfer) bool {
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	execPath, err := os.Executable()
 	if err != nil {
 		outputEvent.SetString("Failed to get executable path.")
@@ -243,7 +244,7 @@ func (w WindowsNetwork) addFirewallRule() bool {
 	return true
 }
 
-func (w WindowsNetwork) deleteFirewallRule() {
+func (w WindowsNetwork) deleteFirewallRule(t *Transfer) {
 	outputEvent := wx.NewThreadEvent("")
 	fwStr := "netsh advfirewall firewall delete rule name=flyingcarpet"
 	outputEvent.SetString(w.runCommand(fwStr))
@@ -258,7 +259,7 @@ func (w WindowsNetwork) checkForFile(t *Transfer) bool {
 	return true
 }
 
-func (w *WindowsNetwork) runCommand(cmd string, errDesc string) (output string) {
+func (w *WindowsNetwork) runCommand(cmd string) (output string) {
 	var cmdBytes []byte
 	err := errors.New("")
 	cmdSlice := strings.Split(cmd, " ")
