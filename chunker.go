@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const CHUNKSIZE = 1000000	// 1MB
+const CHUNKSIZE = 1000000 // 1MB
 
 func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 
@@ -87,7 +87,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 	}
 	if runtime.GOOS == "darwin" {
 		t.AdHocChan <- false
-		<- t.AdHocChan
+		<-t.AdHocChan
 	}
 	outputEvent.SetString(fmt.Sprintf("\nSending took %s\n", time.Since(start)))
 	t.Frame.QueueEvent(outputEvent)
@@ -156,7 +156,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 	t.Frame.QueueEvent(outputEvent)
 	outputEvent.SetString(fmt.Sprintf("\nReceiving took %s", time.Since(start)))
 	t.Frame.QueueEvent(outputEvent)
-	speed := (float64(getSize(outFile)*8) / 1000000) / (float64(time.Since(start))/1000000000)
+	speed := (float64(getSize(outFile)*8) / 1000000) / (float64(time.Since(start)) / 1000000000)
 	outputEvent.SetString(fmt.Sprintf("\nSpeed: %.2fmbps", speed))
 	t.Frame.QueueEvent(outputEvent)
 	// signal main that it's okay to return
@@ -182,15 +182,16 @@ func getHash(filepath string) (md5hash []byte) {
 	return
 }
 
-
-func ceil(x,y int64) int64 {
-	if x % y != 0 {
-		return ((x/y) + 1)
+func ceil(x, y int64) int64 {
+	if x%y != 0 {
+		return ((x / y) + 1)
 	}
-	return x/y
+	return x / y
 }
 
-func min(x,y int64) int64 {
-	if x < y { return x }
+func min(x, y int64) int64 {
+	if x < y {
+		return x
+	}
 	return y
 }

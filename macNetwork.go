@@ -107,8 +107,8 @@ func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
 		}
 		currentIP = strings.TrimSpace(string(currentIPBytes))
 	}
-	
-	outputEvent.SetString(fmt.Sprintf("Self-assigned IP found: %s",currentIP))
+
+	outputEvent.SetString(fmt.Sprintf("Self-assigned IP found: %s", currentIP))
 	t.Frame.QueueEvent(outputEvent)
 
 	pingString := "ping -c 5 169.254.255.255 | " + // ping broadcast address
@@ -124,7 +124,7 @@ func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
 		}
 		pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 		if pingErr != nil {
-			outputEvent.SetString(fmt.Sprintf("\nCould not find peer. Waiting %2d more seconds. %s",timeout,pingErr))
+			outputEvent.SetString(fmt.Sprintf("\nCould not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
 			t.Frame.QueueEvent(outputEvent)
 			timeout -= 2
 			time.Sleep(time.Second * time.Duration(2))
@@ -133,7 +133,7 @@ func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
 		peerIPs := string(pingBytes)
 		peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
 	}
-	outputEvent.SetString(fmt.Sprintf("Peer IP found: %s",peerIP))
+	outputEvent.SetString(fmt.Sprintf("Peer IP found: %s", peerIP))
 	t.Frame.QueueEvent(outputEvent)
 	success = true
 	return
@@ -147,11 +147,13 @@ func (m MacNetwork) connectToPeer(t *Transfer) bool {
 	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	if m.Mode == "sending" {
 		if !m.checkForFile(t) {
-			outputEvent.SetString(fmt.Sprintf("\nCould not find file to send: %s",t.Filepath))
+			outputEvent.SetString(fmt.Sprintf("\nCould not find file to send: %s", t.Filepath))
 			t.Frame.QueueEvent(outputEvent)
 			return false
 		}
-		if !m.joinAdHoc(t) { return false }
+		if !m.joinAdHoc(t) {
+			return false
+		}
 		go m.stayOnAdHoc(t)
 		if t.Peer == "mac" {
 			var ok bool
@@ -164,10 +166,14 @@ func (m MacNetwork) connectToPeer(t *Transfer) bool {
 		}
 	} else if m.Mode == "receiving" {
 		if t.Peer == "windows" {
-			if !m.joinAdHoc(t) { return false }
+			if !m.joinAdHoc(t) {
+				return false
+			}
 			go m.stayOnAdHoc(t)
 		} else if t.Peer == "mac" {
-			if !m.startAdHoc(t) { return false }
+			if !m.startAdHoc(t) {
+				return false
+			}
 		}
 	}
 	return true
@@ -184,7 +190,7 @@ func (m MacNetwork) resetWifi(t *Transfer) {
 func (m MacNetwork) stayOnAdHoc(t *Transfer) {
 	for {
 		select {
-		case <- t.AdHocChan:
+		case <-t.AdHocChan:
 			outputEvent.SetString("Stopping ad hoc connection.")
 			t.Frame.QueueEvent(outputEvent)
 			t.AdHocChan <- true
@@ -199,7 +205,7 @@ func (m MacNetwork) stayOnAdHoc(t *Transfer) {
 }
 
 func (m MacNetwork) checkForFile(t *Transfer) bool {
-	_,err := os.Stat(t.Filepath)
+	_, err := os.Stat(t.Filepath)
 	if err != nil {
 		return false
 	}
