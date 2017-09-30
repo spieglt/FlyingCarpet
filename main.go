@@ -22,6 +22,8 @@ const PROGRESS_BAR_UPDATE = wx.ID_HIGHEST + 2
 const PROGRESS_BAR_SHOW = wx.ID_HIGHEST + 3
 const START_BUTTON_ENABLE = wx.ID_HIGHEST + 4
 
+// need different thread event for each post to output box, so need helper function that's receiver on Transfer?
+
 func main() {
 	wx1 := wx.NewApp()
 	mf := newGui()
@@ -42,6 +44,8 @@ func (t *Transfer) mainRoutine(mode string) {
 	var n Network
 
 	if mode == "send" {
+		threadEvent.SetString("In if block")
+		t.Frame.QueueEvent(threadEvent)
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
@@ -50,6 +54,8 @@ func (t *Transfer) mainRoutine(mode string) {
 			w := WindowsNetwork{Mode: "sending"}
 			w.PreviousSSID = w.getCurrentWifi()
 			n = w
+			threadEvent.SetString("Got current wifi")
+			t.Frame.QueueEvent(threadEvent)
 		} else if runtime.GOOS == "darwin" {
 			n = MacNetwork{Mode: "sending"}
 		}
