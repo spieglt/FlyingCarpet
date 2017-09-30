@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	// "log"
 	"os"
 	"runtime"
 	"strings"
@@ -15,35 +14,45 @@ import (
 const CHUNKSIZE = 1000000	// 1MB
 
 func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
+
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
+	progressEvent := wx.NewThreadEvent(wx.EVT_THREAD, PROGRESS_BAR_UPDATE)
+	progressShow := wx.NewThreadEvent(wx.EVT_THREAD, PROGRESS_BAR_SHOW)
+	t.Frame.QueueEvent(progressShow)
+
 	start := time.Now()
 	defer t.Conn.Close()
 
 	file, err := os.Open(t.Filepath)
 	if err != nil {
 		n.teardown(t)
-		OutputBox.AppendText("\nError opening out file. Please quit and restart Flying Carpet.")
+		outputEvent.SetString("\nError opening out file. Please quit and restart Flying Carpet.")
+		t.Frame.QueueEvent(outputEvent)
 		sendChan <- false
 		return
 	}
 	defer file.Close()
 
 	fileSize := getSize(file)
-	OutputBox.AppendText(fmt.Sprintf("File size: %d\n", fileSize))
-	OutputBox.AppendText(fmt.Sprintf("MD5 hash: %x\n", getHash(t.Filepath)))
+	outputEvent.SetString(fmt.Sprintf("File size: %d\nMD5 hash: %x", fileSize, getHash(t.Filepath)))
+	t.Frame.QueueEvent(outputEvent)
 
 	numChunks := ceil(fileSize, CHUNKSIZE)
 
 	bytesLeft := fileSize
 	var i int64
-	OutputBox.AppendText("\n")
+	outputEvent.SetString("\n")
+	t.Frame.QueueEvent(outputEvent)
 	for i = 0; i < numChunks; i++ {
 		bufferSize := min(CHUNKSIZE, bytesLeft)
 		buffer := make([]byte, bufferSize)
 		bytesRead, err := file.Read(buffer)
 		if int64(bytesRead) != bufferSize {
 			n.teardown(t)
-			OutputBox.AppendText(fmt.Sprintf("bytesRead: %d\nbufferSize: %d\n", bytesRead, bufferSize))
-			OutputBox.AppendText("\nError reading out file. Please quit and restart Flying Carpet.")
+			outputEvent.SetString(fmt.Sprintf("bytesRead: %d\nbufferSize: %d\n", bytesRead, bufferSize))
+			t.Frame.QueueEvent(outputEvent)
+			outputEvent.SetString("\nError reading out file. Please quit and restart Flying Carpet.")
+			t.Frame.QueueEvent(outputEvent)
 			sendChan <- false
 			return
 		}
@@ -57,7 +66,8 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 		err = binary.Write(t.Conn, binary.BigEndian, chunkSize)
 		if err != nil {
 			n.teardown(t)
-			OutputBox.AppendText("\nError writing chunk length. Please quit and restart Flying Carpet.")
+			outputEvent.SetString("\nError writing chunk length. Please quit and restart Flying Carpet.")
+			t.Frame.QueueEvent(outputEvent)
 			sendChan <- false
 			return
 		}
@@ -66,20 +76,21 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 		bytes, err := t.Conn.Write(encryptedBuffer)
 		if bytes != len(encryptedBuffer) {
 			n.teardown(t)
-			OutputBox.AppendText("\nSend error. Please quit and restart Flying Carpet.")
+			outputEvent.SetString("\nSend error. Please quit and restart Flying Carpet.")
+			t.Frame.QueueEvent(outputEvent)
 			sendChan <- false
 			return
 		}
-		OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n") + 1, OutputBox.GetLastPosition(), 
-			fmt.Sprintf("\nProgress: %3.0f%%", (float64(fileSize)-float64(bytesLeft))/float64(fileSize)*100))
-		// fmt.Printf("\rProgress: %3.0f%%", (float64(fileSize)-float64(bytesLeft))/float64(fileSize)*100)
+		percentDone := (fileSize - bytesLeft) / fileSize
+		progressEvent.SetInt(percentDone)
+		t.Frame.QueueEvent(progressEvent)
 	}
-	OutputBox.AppendText("\n")
 	if runtime.GOOS == "darwin" {
 		t.AdHocChan <- false
 		<- t.AdHocChan
 	}
-	OutputBox.AppendText(fmt.Sprintf("\nSending took %s\n", time.Since(start)))
+	outputEvent.SetString(fmt.Sprintf("\nSending took %s\n", time.Since(start)))
+	t.Frame.QueueEvent(outputEvent)
 	sendChan <- true
 	return
 }
@@ -92,7 +103,8 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 	outFile, err := os.OpenFile(t.Filepath, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		n.teardown(t)
-		OutputBox.AppendText("\nError creating out file. Please quit and restart Flying Carpet.")
+		outputEvent.SetString("\nError creating out file. Please quit and restart Flying Carpet.")
+		t.Frame.QueueEvent(outputEvent)
 		receiveChan <- false
 		return
 	}
@@ -103,7 +115,8 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 		var chunkSize int64
 		err := binary.Read(t.Conn, binary.BigEndian, &chunkSize)
 		if err != nil {
-			OutputBox.AppendText(fmt.Sprintf("\nerr: %s", err.Error()))
+			outputEvent.SetString(fmt.Sprintf("\nerr: %s", err.Error()))
+			t.Frame.QueueEvent(outputEvent)
 		}
 		if chunkSize == 0 {
 			// done receiving
@@ -116,13 +129,14 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 		bytesReceived, err := io.ReadFull(t.Conn, chunk)
 		if err != nil {
 			n.teardown(t)
-			OutputBox.AppendText("\nError reading from stream. Please quit and restart Flying Carpet.")
+			outputEvent.SetString("\nError reading from stream. Please quit and restart Flying Carpet.")
+			t.Frame.QueueEvent(outputEvent)
 			receiveChan <- false
 			return
 		}
 		if int64(bytesReceived) != chunkSize {
-			OutputBox.AppendText(fmt.Sprintf("\nbytesReceived: %d", bytesReceived))
-			OutputBox.AppendText(fmt.Sprintf("\nchunkSize: %d", chunkSize))
+			outputEvent.SetString(fmt.Sprintf("\nbytesReceived: %d\nchunkSize: %d", bytesReceived, chunkSize))
+			t.Frame.QueueEvent(outputEvent)
 		}
 
 		// decrypt and add to outfile
@@ -130,16 +144,21 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 		_, err = outFile.Write(decryptedChunk)
 		if err != nil {
 			n.teardown(t)
-			OutputBox.AppendText("\nError writing to out file. Please quit and restart Flying Carpet.")
+			outputEvent.SetString("\nError writing to out file. Please quit and restart Flying Carpet.")
+			t.Frame.QueueEvent(outputEvent)
 			receiveChan <- false
 			return
 		}
 	}
-	OutputBox.AppendText(fmt.Sprintf("\nReceived file size: %d", getSize(outFile)))
-	OutputBox.AppendText(fmt.Sprintf("\nReceived file hash: %x", getHash(t.Filepath)))
-	OutputBox.AppendText(fmt.Sprintf("\nReceiving took %s", time.Since(start)))
+	outputEvent.SetString(fmt.Sprintf("\nReceived file size: %d", getSize(outFile)))
+	t.Frame.QueueEvent(outputEvent)
+	outputEvent.SetString(fmt.Sprintf("\nReceived file hash: %x", getHash(t.Filepath)))
+	t.Frame.QueueEvent(outputEvent)
+	outputEvent.SetString(fmt.Sprintf("\nReceiving took %s", time.Since(start)))
+	t.Frame.QueueEvent(outputEvent)
 	speed := (float64(getSize(outFile)*8) / 1000000) / (float64(time.Since(start))/1000000000)
-	OutputBox.AppendText(fmt.Sprintf("\nSpeed: %.2fmbps", speed))
+	outputEvent.SetString(fmt.Sprintf("\nSpeed: %.2fmbps", speed))
+	t.Frame.QueueEvent(outputEvent)
 	// signal main that it's okay to return
 	receiveChan <- true
 }

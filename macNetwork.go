@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	// "log"
 	"os"
 	"os/exec"
 	"strings"
@@ -10,24 +9,28 @@ import (
 )
 
 func (m *MacNetwork) startAdHoc(t *Transfer) bool {
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	tmpLoc := "/private/tmp/adhocnet"
 	os.Remove(tmpLoc)
 
 	data, err := Asset("static/adhocnet")
 	if err != nil {
 		m.teardown(t)
-		OutputBox.AppendText("\nStatic file error")
+		outputEvent.SetString("Static file error")
+		t.Frame.QueueEvent(outputEvent)
 		return false
 	}
 	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 	if err != nil {
 		m.teardown(t)
-		OutputBox.AppendText("\nError creating temp file")
+		outputEvent.SetString("Error creating temp file")
+		t.Frame.QueueEvent(outputEvent)
 		return false
 	}
 	if _, err = outFile.Write(data); err != nil {
 		m.teardown(t)
-		OutputBox.AppendText("\nWrite error")
+		outputEvent.SetString("Write error")
+		t.Frame.QueueEvent(outputEvent)
 		return false
 	}
 	defer os.Remove(tmpLoc)
@@ -35,85 +38,94 @@ func (m *MacNetwork) startAdHoc(t *Transfer) bool {
 	cmd := exec.Command(tmpLoc, t.SSID, t.Passphrase)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		fmt.Println(string(output))
+		outputEvent.SetString(string(output))
+		t.Frame.QueueEvent(outputEvent)
 		m.teardown(t)
-		OutputBox.AppendText("\nError creating ad hoc network")
+		outputEvent.SetString("Error creating ad hoc network")
+		t.Frame.QueueEvent(outputEvent)
 		return false
 	}
-	fmt.Printf("startAdHoc: %sSSID: %s\n", output, t.SSID)
+	outputEvent.SetString(fmt.Sprintf("startAdHoc: %sSSID: %s\n", output, t.SSID))
+	t.Frame.QueueEvent(outputEvent)
 	return true
 }
 
 func (m *MacNetwork) joinAdHoc(t *Transfer) bool {
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	wifiInterface := m.getWifiInterface()
-	OutputBox.AppendText("\nLooking for ad-hoc network...")
+	outputEvent.SetString("Looking for ad-hoc network...")
+	t.Frame.QueueEvent(outputEvent)
 	timeout := JOIN_ADHOC_TIMEOUT
 	joinAdHocStr := "networksetup -setairportnetwork " + wifiInterface + " " + t.SSID + " " + t.Passphrase
 	joinAdHocBytes, err := exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
-	OutputBox.AppendText("\n")
 	for len(joinAdHocBytes) != 0 {
 		if timeout <= 0 {
-			OutputBox.AppendText("\nCould not find the ad hoc network within the timeout period.")
+			outputEvent.SetString("Could not find the ad hoc network within the timeout period.")
+			t.Frame.QueueEvent(outputEvent)
 			return false
 		}
-		OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n") + 1, OutputBox.GetLastPosition(), 
-			fmt.Sprintf("\nFailed to join %s network. Trying for %2d more seconds.", t.SSID, timeout))
+		outputEvent.SetString(fmt.Sprintf("\nFailed to join %s network. Trying for %2d more seconds.", t.SSID, timeout))
+		t.Frame.QueueEvent(outputEvent)
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(5))
 		joinAdHocBytes, err = exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
 		if err != nil {
 			m.teardown(t)
-			OutputBox.AppendText("\nError joining ad hoc network.")
+			outputEvent.SetString("Error joining ad hoc network.")
+			t.Frame.QueueEvent(outputEvent)
 			return false
 		}
 	}
-	fmt.Printf("\n")
 	return true
 }
 
 func (m MacNetwork) getCurrentWifi() (SSID string) {
 	cmdStr := "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I | awk '/ SSID/ {print substr($0, index($0, $2))}'"
-	SSID = m.runCommand(cmdStr, "Could not get current SSID.")
+	SSID = m.runCommand(cmdStr)
 	return
 }
 
 func (m *MacNetwork) getWifiInterface() string {
 	getInterfaceString := "networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}'"
-	return m.runCommand(getInterfaceString, "Could not get wifi interface.")
+	return m.runCommand(getInterfaceString)
 }
 
-func (m *MacNetwork) findMac() (peerIP string, success bool) {
+func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	timeout := FIND_MAC_TIMEOUT
 	var currentIP string
-	OutputBox.AppendText("\n")
+	outputEvent.SetString("")
+	t.Frame.QueueEvent(outputEvent)
 	for currentIP == "" {
 		currentIPString := "ipconfig getifaddr " + m.getWifiInterface()
 		currentIPBytes, err := exec.Command("sh", "-c", currentIPString).CombinedOutput()
 		if err != nil {
-			OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n") + 1, OutputBox.GetLastPosition(), 
-				fmt.Sprintf("\nWaiting for self-assigned IP... %s", err))
+			outputEvent.SetString(fmt.Sprintf("\nWaiting for self-assigned IP... %s", err))
+			t.Frame.QueueEvent(outputEvent)
 			time.Sleep(time.Second * time.Duration(1))
 			continue
 		}
 		currentIP = strings.TrimSpace(string(currentIPBytes))
 	}
-	fmt.Printf("\nSelf-assigned IP found: %s\n",currentIP)
+	
+	outputEvent.SetString(fmt.Sprintf("Self-assigned IP found: %s",currentIP))
+	t.Frame.QueueEvent(outputEvent)
 
 	pingString := "ping -c 5 169.254.255.255 | " + // ping broadcast address
 		"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
 		"grep --line-buffered -vE '169.254.255.255' | " + // exclude broadcast address
 		"grep -vE '" + currentIP + "'" // exclude current IP
 
-	OutputBox.AppendText("\n")
 	for peerIP == "" {
 		if timeout <= 0 {
-			OutputBox.AppendText("\nCould not find the peer computer within the timeout period.")
+			outputEvent.SetString("Could not find the peer computer within the timeout period.")
+			t.Frame.QueueEvent(outputEvent)
 			return "", false
 		}
 		pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 		if pingErr != nil {
-			OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n") + 1, OutputBox.GetLastPosition(), 
-				fmt.Sprintf("\nCould not find peer. Waiting %2d more seconds. %s",timeout,pingErr))
+			outputEvent.SetString(fmt.Sprintf("\nCould not find peer. Waiting %2d more seconds. %s",timeout,pingErr))
+			t.Frame.QueueEvent(outputEvent)
 			timeout -= 2
 			time.Sleep(time.Second * time.Duration(2))
 			continue
@@ -121,7 +133,8 @@ func (m *MacNetwork) findMac() (peerIP string, success bool) {
 		peerIPs := string(pingBytes)
 		peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
 	}
-	fmt.Printf("\nPeer IP found: %s\n",peerIP)
+	outputEvent.SetString(fmt.Sprintf("Peer IP found: %s",peerIP))
+	t.Frame.QueueEvent(outputEvent)
 	success = true
 	return
 }
@@ -131,9 +144,11 @@ func (m *MacNetwork) findWindows() (peerIP string) {
 }
 
 func (m MacNetwork) connectToPeer(t *Transfer) bool {
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	if m.Mode == "sending" {
 		if !m.checkForFile(t) {
-			OutputBox.AppendText(fmt.Sprintf("\nCould not find file to send: %s",t.Filepath))
+			outputEvent.SetString(fmt.Sprintf("\nCould not find file to send: %s",t.Filepath))
+			t.Frame.QueueEvent(outputEvent)
 			return false
 		}
 		if !m.joinAdHoc(t) { return false }
@@ -159,16 +174,19 @@ func (m MacNetwork) connectToPeer(t *Transfer) bool {
 }
 
 func (m MacNetwork) resetWifi(t *Transfer) {
+	outputEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	wifiInterface := m.getWifiInterface()
 	cmdString := "networksetup -setairportpower " + wifiInterface + " off && networksetup -setairportpower " + wifiInterface + " on"
-	fmt.Println(m.runCommand(cmdString,"Could not reset WiFi adapter."))
+	outputEvent.SetString(runCommand(cmdString))
+	t.Frame.QueueEvent(outputEvent)
 }
 
 func (m MacNetwork) stayOnAdHoc(t *Transfer) {
 	for {
 		select {
 		case <- t.AdHocChan:
-			OutputBox.AppendText("\nStopping ad hoc connection.")
+			outputEvent.SetString("Stopping ad hoc connection.")
+			t.Frame.QueueEvent(outputEvent)
 			t.AdHocChan <- true
 			return
 		default:
@@ -191,7 +209,7 @@ func (m MacNetwork) checkForFile(t *Transfer) bool {
 func (m *MacNetwork) runCommand(cmd string, errDesc string) (output string) {
 	cmdBytes, err := exec.Command("sh", "-c", cmd).CombinedOutput()
 	if err != nil {
-		fmt.Printf(errDesc+" Error: %s\n", err)
+		return err.Error()
 	}
 	return strings.TrimSpace(string(cmdBytes))
 }

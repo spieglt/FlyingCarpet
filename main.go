@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/md5"
 	"fmt"
-	// "log"
 	"math/rand"
 	"net"
 	"os"
@@ -16,17 +15,20 @@ import (
 )
 
 // Change later
-var OutputBox wx.TextCtrl
 var StartButton wx.Button
 
 const DIAL_TIMEOUT = 60
 const JOIN_ADHOC_TIMEOUT = 60
 const FIND_MAC_TIMEOUT = 60
 
+const OUTPUT_BOX_UPDATE   = wx.ID_HIGHEST + 1
+const PROGRESS_BAR_UPDATE = wx.ID_HIGHEST + 2
+const PROGRESS_BAR_SHOW   = wx.ID_HIGHEST + 3
+
 func main() {
 	wx1 := wx.NewApp()
-	f := newGui()
-	f.Show()
+	mf := newGui()
+	mf.Show()
 	wx1.MainLoop()
 	return
 }
@@ -35,6 +37,8 @@ func (t *Transfer) mainRoutine(mode string) {
 	receiveChan := make(chan bool)
 	sendChan := make(chan bool)
 	var n Network
+
+	threadEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 
 	if mode == "send" {
 		pwBytes := md5.Sum([]byte(t.Passphrase))
@@ -50,31 +54,37 @@ func (t *Transfer) mainRoutine(mode string) {
 		}
 		if !n.connectToPeer(t) {
 			StartButton.Enable(true)
-			OutputBox.AppendText("\nExiting mainRoutine.")
+			threadEvent.SetString("Exiting mainRoutine.")
+			t.Frame.QueueEvent(threadEvent)
 			return
 		}
 
 		if connected := t.sendFile(sendChan, n); connected == false {
 			StartButton.Enable(true)
-			OutputBox.AppendText("\nCould not establish TCP connection with peer. Exiting mainRoutine.")
+			threadEvent.SetString("Could not establish TCP connection with peer. Exiting mainRoutine.")
+			t.Frame.QueueEvent(threadEvent)
 			return
 		}
-		OutputBox.AppendText("\nConnected")
+		threadEvent.SetString("Connected")
+		t.Frame.QueueEvent(threadEvent)
 		sendSuccess := <-sendChan
 		if !sendSuccess {
 			StartButton.Enable(true)
-			OutputBox.AppendText("\nExiting mainRoutine.")
+			threadEvent.SetString("Exiting mainRoutine.")
+			t.Frame.QueueEvent(threadEvent)
 			return
 		}
 		StartButton.Enable(true)
-		OutputBox.AppendText("\nSend complete, resetting WiFi and exiting.")
+		threadEvent.SetString("Send complete, resetting WiFi and exiting.")
+		t.Frame.QueueEvent(threadEvent)
 
 	} else if mode == "receive" {
 		t.Passphrase = generatePassword()
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
-		OutputBox.AppendText(fmt.Sprintf("\n=============================\n" +
+		threadEvent.SetString(fmt.Sprintf("=============================\n" +
+			t.Frame.QueueEvent(threadEvent)
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n" +
 			"=============================\n",t.Passphrase))
 
@@ -85,7 +95,8 @@ func (t *Transfer) mainRoutine(mode string) {
 		}
 		if !n.connectToPeer(t) {
 			StartButton.Enable(true)
-			OutputBox.AppendText("\nExiting mainRoutine.")
+			threadEvent.SetString("Exiting mainRoutine.")
+			t.Frame.QueueEvent(threadEvent)
 			return
 		}
 
@@ -94,64 +105,74 @@ func (t *Transfer) mainRoutine(mode string) {
 		listenerIsUp := <-receiveChan
 		if !listenerIsUp {
 			StartButton.Enable(true)
-			OutputBox.AppendText("\nExiting mainRoutine.")
+			threadEvent.SetString("Exiting mainRoutine.")
+			t.Frame.QueueEvent(threadEvent)
 			return
 		}
 		// wait for reception to finish
 		receiveSuccess := <-receiveChan
 		if !receiveSuccess {
 			StartButton.Enable(true)
-			OutputBox.AppendText("\nExiting mainRoutine.")
+			threadEvent.SetString("Exiting mainRoutine.")
+			t.Frame.QueueEvent(threadEvent)
 			return
 		}
-		OutputBox.AppendText("\nReception complete, resetting WiFi and exiting.")
+		threadEvent.SetString("Reception complete, resetting WiFi and exiting.")
+		t.Frame.QueueEvent(threadEvent)
 	}
 	n.resetWifi(t)
 }
 
 func (t *Transfer) receiveFile(receiveChan chan bool, n Network) {
+	threadEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(t.Port))
 	if err != nil {
 		n.teardown(t)
-		OutputBox.AppendText(fmt.Sprintf("\nCould not listen on :%d",t.Port))
+		threadEvent.SetString(fmt.Sprintf("Could not listen on :%d",t.Port))
+		t.Frame.QueueEvent(threadEvent)
 		receiveChan <- false
 		return
 	}
-	OutputBox.AppendText("\nListening on :" + strconv.Itoa(t.Port))
+	threadEvent.SetString("\nListening on :" + strconv.Itoa(t.Port))
+	t.Frame.QueueEvent(threadEvent)
 	receiveChan <- true
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			n.teardown(t)
-			OutputBox.AppendText(fmt.Sprintf("\nError accepting connection on :%d",t.Port))
+			threadEvent.SetString(fmt.Sprintf("Error accepting connection on :%d",t.Port))
+			t.Frame.QueueEvent(threadEvent)
 			receiveChan <- false
 			return
 		}
 		t.Conn = conn
-		OutputBox.AppendText("\nConnection accepted")
+		threadEvent.SetString("Connection accepted")
+		t.Frame.QueueEvent(threadEvent)
 		go t.receiveAndAssemble(receiveChan, n)
 	}
 }
 
 func (t *Transfer) sendFile(sendChan chan bool, n Network) bool {
+	threadEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	var conn net.Conn
 	var err error
-	OutputBox.AppendText("\n")
 	for i := 0; i < DIAL_TIMEOUT; i++ {
 		err = nil
 		conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond * 10)
 		if err != nil {
-			OutputBox.Replace(strings.LastIndex(OutputBox.GetValue(), "\n") + 1, OutputBox.GetLastPosition(), 
-				fmt.Sprintf("\nFailed connection %2d to %s, retrying.", i, t.RecipientIP))
+			threadEvent.SetString(fmt.Sprintf("Failed connection %2d to %s, retrying.", i, t.RecipientIP))
+			t.Frame.QueueEvent(threadEvent)
 			time.Sleep(time.Second * 1)
 			continue
 		}
-		OutputBox.AppendText("\nSuccessfully dialed peer.")
+		threadEvent.SetString("Successfully dialed peer.")
+		t.Frame.QueueEvent(threadEvent)
 		t.Conn = conn
 		go t.chunkAndSend(sendChan, n)
 		return true
 	}
-	OutputBox.AppendText(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT))
+	threadEvent.SetString(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT))
+	t.Frame.QueueEvent(threadEvent)
 	return false
 }
 
@@ -167,58 +188,61 @@ func generatePassword() string {
 
 func newGui() *MainFrame {
 
-	f := &MainFrame{}
-	f.Frame = wx.NewFrame(wx.NullWindow, wx.ID_ANY, "Flying Carpet")
+	mf := &MainFrame{}
+	mf.Frame = wx.NewFrame(wx.NullWindow, wx.ID_ANY, "Flying Carpet")
 	
-	f.SetSize(400,400)
+	mf.SetSize(400,400)
 	
 	// radio buttons box
-	radioSizer := wx.NewBoxSizer( wx.HORIZONTAL )
+	radioSizer := wx.NewBoxSizer(wx.HORIZONTAL)
 
 	// peer os box
-	peerSizer := wx.NewBoxSizer( wx.VERTICAL )
-	radiobox1 := wx.NewRadioBox( f, wx.ID_ANY, "Peer OS", wx.DefaultPosition, wx.DefaultSize, []string{"macOS", "Windows"}, 1, wx.HORIZONTAL )
-	peerSizer.Add( radiobox1, 1, wx.ALL|wx.EXPAND, 5 )
+	peerSizer := wx.NewBoxSizer(wx.VERTICAL)
+	radiobox1 := wx.NewRadioBox(mf, wx.ID_ANY, "Peer OS", wx.DefaultPosition, wx.DefaultSize, []string{"macOS", "Windows"}, 1, wx.HORIZONTAL)
+	peerSizer.Add(radiobox1, 1, wx.ALL|wx.EXPAND, 5)
 	
 	// bottom half and big container
-	bSizerBottom := wx.NewBoxSizer( wx.VERTICAL )
-	bSizerTotal := wx.NewBoxSizer( wx.VERTICAL )
+	bSizerBottom := wx.NewBoxSizer(wx.VERTICAL)
+	bSizerTotal := wx.NewBoxSizer(wx.VERTICAL)
 
 	// file selection box
-	fileSizer := wx.NewBoxSizer( wx.HORIZONTAL )
-	sendButton := wx.NewButton(f, wx.ID_ANY, "Select File", wx.DefaultPosition, wx.DefaultSize, 0)
-	receiveButton := wx.NewButton(f, wx.ID_ANY, "Select Folder", wx.DefaultPosition, wx.DefaultSize, 0)
+	fileSizer := wx.NewBoxSizer(wx.HORIZONTAL)
+	sendButton := wx.NewButton(mf, wx.ID_ANY, "Select File", wx.DefaultPosition, wx.DefaultSize, 0)
+	receiveButton := wx.NewButton(mf, wx.ID_ANY, "Select Folder", wx.DefaultPosition, wx.DefaultSize, 0)
 	receiveButton.Hide()
-	fileBox := wx.NewTextCtrl( f, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, 0 )
-	fileSizer.Add( sendButton, 0, wx.ALL|wx.EXPAND, 5 )
-	fileSizer.Add( receiveButton, 0, wx.ALL|wx.EXPAND, 5 )
-	fileSizer.Add( fileBox, 1, wx.ALL|wx.EXPAND, 5 )
+	fileBox := wx.NewTextCtrl(mf, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, 0)
+	fileSizer.Add(sendButton, 0, wx.ALL|wx.EXPAND, 5)
+	fileSizer.Add(receiveButton, 0, wx.ALL|wx.EXPAND, 5)
+	fileSizer.Add(fileBox, 1, wx.ALL|wx.EXPAND, 5)
 	
-	bSizerBottom.Add(fileSizer, 0, wx.ALL|wx.EXPAND, 5 )
+	bSizerBottom.Add(fileSizer, 0, wx.ALL|wx.EXPAND, 5)
 
-	radioSizer.Add( peerSizer, 1, wx.EXPAND, 5 )
-	modeSizer := wx.NewBoxSizer( wx.VERTICAL )
+	radioSizer.Add(peerSizer, 1, wx.EXPAND, 5)
+	modeSizer := wx.NewBoxSizer(wx.VERTICAL)
 
-	radiobox2 := wx.NewRadioBox(f, wx.ID_ANY, "Mode", wx.DefaultPosition, wx.DefaultSize, []string{"Send", "Receive"}, 1, wx.HORIZONTAL )
-	modeSizer.Add( radiobox2, 1, wx.ALL|wx.EXPAND, 5 )
+	radiobox2 := wx.NewRadioBox(mf, wx.ID_ANY, "Mode", wx.DefaultPosition, wx.DefaultSize, []string{"Send", "Receive"}, 1, wx.HORIZONTAL)
+	modeSizer.Add(radiobox2, 1, wx.ALL|wx.EXPAND, 5)
 	
-	startButton := wx.NewButton( f, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
+	startButton := wx.NewButton(mf, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
 	StartButton = startButton
-	bSizerBottom.Add( startButton, 0, wx.ALL|wx.EXPAND, 5 )
-	outputBox := wx.NewTextCtrl( f, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE | wx.TE_READONLY )
-	OutputBox = outputBox
-	OutputBox.AppendText("Welcome to Flying Carpet!")
+	bSizerBottom.Add(startButton, 0, wx.ALL|wx.EXPAND, 5)
+	outputBox := wx.NewTextCtrl(mf, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE | wx.TE_READONLY)
+	outputBox.AppendText("Welcome to Flying Carpet!")
 
-	bSizerBottom.Add( outputBox, 1, wx.ALL|wx.EXPAND, 5 )
+	progressBar := wx.NewGauge(mf, wx.ID_ANY, 100, wx.DefaultPosition, wx.DefaultSize, wx.GA_HORIZONTAL)
+	progressBar.Hide()
+
+	bSizerBottom.Add(outputBox, 1, wx.ALL|wx.EXPAND, 5)
 	outputBox.SetSize(200,200);
+	bSizerBottom.Add(progressBar, 1, wx.ALL|wx.EXPAND, 5)
 
-	radioSizer.Add( modeSizer, 1, wx.EXPAND, 5 )
+	radioSizer.Add(modeSizer, 1, wx.EXPAND, 5)
 
-	bSizerTotal.Add( radioSizer, 0, wx.EXPAND, 5 )
-	bSizerTotal.Add( bSizerBottom, 1, wx.EXPAND, 5 )
+	bSizerTotal.Add(radioSizer, 0, wx.EXPAND, 5)
+	bSizerTotal.Add(bSizerBottom, 1, wx.EXPAND, 5)
 
 	// mode button action
-	wx.Bind(f, wx.EVT_RADIOBOX, func(e wx.Event) {
+	wx.Bind(mf, wx.EVT_RADIOBOX, func(e wx.Event) {
 		if radiobox2.GetSelection() == 0 {
 			receiveButton.Hide()
 			sendButton.Show()
@@ -226,11 +250,11 @@ func newGui() *MainFrame {
 			sendButton.Hide()
 			receiveButton.Show()
 		}
-		f.Layout()
+		mf.Layout()
 	}, radiobox2.GetId())
 
 	// send button action
-	wx.Bind(f, wx.EVT_BUTTON, func(e wx.Event) {
+	wx.Bind(mf, wx.EVT_BUTTON, func(e wx.Event) {
 		fd := wx.NewFileDialogT(wx.NullWindow, "Select Files", "", "", "*", wx.FD_OPEN, wx.DefaultPosition, wx.DefaultSize, "Open")
 		if fd.ShowModal() != wx.ID_CANCEL {
 			filename := fd.GetPath()
@@ -239,7 +263,7 @@ func newGui() *MainFrame {
 	}, sendButton.GetId())
 
 	// receive button action
-	wx.Bind(f, wx.EVT_BUTTON, func(e wx.Event) {
+	wx.Bind(mf, wx.EVT_BUTTON, func(e wx.Event) {
 		fd := wx.NewDirDialogT(wx.NullWindow, "Select Folder", "Open", wx.DD_DEFAULT_STYLE, wx.DefaultPosition, wx.DefaultSize)
 
 		usr, err := user.Current()
@@ -255,7 +279,7 @@ func newGui() *MainFrame {
 	}, receiveButton.GetId())
 
 	// start button action
-	wx.Bind(f, wx.EVT_BUTTON, func(e wx.Event) {
+	wx.Bind(mf, wx.EVT_BUTTON, func(e wx.Event) {
 		mode, peer := "", ""
 		if radiobox2.GetSelection() == 0 {
 			mode = "send"
@@ -273,10 +297,11 @@ func newGui() *MainFrame {
 			Port:       3290,
 			Peer:       peer,
 			AdHocChan:	make(chan bool),
+			Frame:      &mf
 		}
 
 		if mode == "send" {
-			pd := wx.NewPasswordEntryDialog(f, "Enter password from receiving end:", "", "", wx.OK|wx.CANCEL, wx.DefaultPosition)
+			pd := wx.NewPasswordEntryDialog(mf, "Enter password from receiving end:", "", "", wx.OK|wx.CANCEL, wx.DefaultPosition)
 			ret := pd.ShowModal()
 			if ret == wx.ID_OK {
 				_,err := os.Stat(t.Filepath)
@@ -302,12 +327,30 @@ func newGui() *MainFrame {
 			}
 		}
 	}, startButton.GetId())
+
+	// output box update event
+	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
+		threadEvent := wx.ToThreadEvent(e)
+		outputBox.AppendText("\n" + threadEvent.GetString())
+	}, OUTPUT_BOX_UPDATE)
+
+	// progress bar update event
+	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
+        threadEvent := wx.ToThreadEvent(e)
+        progressBar.SetValue(threadEvent.GetInt())
+	}, PROGRESS_BAR_UPDATE)
+
+	// progress bar display event
+	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
+        progressBar.Show()
+        mf.Layout()
+	}, PROGRESS_BAR_SHOW)
 	
-	f.SetSizer( bSizerTotal )
-	f.Layout()
-	f.Centre( wx.BOTH )
+	mf.SetSizer(bSizerTotal)
+	mf.Layout()
+	mf.Centre(wx.BOTH)
 	
-	return f
+	return mf
 
 }
 
@@ -320,6 +363,7 @@ type Transfer struct {
 	RecipientIP string
 	Peer        string
 	AdHocChan   chan bool
+	Frame       *MainFrame
 }
 
 type Network interface {
