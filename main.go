@@ -14,9 +14,6 @@ import (
 	"os/user"
 )
 
-// Change later
-var StartButton wx.Button
-
 const DIAL_TIMEOUT = 60
 const JOIN_ADHOC_TIMEOUT = 60
 const FIND_MAC_TIMEOUT = 60
@@ -24,6 +21,7 @@ const FIND_MAC_TIMEOUT = 60
 const OUTPUT_BOX_UPDATE   = wx.ID_HIGHEST + 1
 const PROGRESS_BAR_UPDATE = wx.ID_HIGHEST + 2
 const PROGRESS_BAR_SHOW   = wx.ID_HIGHEST + 3
+const START_BUTTON_ENABLE = wx.ID_HIGHEST + 4
 
 func main() {
 	wx1 := wx.NewApp()
@@ -34,6 +32,7 @@ func main() {
 }
 
 func (t *Transfer) mainRoutine(mode string) {
+	startButtonEvent := wx.NewThreadEvent(wx.EVT_THREAD, START_BUTTON_ENABLE)
 	receiveChan := make(chan bool)
 	sendChan := make(chan bool)
 	var n Network
@@ -53,14 +52,14 @@ func (t *Transfer) mainRoutine(mode string) {
 			n = MacNetwork{Mode: "sending"}
 		}
 		if !n.connectToPeer(t) {
-			StartButton.Enable(true)
+			t.Frame.QueueEvent(startButtonEvent)
 			threadEvent.SetString("Exiting mainRoutine.")
 			t.Frame.QueueEvent(threadEvent)
 			return
 		}
 
 		if connected := t.sendFile(sendChan, n); connected == false {
-			StartButton.Enable(true)
+			t.Frame.QueueEvent(startButtonEvent)
 			threadEvent.SetString("Could not establish TCP connection with peer. Exiting mainRoutine.")
 			t.Frame.QueueEvent(threadEvent)
 			return
@@ -69,12 +68,12 @@ func (t *Transfer) mainRoutine(mode string) {
 		t.Frame.QueueEvent(threadEvent)
 		sendSuccess := <-sendChan
 		if !sendSuccess {
-			StartButton.Enable(true)
+			t.Frame.QueueEvent(startButtonEvent)
 			threadEvent.SetString("Exiting mainRoutine.")
 			t.Frame.QueueEvent(threadEvent)
 			return
 		}
-		StartButton.Enable(true)
+		t.Frame.QueueEvent(startButtonEvent)
 		threadEvent.SetString("Send complete, resetting WiFi and exiting.")
 		t.Frame.QueueEvent(threadEvent)
 
@@ -94,7 +93,7 @@ func (t *Transfer) mainRoutine(mode string) {
 			n = MacNetwork{Mode: "receiving"}
 		}
 		if !n.connectToPeer(t) {
-			StartButton.Enable(true)
+			t.Frame.QueueEvent(startButtonEvent)
 			threadEvent.SetString("Exiting mainRoutine.")
 			t.Frame.QueueEvent(threadEvent)
 			return
@@ -104,7 +103,7 @@ func (t *Transfer) mainRoutine(mode string) {
 		// wait for listener to be up
 		listenerIsUp := <-receiveChan
 		if !listenerIsUp {
-			StartButton.Enable(true)
+			t.Frame.QueueEvent(startButtonEvent)
 			threadEvent.SetString("Exiting mainRoutine.")
 			t.Frame.QueueEvent(threadEvent)
 			return
@@ -112,7 +111,7 @@ func (t *Transfer) mainRoutine(mode string) {
 		// wait for reception to finish
 		receiveSuccess := <-receiveChan
 		if !receiveSuccess {
-			StartButton.Enable(true)
+			t.Frame.QueueEvent(startButtonEvent)
 			threadEvent.SetString("Exiting mainRoutine.")
 			t.Frame.QueueEvent(threadEvent)
 			return
@@ -345,6 +344,12 @@ func newGui() *MainFrame {
         progressBar.Show()
         mf.Layout()
 	}, PROGRESS_BAR_SHOW)
+
+	// start button enable event
+	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
+        startButton.Enable(true)
+        mf.Layout()
+	}, START_BUTTON_ENABLE)
 	
 	mf.SetSizer(bSizerTotal)
 	mf.Layout()
