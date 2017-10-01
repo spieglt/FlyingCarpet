@@ -33,19 +33,11 @@ func main() {
 }
 
 func (t *Transfer) mainRoutine(mode string) {
-
-	threadEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
-	threadEvent.SetString("Hey")
-	t.Frame.QueueEvent(threadEvent)
-
-	startButtonEvent := wx.NewThreadEvent(wx.EVT_THREAD, START_BUTTON_ENABLE)
 	receiveChan := make(chan bool)
 	sendChan := make(chan bool)
 	var n Network
 
 	if mode == "send" {
-		threadEvent.SetString("In if block")
-		t.Frame.QueueEvent(threadEvent)
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
@@ -54,46 +46,40 @@ func (t *Transfer) mainRoutine(mode string) {
 			w := WindowsNetwork{Mode: "sending"}
 			w.PreviousSSID = w.getCurrentWifi()
 			n = w
-			threadEvent.SetString("Got current wifi")
-			t.Frame.QueueEvent(threadEvent)
+			t.output("Got current wifi")
 		} else if runtime.GOOS == "darwin" {
 			n = MacNetwork{Mode: "sending"}
 		}
 		if !n.connectToPeer(t) {
-			t.Frame.QueueEvent(startButtonEvent)
-			threadEvent.SetString("Exiting mainRoutine.")
-			t.Frame.QueueEvent(threadEvent)
+			t.enableStartButton()
+			t.output("Exiting mainRoutine.")
 			return
 		}
 
 		if connected := t.sendFile(sendChan, n); connected == false {
-			t.Frame.QueueEvent(startButtonEvent)
-			threadEvent.SetString("Could not establish TCP connection with peer. Exiting mainRoutine.")
-			t.Frame.QueueEvent(threadEvent)
+			t.enableStartButton()
+			t.output("Could not establish TCP connection with peer. Exiting mainRoutine.")
 			return
 		}
-		threadEvent.SetString("Connected")
-		t.Frame.QueueEvent(threadEvent)
+		t.output("Connected")
 		sendSuccess := <-sendChan
 		if !sendSuccess {
-			t.Frame.QueueEvent(startButtonEvent)
-			threadEvent.SetString("Exiting mainRoutine.")
-			t.Frame.QueueEvent(threadEvent)
+			t.enableStartButton()
+			t.output("Exiting mainRoutine.")
 			return
 		}
-		t.Frame.QueueEvent(startButtonEvent)
-		threadEvent.SetString("Send complete, resetting WiFi and exiting.")
-		t.Frame.QueueEvent(threadEvent)
+		t.enableStartButton()
+		t.output("Send complete, resetting WiFi and exiting.")
 
 	} else if mode == "receive" {
 		t.Passphrase = generatePassword()
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
-		threadEvent.SetString(fmt.Sprintf("=============================\n"+
+		t.output(fmt.Sprintf("=============================\n"+
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
 			"=============================\n", t.Passphrase))
-		t.Frame.QueueEvent(threadEvent)
+		
 
 		if runtime.GOOS == "windows" {
 			n = WindowsNetwork{Mode: "receiving"}
@@ -101,9 +87,8 @@ func (t *Transfer) mainRoutine(mode string) {
 			n = MacNetwork{Mode: "receiving"}
 		}
 		if !n.connectToPeer(t) {
-			t.Frame.QueueEvent(startButtonEvent)
-			threadEvent.SetString("Exiting mainRoutine.")
-			t.Frame.QueueEvent(threadEvent)
+			t.enableStartButton()
+			t.output("Exiting mainRoutine.")
 			return
 		}
 
@@ -111,75 +96,65 @@ func (t *Transfer) mainRoutine(mode string) {
 		// wait for listener to be up
 		listenerIsUp := <-receiveChan
 		if !listenerIsUp {
-			t.Frame.QueueEvent(startButtonEvent)
-			threadEvent.SetString("Exiting mainRoutine.")
-			t.Frame.QueueEvent(threadEvent)
+			t.enableStartButton()
+			t.output("Exiting mainRoutine.")
 			return
 		}
 		// wait for reception to finish
 		receiveSuccess := <-receiveChan
 		if !receiveSuccess {
-			t.Frame.QueueEvent(startButtonEvent)
-			threadEvent.SetString("Exiting mainRoutine.")
-			t.Frame.QueueEvent(threadEvent)
+			t.enableStartButton()
+			t.output("Exiting mainRoutine.")
 			return
 		}
-		threadEvent.SetString("Reception complete, resetting WiFi and exiting.")
-		t.Frame.QueueEvent(threadEvent)
+		t.output("Reception complete, resetting WiFi and exiting.")
 	}
 	n.resetWifi(t)
 }
 
 func (t *Transfer) receiveFile(receiveChan chan bool, n Network) {
-	threadEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
+	
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(t.Port))
 	if err != nil {
 		n.teardown(t)
-		threadEvent.SetString(fmt.Sprintf("Could not listen on :%d", t.Port))
-		t.Frame.QueueEvent(threadEvent)
+		t.output(fmt.Sprintf("Could not listen on :%d", t.Port))
 		receiveChan <- false
 		return
 	}
-	threadEvent.SetString("\nListening on :" + strconv.Itoa(t.Port))
-	t.Frame.QueueEvent(threadEvent)
+	t.output("Listening on :" + strconv.Itoa(t.Port))
 	receiveChan <- true
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			n.teardown(t)
-			threadEvent.SetString(fmt.Sprintf("Error accepting connection on :%d", t.Port))
-			t.Frame.QueueEvent(threadEvent)
+			t.output(fmt.Sprintf("Error accepting connection on :%d", t.Port))
 			receiveChan <- false
 			return
 		}
 		t.Conn = conn
-		threadEvent.SetString("Connection accepted")
-		t.Frame.QueueEvent(threadEvent)
+		t.output("Connection accepted")
 		go t.receiveAndAssemble(receiveChan, n)
 	}
 }
 
 func (t *Transfer) sendFile(sendChan chan bool, n Network) bool {
-	threadEvent := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
+	
 	var conn net.Conn
 	var err error
 	for i := 0; i < DIAL_TIMEOUT; i++ {
 		err = nil
 		conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond*10)
 		if err != nil {
-			threadEvent.SetString(fmt.Sprintf("Failed connection %2d to %s, retrying.", i, t.RecipientIP))
-			t.Frame.QueueEvent(threadEvent)
+			t.output(fmt.Sprintf("Failed connection %2d to %s, retrying.", i, t.RecipientIP))
 			time.Sleep(time.Second * 1)
 			continue
 		}
-		threadEvent.SetString("Successfully dialed peer.")
-		t.Frame.QueueEvent(threadEvent)
+		t.output("Successfully dialed peer.")
 		t.Conn = conn
 		go t.chunkAndSend(sendChan, n)
 		return true
 	}
-	threadEvent.SetString(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT))
-	t.Frame.QueueEvent(threadEvent)
+	t.output(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT))
 	return false
 }
 
@@ -313,15 +288,15 @@ func newGui() *MainFrame {
 				_, err := os.Stat(t.Filepath)
 				if err == nil {
 					startButton.Enable(false)
-					outputBox.AppendText("\nEntered password: " + pd.GetValue())
+					outputBox.AppendText("Entered password: " + pd.GetValue())
 					t.Passphrase = pd.GetValue()
 					// pd.Destroy()
 					go t.mainRoutine(mode)
 				} else {
-					outputBox.AppendText("\nCould not find output file.")
+					outputBox.AppendText("Could not find output file.")
 				}
 			} else {
-				outputBox.AppendText("\nPassword entry was cancelled.")
+				outputBox.AppendText("Password entry was cancelled.")
 			}
 		} else if mode == "receive" {
 			_, err := os.Stat(t.Filepath)
@@ -329,7 +304,7 @@ func newGui() *MainFrame {
 				startButton.Enable(false)
 				go t.mainRoutine(mode)
 			} else {
-				outputBox.AppendText("\nError: destination file already exists.")
+				outputBox.AppendText("Error: destination file already exists.")
 			}
 		}
 	}, startButton.GetId())
@@ -337,7 +312,7 @@ func newGui() *MainFrame {
 	// output box update event
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
 		threadEvent := wx.ToThreadEvent(e)
-		outputBox.AppendText("\n" + threadEvent.GetString())
+		outputBox.AppendText("" + threadEvent.GetString())
 	}, OUTPUT_BOX_UPDATE)
 
 	// progress bar update event
@@ -363,7 +338,17 @@ func newGui() *MainFrame {
 	mf.Centre(wx.BOTH)
 
 	return mf
+}
 
+func (t *Transfer) output(msg string) {
+	threadEvt := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
+	threadEvt.SetString("" + msg)
+	t.Frame.QueueEvent(threadEvt)
+}
+
+func (t *Transfer) enableStartButton() {
+	startButtonEvt := wx.NewThreadEvent(wx.EVT_THREAD, START_BUTTON_ENABLE)
+	t.Frame.QueueEvent(startButtonEvt)
 }
 
 type Transfer struct {
