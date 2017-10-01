@@ -213,9 +213,9 @@ func newGui() *MainFrame {
 	progressBar := wx.NewGauge(mf, wx.ID_ANY, 100, wx.DefaultPosition, wx.DefaultSize, wx.GA_HORIZONTAL)
 	progressBar.Hide()
 
-	bSizerBottom.Add(outputBox, 1, wx.ALL|wx.EXPAND, 5)
+	bSizerBottom.Add(outputBox, 1, wx.ALL|wx.EXPAND, 0)
 	outputBox.SetSize(200, 200)
-	bSizerBottom.Add(progressBar, 1, wx.ALL|wx.EXPAND, 5)
+	bSizerBottom.Add(progressBar, 0, wx.ALL|wx.EXPAND, 5)
 
 	radioSizer.Add(modeSizer, 1, wx.EXPAND, 5)
 

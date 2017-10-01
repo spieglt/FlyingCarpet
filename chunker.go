@@ -34,6 +34,16 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 
 	bytesLeft := fileSize
 	var i int64
+
+	ticker := time.NewTicker(time.Millisecond * 250)
+	go func() {
+		for _ = range ticker.C {
+			percentDone := 100 * float64(float64(fileSize) - float64(bytesLeft)) / float64(fileSize)
+			// t.output(fmt.Sprintf("percentDone: %d", percentDone))
+			t.updateProgressBar(int(percentDone))
+		}
+	}()
+
 	for i = 0; i < numChunks; i++ {
 		bufferSize := min(CHUNKSIZE, bytesLeft)
 		buffer := make([]byte, bufferSize)
@@ -68,13 +78,12 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 			sendChan <- false
 			return
 		}
-		percentDone := (fileSize - bytesLeft) / fileSize
-		t.updateProgressBar(int(percentDone))
 	}
 	if runtime.GOOS == "darwin" {
 		t.AdHocChan <- false
 		<-t.AdHocChan
 	}
+	ticker.Stop()
 	t.output(fmt.Sprintf("Sending took %s\n", time.Since(start)))
 	sendChan <- true
 	return
