@@ -9,7 +9,7 @@ import (
 )
 
 func (m *MacNetwork) startAdHoc(t *Transfer) bool {
-	
+
 	tmpLoc := "/private/tmp/adhocnet"
 	os.Remove(tmpLoc)
 
@@ -45,7 +45,7 @@ func (m *MacNetwork) startAdHoc(t *Transfer) bool {
 }
 
 func (m *MacNetwork) joinAdHoc(t *Transfer) bool {
-	
+
 	wifiInterface := m.getWifiInterface()
 	t.output("Looking for ad-hoc network " + t.SSID + "...")
 	timeout := JOIN_ADHOC_TIMEOUT
@@ -126,7 +126,7 @@ func (m *MacNetwork) findWindows() (peerIP string) {
 }
 
 func (m MacNetwork) connectToPeer(t *Transfer) bool {
-	
+
 	if m.Mode == "sending" {
 		if !m.checkForFile(t) {
 			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
@@ -161,14 +161,14 @@ func (m MacNetwork) connectToPeer(t *Transfer) bool {
 }
 
 func (m MacNetwork) resetWifi(t *Transfer) {
-	
+
 	wifiInterface := m.getWifiInterface()
 	cmdString := "networksetup -setairportpower " + wifiInterface + " off && networksetup -setairportpower " + wifiInterface + " on"
 	t.output(m.runCommand(cmdString))
 }
 
 func (m MacNetwork) stayOnAdHoc(t *Transfer) {
-	
+
 	for {
 		select {
 		case <-t.AdHocChan:

@@ -79,7 +79,6 @@ func (t *Transfer) mainRoutine(mode string) {
 		t.output(fmt.Sprintf("=============================\n"+
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
 			"=============================\n", t.Passphrase))
-		
 
 		if runtime.GOOS == "windows" {
 			n = WindowsNetwork{Mode: "receiving"}
@@ -113,7 +112,7 @@ func (t *Transfer) mainRoutine(mode string) {
 }
 
 func (t *Transfer) receiveFile(receiveChan chan bool, n Network) {
-	
+
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(t.Port))
 	if err != nil {
 		n.teardown(t)
@@ -138,7 +137,7 @@ func (t *Transfer) receiveFile(receiveChan chan bool, n Network) {
 }
 
 func (t *Transfer) sendFile(sendChan chan bool, n Network) bool {
-	
+
 	var conn net.Conn
 	var err error
 	for i := 0; i < DIAL_TIMEOUT; i++ {

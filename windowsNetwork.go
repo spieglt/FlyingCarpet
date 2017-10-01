@@ -11,7 +11,7 @@ import (
 )
 
 func (w *WindowsNetwork) startAdHoc(t *Transfer) bool {
-	
+
 	t.output(w.runCommand("netsh winsock reset"))
 	w.stopAdHoc(t)
 	t.output("SSID: " + t.SSID)
@@ -26,12 +26,12 @@ func (w *WindowsNetwork) startAdHoc(t *Transfer) bool {
 }
 
 func (w *WindowsNetwork) stopAdHoc(t *Transfer) {
-	
+
 	t.output(w.runCommand("netsh wlan stop hostednetwork"))
 }
 
 func (w *WindowsNetwork) joinAdHoc(t *Transfer) bool {
-	
+
 	tmpLoc := ".\\adhoc.xml"
 
 	// make doc
@@ -105,7 +105,7 @@ func (w *WindowsNetwork) joinAdHoc(t *Transfer) bool {
 }
 
 func (w *WindowsNetwork) findPeer(t *Transfer) (peerIP string) {
-	
+
 	ipPattern, _ := regexp.Compile("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}")
 
 	// clear arp cache
@@ -156,7 +156,7 @@ func (w *WindowsNetwork) getWifiInterface() string {
 }
 
 func (w WindowsNetwork) connectToPeer(t *Transfer) bool {
-	
+
 	if w.Mode == "receiving" {
 		if !w.addFirewallRule(t) {
 			return false
@@ -189,19 +189,19 @@ func (w WindowsNetwork) connectToPeer(t *Transfer) bool {
 }
 
 func (w WindowsNetwork) resetWifi(t *Transfer) {
-	
+
 	if w.Mode == "receiving" || t.Peer == "mac" {
 		w.deleteFirewallRule(t)
 		w.stopAdHoc(t)
 	} else {
-		w.runCommand("netsh wlan delete profile name="+t.SSID)
+		w.runCommand("netsh wlan delete profile name=" + t.SSID)
 		// rejoin previous wifi
 		t.output(w.runCommand("netsh wlan connect name=" + w.PreviousSSID))
 	}
 }
 
 func (w WindowsNetwork) addFirewallRule(t *Transfer) bool {
-	
+
 	execPath, err := os.Executable()
 	if err != nil {
 		t.output("Failed to get executable path.")
