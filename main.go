@@ -312,7 +312,7 @@ func newGui() *MainFrame {
 	// output box update event
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
 		threadEvent := wx.ToThreadEvent(e)
-		outputBox.AppendText("" + threadEvent.GetString())
+		outputBox.AppendText("\n" + threadEvent.GetString())
 	}, OUTPUT_BOX_UPDATE)
 
 	// progress bar update event
@@ -342,7 +342,7 @@ func newGui() *MainFrame {
 
 func (t *Transfer) output(msg string) {
 	threadEvt := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
-	threadEvt.SetString("" + msg)
+	threadEvt.SetString(msg)
 	t.Frame.QueueEvent(threadEvt)
 }
 

@@ -81,10 +81,8 @@ func (m *MacNetwork) getWifiInterface() string {
 }
 
 func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
-	
 	timeout := FIND_MAC_TIMEOUT
 	var currentIP string
-	t.output("")
 	for currentIP == "" {
 		currentIPString := "ipconfig getifaddr " + m.getWifiInterface()
 		currentIPBytes, err := exec.Command("sh", "-c", currentIPString).CombinedOutput()
@@ -104,6 +102,7 @@ func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
 		"grep -vE '" + currentIP + "'" // exclude current IP
 
 	for peerIP == "" {
+		t.output("looking for peer IP")
 		if timeout <= 0 {
 			t.output("Could not find the peer computer within the timeout period.")
 			return "", false
@@ -116,7 +115,7 @@ func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
 			continue
 		}
 		peerIPs := string(pingBytes)
-		peerIP = peerIPs[:strings.Index(peerIPs, "")]
+		peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
 	}
 	t.output(fmt.Sprintf("Peer IP found: %s", peerIP))
 	success = true

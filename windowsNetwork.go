@@ -86,7 +86,6 @@ func (w *WindowsNetwork) joinAdHoc(t *Transfer) bool {
 
 	// join network
 	timeout := JOIN_ADHOC_TIMEOUT
-	t.output("")
 	for t.SSID != w.getCurrentWifi() {
 		if timeout <= 0 {
 			t.output("Could not find the ad hoc network within the timeout period.")
@@ -101,7 +100,6 @@ func (w *WindowsNetwork) joinAdHoc(t *Transfer) bool {
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(5))
 	}
-	// t.output("")
 	return true
 }
 
