@@ -208,7 +208,7 @@ func newGui() *MainFrame {
 	startButton := wx.NewButton(mf, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
 	bSizerBottom.Add(startButton, 0, wx.ALL|wx.EXPAND, 5)
 	outputBox := wx.NewTextCtrl(mf, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE|wx.TE_READONLY)
-	outputBox.AppendText("Welcome to Flying Carpet!")
+	outputBox.AppendText("Welcome to Flying Carpet!\n")
 
 	progressBar := wx.NewGauge(mf, wx.ID_ANY, 100, wx.DefaultPosition, wx.DefaultSize, wx.GA_HORIZONTAL)
 	progressBar.Hide()
@@ -288,7 +288,7 @@ func newGui() *MainFrame {
 				_, err := os.Stat(t.Filepath)
 				if err == nil {
 					startButton.Enable(false)
-					outputBox.AppendText("Entered password: " + pd.GetValue())
+					outputBox.AppendText("Entered password: \n" + pd.GetValue())
 					t.Passphrase = pd.GetValue()
 					// pd.Destroy()
 					go t.mainRoutine(mode)

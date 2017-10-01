@@ -85,6 +85,7 @@ func (w *WindowsNetwork) joinAdHoc(t *Transfer) bool {
 	t.output(w.runCommand("netsh wlan add profile filename=" + tmpLoc + " user=current"))
 
 	// join network
+	t.output("Looking for ad-hoc network " + t.SSID + "...")
 	timeout := JOIN_ADHOC_TIMEOUT
 	for t.SSID != w.getCurrentWifi() {
 		if timeout <= 0 {

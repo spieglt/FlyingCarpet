@@ -47,7 +47,7 @@ func (m *MacNetwork) startAdHoc(t *Transfer) bool {
 func (m *MacNetwork) joinAdHoc(t *Transfer) bool {
 	
 	wifiInterface := m.getWifiInterface()
-	t.output("Looking for ad-hoc network...")
+	t.output("Looking for ad-hoc network " + t.SSID + "...")
 	timeout := JOIN_ADHOC_TIMEOUT
 	joinAdHocStr := "networksetup -setairportnetwork " + wifiInterface + " " + t.SSID + " " + t.Passphrase
 	joinAdHocBytes, err := exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
@@ -56,7 +56,7 @@ func (m *MacNetwork) joinAdHoc(t *Transfer) bool {
 			t.output("Could not find the ad hoc network within the timeout period.")
 			return false
 		}
-		t.output(fmt.Sprintf("Failed to join %s network. Trying for %2d more seconds.", t.SSID, timeout))
+		t.output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(5))
 		joinAdHocBytes, err = exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
@@ -102,7 +102,6 @@ func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
 		"grep -vE '" + currentIP + "'" // exclude current IP
 
 	for peerIP == "" {
-		t.output("looking for peer IP")
 		if timeout <= 0 {
 			t.output("Could not find the peer computer within the timeout period.")
 			return "", false
