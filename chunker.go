@@ -120,10 +120,13 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 		chunk := make([]byte, chunkSize)
 		bytesReceived, err := io.ReadFull(t.Conn, chunk)
 		if err != nil {
-			n.teardown(t)
-			t.output("Error reading from stream. Please quit and restart Flying Carpet.")
-			receiveChan <- false
-			return
+			t.output("Error reading from stream. Retrying.")
+			t.output(err.Error())
+			continue
+			// n.teardown(t)
+			// t.output("Error reading from stream. Please quit and restart Flying Carpet. " + err.Error())
+			// receiveChan <- false
+			// return
 		}
 		if int64(bytesReceived) != chunkSize {
 			t.output(fmt.Sprintf("bytesReceived: %d\nchunkSize: %d", bytesReceived, chunkSize))

@@ -250,7 +250,7 @@ func newGui() *MainFrame {
 		if err != nil {
 			panic("Could not get user")
 		}
-		fd.SetPath(usr.HomeDir)
+		fd.SetPath(usr.HomeDir + string(os.PathSeparator) + "Desktop")
 
 		if fd.ShowModal() != wx.ID_CANCEL {
 			folder := fd.GetPath()
