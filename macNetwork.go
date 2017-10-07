@@ -49,6 +49,16 @@ func (m *MacNetwork) joinAdHoc(t *Transfer) bool {
 	wifiInterface := m.getWifiInterface()
 	t.output("Looking for ad-hoc network " + t.SSID + "...")
 	timeout := JOIN_ADHOC_TIMEOUT
+
+	// add to list at top position to prevent hopping
+	// setPreferredStr := "networksetup -addpreferredwirelessnetworkatindex " + wifiInterface + " " + t.SSID + " 0 WPA2 " + t.Passphrase
+	// setPreferredBytes, err := exec.Command("sh", "-c", setPreferredStr).CombinedOutput()
+	// if err != nil {
+	// 	t.output("Could not set preferred network: " + err.Error())
+	// } else {
+	// 	t.output("Successfully added preferred network: " + string(setPreferredBytes))
+	// }
+
 	joinAdHocStr := "sudo networksetup -setairportnetwork " + wifiInterface + " " + t.SSID + " " + t.Passphrase
 	joinAdHocBytes, err := exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
 	for len(joinAdHocBytes) != 0 {
