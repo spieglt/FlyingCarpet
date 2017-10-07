@@ -287,7 +287,7 @@ func newGui() *MainFrame {
 				_, err := os.Stat(t.Filepath)
 				if err == nil {
 					startButton.Enable(false)
-					outputBox.AppendText("Entered password: \n" + pd.GetValue())
+					outputBox.AppendText("Entered password: " + pd.GetValue())
 					t.Passphrase = pd.GetValue()
 					// pd.Destroy()
 					go t.mainRoutine(mode)

@@ -49,7 +49,7 @@ func (m *MacNetwork) joinAdHoc(t *Transfer) bool {
 	wifiInterface := m.getWifiInterface()
 	t.output("Looking for ad-hoc network " + t.SSID + "...")
 	timeout := JOIN_ADHOC_TIMEOUT
-	joinAdHocStr := "networksetup -setairportnetwork " + wifiInterface + " " + t.SSID + " " + t.Passphrase
+	joinAdHocStr := "sudo networksetup -setairportnetwork " + wifiInterface + " " + t.SSID + " " + t.Passphrase
 	joinAdHocBytes, err := exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
 	for len(joinAdHocBytes) != 0 {
 		if timeout <= 0 {
@@ -88,7 +88,7 @@ func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
 		currentIPBytes, err := exec.Command("sh", "-c", currentIPString).CombinedOutput()
 		if err != nil {
 			t.output(fmt.Sprintf("Waiting for self-assigned IP... %s", err))
-			time.Sleep(time.Second * time.Duration(1))
+			time.Sleep(time.Second * time.Duration(4))
 			continue
 		}
 		currentIP = strings.TrimSpace(string(currentIPBytes))
