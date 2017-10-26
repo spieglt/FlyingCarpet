@@ -370,8 +370,10 @@ type Network interface {
 }
 
 type WindowsNetwork struct {
-	Mode         string // sending or receiving
-	PreviousSSID string
+	Mode           string // sending or receiving
+	PreviousSSID   string
+	AdHocCapable   bool
+	wifiDirectChan chan string
 }
 
 type MacNetwork struct {

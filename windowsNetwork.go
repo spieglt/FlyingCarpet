@@ -17,17 +17,29 @@ func (w *WindowsNetwork) startAdHoc(t *Transfer) bool {
 	t.output("SSID: " + t.SSID)
 	t.output(w.runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Passphrase))
 	_, err := exec.Command("netsh", "wlan", "start", "hostednetwork").CombinedOutput()
+	// TODO: replace with "echo %errorlevel%" == 1
+	if err.Error() == "exit status 1" {
+		w.AdHocCapable = false
+		// run wifiDirect functions, return true
+	}
 	if err != nil {
 		w.teardown(t)
 		t.output(fmt.Sprintf("Could not start hosted network. This computer's wireless card/driver may not support it. %s", err))
 		return false
 	}
+	w.AdHocCapable = true
 	return true
 }
 
 func (w *WindowsNetwork) stopAdHoc(t *Transfer) {
-
-	t.output(w.runCommand("netsh wlan stop hostednetwork"))
+	if w.AdHocCapable {
+		t.output(w.runCommand("netsh wlan stop hostednetwork"))
+	} else {
+		// send quit command to wifiDirect, output result
+		w.wifiDirectChan <- "quit"
+		reply := <-w.wifiDirectChan
+		t.output(reply)
+	}
 }
 
 func (w *WindowsNetwork) joinAdHoc(t *Transfer) bool {
