@@ -12,30 +12,34 @@ import (
 
 func (w *WindowsNetwork) startAdHoc(t *Transfer) bool {
 
-	t.output(w.runCommand("netsh winsock reset"))
-	w.stopAdHoc(t)
+	w.runCommand("netsh winsock reset")
+	w.runCommand("netsh wlan stop hostednetwork")
 	t.output("SSID: " + t.SSID)
 	t.output(w.runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Passphrase))
 	_, err := exec.Command("netsh", "wlan", "start", "hostednetwork").CombinedOutput()
 	// TODO: replace with "echo %errorlevel%" == 1
 	if err.Error() == "exit status 1" {
+		t.output("Could not start hosted network, trying Wi-Fi Direct.")
 		w.AdHocCapable = false
-		// run wifiDirect functions, return true
-	}
-	if err != nil {
+		go w.startLegacyAP(t)
+		// TODO: check for result of startLegacyAP
+		return true
+	} else if err == nil {
+		w.AdHocCapable = true
+		return true
+	} else {
 		w.teardown(t)
-		t.output(fmt.Sprintf("Could not start hosted network. This computer's wireless card/driver may not support it. %s", err))
+		t.output(fmt.Sprintf("Could not start hosted network."))
 		return false
 	}
-	w.AdHocCapable = true
-	return true
 }
 
 func (w *WindowsNetwork) stopAdHoc(t *Transfer) {
 	if w.AdHocCapable {
 		t.output(w.runCommand("netsh wlan stop hostednetwork"))
 	} else {
-		// send quit command to wifiDirect, output result
+		t.output("Stopping Wi-Fi Direct.")
+		// TODO: blocking operation, check wifiDirect function is running.
 		w.wifiDirectChan <- "quit"
 		reply := <-w.wifiDirectChan
 		t.output(reply)
