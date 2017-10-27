@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
+	"time"
 )
 
 // TODO: error handling
@@ -16,40 +18,41 @@ func (w *WindowsNetwork) startLegacyAP(t *Transfer) {
 
 	data, err := Asset("static/wdlap.exe")
 	if err != nil {
-		w.teardown(t)
 		t.output(fmt.Sprintf("Static file error: %s", err))
+		w.teardown(t)
 		// return false
 	}
 	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 	if err != nil {
-		w.teardown(t)
 		t.output("Error creating temp file")
+		w.teardown(t)
 		// return false
 	}
 	if _, err = outFile.Write(data); err != nil {
-		w.teardown(t)
 		t.output("Write error")
+		w.teardown(t)
 		// return false
 	}
+	outFile.Close()
 	defer os.Remove(tmpLoc)
 
 	// run it with proper options
 	cmd := exec.Command(tmpLoc)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		fmt.Println(err)
+		t.output(err.Error())
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		fmt.Println(err)
+		t.output(err.Error())
 	}
 	reader := bufio.NewReader(stdout)
 	if err != nil {
-		fmt.Println(err)
+		t.output(err.Error())
 	}
 	err = cmd.Start()
 	if err != nil {
-		fmt.Println(err)
+		t.output(err.Error())
 	}
 
 	go readStdout(reader, t)
@@ -68,6 +71,7 @@ func (w *WindowsNetwork) startLegacyAP(t *Transfer) {
 			w.wifiDirectChan <- "Exiting WifiDirect."
 			return
 		default:
+			time.Sleep(time.Second * 3)
 		}
 	}
 
@@ -78,11 +82,12 @@ func readStdout(reader *bufio.Reader, t *Transfer) {
 		resp, err := reader.ReadString('\n')
 		if err != nil {
 			t.output(fmt.Sprintf("WifiDirect stdout error: %s", err))
-			return
+			// return
+			time.Sleep(time.Second * 3)
 		}
 		if resp != "\r\n" && resp != ">\r\n" {
 			// write to window
-			t.output(string(resp))
+			t.output(strings.TrimSpace(string(resp)))
 		}
 	}
 }

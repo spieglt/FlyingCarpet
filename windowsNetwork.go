@@ -28,8 +28,8 @@ func (w *WindowsNetwork) startAdHoc(t *Transfer) bool {
 		w.AdHocCapable = true
 		return true
 	} else {
-		w.teardown(t)
 		t.output(fmt.Sprintf("Could not start hosted network."))
+		w.teardown(t)
 		return false
 	}
 }
