@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -38,6 +39,7 @@ func (w *WindowsNetwork) startLegacyAP(t *Transfer) {
 
 	// run it with proper options
 	cmd := exec.Command(tmpLoc)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.output(err.Error())

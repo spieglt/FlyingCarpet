@@ -17,7 +17,6 @@ type MainFrame struct {
 }
 
 func newGui() *MainFrame {
-
 	mf := &MainFrame{}
 	mf.Frame = wx.NewFrame(wx.NullWindow, wx.ID_ANY, "Flying Carpet")
 

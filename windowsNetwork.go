@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -16,7 +17,9 @@ func (w *WindowsNetwork) startAdHoc(t *Transfer) bool {
 	w.runCommand("netsh wlan stop hostednetwork")
 	t.output("SSID: " + t.SSID)
 	t.output(w.runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Passphrase))
-	_, err := exec.Command("netsh", "wlan", "start", "hostednetwork").CombinedOutput()
+	cmd := exec.Command("netsh", "wlan", "start", "hostednetwork")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	_, err := cmd.CombinedOutput()
 	// TODO: replace with "echo %errorlevel%" == 1
 	if err.Error() == "exit status 1" {
 		t.output("Could not start hosted network, trying Wi-Fi Direct.")
@@ -226,7 +229,9 @@ func (w WindowsNetwork) addFirewallRule(t *Transfer) bool {
 	fwStr := "netsh advfirewall firewall add rule name=flyingcarpet dir=in action=allow program=" +
 		execPath + " enable=yes profile=any localport=3290 protocol=tcp"
 	fwSlice := strings.Split(fwStr, " ")
-	_, err = exec.Command(fwSlice[0], fwSlice[1:]...).CombinedOutput()
+	cmd := exec.Command(fwSlice[0], fwSlice[1:]...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	_, err = cmd.CombinedOutput()
 	if err != nil {
 		t.output("Could not create firewall rule. You must run as administrator to receive. (Press Win+X and then A to start an administrator command prompt.)")
 		return false
@@ -248,14 +253,18 @@ func (w WindowsNetwork) checkForFile(t *Transfer) bool {
 	return true
 }
 
-func (w *WindowsNetwork) runCommand(cmd string) (output string) {
+func (w *WindowsNetwork) runCommand(cmdStr string) (output string) {
 	var cmdBytes []byte
 	err := errors.New("")
-	cmdSlice := strings.Split(cmd, " ")
+	cmdSlice := strings.Split(cmdStr, " ")
 	if len(cmdSlice) > 1 {
-		cmdBytes, err = exec.Command(cmdSlice[0], cmdSlice[1:]...).CombinedOutput()
+		cmd := exec.Command(cmdSlice[0], cmdSlice[1:]...)
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		cmdBytes, err = cmd.CombinedOutput()
 	} else {
-		cmdBytes, err = exec.Command(cmd).CombinedOutput()
+		cmd := exec.Command(cmdStr)
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		cmdBytes, err = cmd.CombinedOutput()
 	}
 	if err != nil {
 		return err.Error()

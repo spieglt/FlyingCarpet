@@ -6,8 +6,6 @@ import (
 	"github.com/dontpanic92/wxGo/wx"
 	"math/rand"
 	"net"
-	// "os"
-	// "os/user"
 	"runtime"
 	"strconv"
 	"time"
