@@ -27,7 +27,7 @@ func (w *WindowsNetwork) startAdHoc(t *Transfer) bool {
 
 		startChan := make(chan bool)
 		go w.startLegacyAP(t, startChan)
-		if ok := <- startChan; !ok {
+		if ok := <-startChan; !ok {
 			return false
 		}
 		return true
@@ -158,7 +158,7 @@ func (w *WindowsNetwork) findPeer(t *Transfer) (peerIP string) {
 	// run arp for that ip
 	for !ipPattern.Match([]byte(peerIP)) {
 
-		peerCmd := "$(arp -a -N " + ifAddr + " | Select-String -Pattern '(?<ip>192\\.168\\."+thirdOctet+"\\.\\d{1,3})' | Select-String -NotMatch '(?<nm>(" + ifAddr + "|192.168."+thirdOctet+".255)\\s)').Matches.Value"
+		peerCmd := "$(arp -a -N " + ifAddr + " | Select-String -Pattern '(?<ip>192\\.168\\." + thirdOctet + "\\.\\d{1,3})' | Select-String -NotMatch '(?<nm>(" + ifAddr + "|192.168." + thirdOctet + ".255)\\s)').Matches.Value"
 		peerBytes, err := exec.Command("powershell", "-c", peerCmd).CombinedOutput()
 		if err != nil {
 			t.output("Error getting ad hoc IP, retrying.")

@@ -39,7 +39,6 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 	go func() {
 		for _ = range ticker.C {
 			percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
-			// t.output(fmt.Sprintf("percentDone: %d", percentDone))
 			t.updateProgressBar(int(percentDone))
 		}
 	}()
@@ -143,9 +142,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 		}
 	}
 	t.output(fmt.Sprintf("Received file size: %d", getSize(outFile)))
-
 	t.output(fmt.Sprintf("Received file hash: %x", getHash(t.Filepath)))
-
 	t.output(fmt.Sprintf("Receiving took %s", time.Since(start)))
 
 	speed := (float64(getSize(outFile)*8) / 1000000) / (float64(time.Since(start)) / 1000000000)
