@@ -8,25 +8,25 @@ import (
 	"time"
 )
 
-func (m *MacNetwork) startAdHoc(t *Transfer) bool {
+func (n *Network) startAdHoc(t *Transfer) bool {
 
 	tmpLoc := "/private/tmp/adhocnet"
 	os.Remove(tmpLoc)
 
 	data, err := Asset("static/adhocnet")
 	if err != nil {
-		m.teardown(t)
+		n.teardown(t)
 		t.output("Static file error")
 		return false
 	}
 	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 	if err != nil {
-		m.teardown(t)
+		n.teardown(t)
 		t.output("Error creating temp file")
 		return false
 	}
 	if _, err = outFile.Write(data); err != nil {
-		m.teardown(t)
+		n.teardown(t)
 		t.output("Write error")
 		return false
 	}
@@ -36,7 +36,7 @@ func (m *MacNetwork) startAdHoc(t *Transfer) bool {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.output(string(output))
-		m.teardown(t)
+		n.teardown(t)
 		t.output("Error creating ad hoc network")
 		return false
 	}
@@ -44,9 +44,9 @@ func (m *MacNetwork) startAdHoc(t *Transfer) bool {
 	return true
 }
 
-func (m *MacNetwork) joinAdHoc(t *Transfer) bool {
+func (n *Network) joinAdHoc(t *Transfer) bool {
 
-	wifiInterface := m.getWifiInterface()
+	wifiInterface := n.getWifiInterface()
 	t.output("Looking for ad-hoc network " + t.SSID + "...")
 	timeout := JOIN_ADHOC_TIMEOUT
 
@@ -62,7 +62,7 @@ func (m *MacNetwork) joinAdHoc(t *Transfer) bool {
 		time.Sleep(time.Second * time.Duration(5))
 		joinAdHocBytes, err = exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
 		if err != nil {
-			m.teardown(t)
+			n.teardown(t)
 			t.output("Error joining ad hoc network.")
 			return false
 		}
@@ -70,21 +70,21 @@ func (m *MacNetwork) joinAdHoc(t *Transfer) bool {
 	return true
 }
 
-func (m MacNetwork) getCurrentWifi() (SSID string) {
+func (n Network) getCurrentWifi() (SSID string) {
 	cmdStr := "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I | awk '/ SSID/ {print substr($0, index($0, $2))}'"
-	SSID = m.runCommand(cmdStr)
+	SSID = n.runCommand(cmdStr)
 	return
 }
 
-func (m *MacNetwork) getWifiInterface() string {
+func (n *Network) getWifiInterface() string {
 	getInterfaceString := "networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}'"
-	return m.runCommand(getInterfaceString)
+	return n.runCommand(getInterfaceString)
 }
 
-func (m *MacNetwork) getIPAddress(t *Transfer) string {
+func (n *Network) getIPAddress(t *Transfer) string {
 	var currentIP string
 	for currentIP == "" {
-		currentIPString := "ipconfig getifaddr " + m.getWifiInterface()
+		currentIPString := "ipconfig getifaddr " + n.getWifiInterface()
 		currentIPBytes, err := exec.Command("sh", "-c", currentIPString).CombinedOutput()
 		if err != nil {
 			t.output(fmt.Sprintf("Waiting for self-assigned IP... %s", err))
@@ -97,9 +97,9 @@ func (m *MacNetwork) getIPAddress(t *Transfer) string {
 	return currentIP
 }
 
-func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
+func (n *Network) findMac(t *Transfer) (peerIP string, success bool) {
 	timeout := FIND_MAC_TIMEOUT
-	currentIP := m.getIPAddress(t)
+	currentIP := n.getIPAddress(t)
 	pingString := "ping -c 5 169.254.255.255 | " + // ping broadcast address
 		"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
 		"grep --line-buffered -vE '169.254.255.255' | " + // exclude broadcast address
@@ -125,8 +125,8 @@ func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
 	return
 }
 
-func (m *MacNetwork) findWindows(t *Transfer) (peerIP string) {
-	currentIP := m.getIPAddress(t)
+func (n *Network) findWindows(t *Transfer) (peerIP string) {
+	currentIP := n.getIPAddress(t)
 	if strings.Contains(currentIP, "137") {
 		return "192.168.137.1"
 	} else {
@@ -134,34 +134,34 @@ func (m *MacNetwork) findWindows(t *Transfer) (peerIP string) {
 	}
 }
 
-func (m MacNetwork) connectToPeer(t *Transfer) bool {
+func (n Network) connectToPeer(t *Transfer) bool {
 
-	if m.Mode == "sending" {
-		if !m.checkForFile(t) {
+	if n.Mode == "sending" {
+		if !n.checkForFile(t) {
 			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
 			return false
 		}
-		if !m.joinAdHoc(t) {
+		if !n.joinAdHoc(t) {
 			return false
 		}
-		go m.stayOnAdHoc(t)
+		go n.stayOnAdHoc(t)
 		if t.Peer == "mac" {
 			var ok bool
-			t.RecipientIP, ok = m.findMac(t)
+			t.RecipientIP, ok = n.findMac(t)
 			if !ok {
 				return false
 			}
 		} else if t.Peer == "windows" {
-			t.RecipientIP = m.findWindows(t)
+			t.RecipientIP = n.findWindows(t)
 		}
-	} else if m.Mode == "receiving" {
+	} else if n.Mode == "receiving" {
 		if t.Peer == "windows" {
-			if !m.joinAdHoc(t) {
+			if !n.joinAdHoc(t) {
 				return false
 			}
-			go m.stayOnAdHoc(t)
+			go n.stayOnAdHoc(t)
 		} else if t.Peer == "mac" {
-			if !m.startAdHoc(t) {
+			if !n.startAdHoc(t) {
 				return false
 			}
 		}
@@ -169,14 +169,14 @@ func (m MacNetwork) connectToPeer(t *Transfer) bool {
 	return true
 }
 
-func (m MacNetwork) resetWifi(t *Transfer) {
+func (n Network) resetWifi(t *Transfer) {
 
-	wifiInterface := m.getWifiInterface()
+	wifiInterface := n.getWifiInterface()
 	cmdString := "networksetup -setairportpower " + wifiInterface + " off && networksetup -setairportpower " + wifiInterface + " on"
-	t.output(m.runCommand(cmdString))
+	t.output(n.runCommand(cmdString))
 }
 
-func (m MacNetwork) stayOnAdHoc(t *Transfer) {
+func (n Network) stayOnAdHoc(t *Transfer) {
 
 	for {
 		select {
@@ -185,15 +185,15 @@ func (m MacNetwork) stayOnAdHoc(t *Transfer) {
 			t.AdHocChan <- true
 			return
 		default:
-			if m.getCurrentWifi() != t.SSID {
-				m.joinAdHoc(t)
+			if n.getCurrentWifi() != t.SSID {
+				n.joinAdHoc(t)
 			}
 			time.Sleep(time.Second * 1)
 		}
 	}
 }
 
-func (m MacNetwork) checkForFile(t *Transfer) bool {
+func (n Network) checkForFile(t *Transfer) bool {
 	_, err := os.Stat(t.Filepath)
 	if err != nil {
 		return false
@@ -201,7 +201,7 @@ func (m MacNetwork) checkForFile(t *Transfer) bool {
 	return true
 }
 
-func (m *MacNetwork) runCommand(cmd string) (output string) {
+func (n *Network) runCommand(cmd string) (output string) {
 	cmdBytes, err := exec.Command("sh", "-c", cmd).CombinedOutput()
 	if err != nil {
 		return err.Error()
@@ -209,9 +209,9 @@ func (m *MacNetwork) runCommand(cmd string) (output string) {
 	return strings.TrimSpace(string(cmdBytes))
 }
 
-func (m MacNetwork) teardown(t *Transfer) {
-	if m.Mode == "receiving" {
+func (n Network) teardown(t *Transfer) {
+	if n.Mode == "receiving" {
 		os.Remove(t.Filepath)
 	}
-	m.resetWifi(t)
+	n.resetWifi(t)
 }

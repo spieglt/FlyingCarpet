@@ -12,7 +12,7 @@ import (
 )
 
 // TODO: error handling, use chan
-func (w *WindowsNetwork) startLegacyAP(t *Transfer, startChan chan bool) {
+func (w *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	// write legacyAP bin to file
 	tmpLoc := ".\\wdlap.exe"
 	os.Remove(tmpLoc)
@@ -97,7 +97,7 @@ func readStdout(reader *bufio.Reader, t *Transfer) {
 	}
 }
 
-func bail(err error, startChan chan bool, t *Transfer, w *WindowsNetwork) {
+func bail(err error, startChan chan bool, t *Transfer, w *Network) {
 	t.output(fmt.Sprintf("Bailing: %s", err))
 	startChan <- false
 	w.teardown(t)

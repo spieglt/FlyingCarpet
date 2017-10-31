@@ -35,13 +35,9 @@ func (t *Transfer) mainRoutine(mode string) {
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
+		n = Network{Mode: "sending"}
 		if runtime.GOOS == "windows" {
-			w := WindowsNetwork{Mode: "sending"}
-			w.PreviousSSID = w.getCurrentWifi()
-			n = w
-			t.output("Got current wifi")
-		} else if runtime.GOOS == "darwin" {
-			n = MacNetwork{Mode: "sending"}
+			n.PreviousSSID = n.getCurrentWifi()
 		}
 		if !n.connectToPeer(t) {
 			t.enableStartButton()
@@ -73,11 +69,8 @@ func (t *Transfer) mainRoutine(mode string) {
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
 			"=============================\n", t.Passphrase))
 
-		if runtime.GOOS == "windows" {
-			n = WindowsNetwork{Mode: "receiving"}
-		} else if runtime.GOOS == "darwin" {
-			n = MacNetwork{Mode: "receiving"}
-		}
+		n = Network{Mode: "receiving"}
+
 		if !n.connectToPeer(t) {
 			t.enableStartButton()
 			t.output("Exiting mainRoutine.")
@@ -172,20 +165,16 @@ type Transfer struct {
 	Frame       *MainFrame
 }
 
-type Network interface {
+type NetworkInt interface {
 	connectToPeer(*Transfer) bool
 	getCurrentWifi() string
 	resetWifi(*Transfer)
 	teardown(*Transfer)
 }
 
-type WindowsNetwork struct {
+type Network struct {
 	Mode           string // sending or receiving
 	PreviousSSID   string
 	AdHocCapable   bool
 	wifiDirectChan chan string
-}
-
-type MacNetwork struct {
-	Mode string // sending or receiving
 }
