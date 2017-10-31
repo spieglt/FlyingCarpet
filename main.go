@@ -165,13 +165,6 @@ type Transfer struct {
 	Frame       *MainFrame
 }
 
-type NetworkInt interface {
-	connectToPeer(*Transfer) bool
-	getCurrentWifi() string
-	resetWifi(*Transfer)
-	teardown(*Transfer)
-}
-
 type Network struct {
 	Mode           string // sending or receiving
 	PreviousSSID   string
