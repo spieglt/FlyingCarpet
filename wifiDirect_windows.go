@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -35,7 +36,7 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	defer os.Remove(tmpLoc)
 
 	// run it with proper options
-	cmd := exec.Command(tmpLoc)
+	cmd := exec.Command(tmpLoc, strconv.Itoa(os.Getpid()))
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	defer cmd.Process.Kill()
 	stdin, err := cmd.StdinPipe()
@@ -87,8 +88,8 @@ func readStdout(reader *bufio.Reader, t *Transfer) {
 		resp, err := reader.ReadString('\n')
 		if err != nil {
 			t.output(fmt.Sprintf("WifiDirect stdout error: %s", err))
-			// return
-			time.Sleep(time.Second * 3)
+			return
+			// time.Sleep(time.Second * 3)
 		}
 		if resp != "\r\n" && resp != ">\r\n" {
 			// write to window
