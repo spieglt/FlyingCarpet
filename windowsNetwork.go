@@ -24,8 +24,12 @@ func (w *WindowsNetwork) startAdHoc(t *Transfer) bool {
 	if err.Error() == "exit status 1" {
 		t.output("Could not start hosted network, trying Wi-Fi Direct.")
 		w.AdHocCapable = false
-		go w.startLegacyAP(t)
-		// TODO: check for result of startLegacyAP
+
+		startChan := make(chan bool)
+		go w.startLegacyAP(t, startChan)
+		if ok := <- startChan; !ok {
+			return false
+		}
 		return true
 	} else if err == nil {
 		w.AdHocCapable = true
@@ -133,26 +137,28 @@ func (w *WindowsNetwork) findPeer(t *Transfer) (peerIP string) {
 	// get ad hoc ip
 	var ifAddr string
 	for !ipPattern.Match([]byte(ifAddr)) {
-		// ifAddr = w.runCommand("$(ipconfig | Select-String -Pattern '(?<ipaddr>192\\.168\\.173\\..*)').Matches.Groups[1].Value.Trim()",
-		// 	"Could not get ad hoc IP.")
-		ifCmd := "$(ipconfig | Select-String -Pattern '(?<ipaddr>192\\.168\\.173\\..*)').Matches.Groups[1].Value.Trim()"
+		ifCmd := "$(ipconfig | Select-String -Pattern '(?<ipaddr>192\\.168\\.\\d{1,3}\\..*)').Matches.Groups[1].Value.Trim()"
 		ifBytes, err := exec.Command("powershell", "-c", ifCmd).CombinedOutput()
 		if err != nil {
 			t.output("Error getting ad hoc IP, retrying.")
 		}
 		ifAddr = strings.TrimSpace(string(ifBytes))
-		// t.output("ad hoc IP:" + ifAddr)
 		time.Sleep(time.Second * time.Duration(2))
 	}
 	t.output("Starting findPeer")
+
+	// necessary for wifi direct ip addresses
+	var thirdOctet string
+	if strings.Contains(ifAddr, "137") {
+		thirdOctet = "137"
+	} else {
+		thirdOctet = "173"
+	}
+
 	// run arp for that ip
 	for !ipPattern.Match([]byte(peerIP)) {
 
-		// peerIP = w.runCommand("$(arp -a -N "+ifAddr+" | Select-String -Pattern '(?<ip>192\\.168\\.173\\.\\d{1,3})' | Select-String -NotMatch '(?<nm>("+
-		// 	ifAddr+"|192.168.173.255)\\s)').Matches.Value",
-		// 	"Could not get peer IP.")
-
-		peerCmd := "$(arp -a -N " + ifAddr + " | Select-String -Pattern '(?<ip>192\\.168\\.173\\.\\d{1,3})' | Select-String -NotMatch '(?<nm>(" + ifAddr + "|192.168.173.255)\\s)').Matches.Value"
+		peerCmd := "$(arp -a -N " + ifAddr + " | Select-String -Pattern '(?<ip>192\\.168\\."+thirdOctet+"\\.\\d{1,3})' | Select-String -NotMatch '(?<nm>(" + ifAddr + "|192.168."+thirdOctet+".255)\\s)').Matches.Value"
 		peerBytes, err := exec.Command("powershell", "-c", peerCmd).CombinedOutput()
 		if err != nil {
 			t.output("Error getting ad hoc IP, retrying.")

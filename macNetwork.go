@@ -81,8 +81,7 @@ func (m *MacNetwork) getWifiInterface() string {
 	return m.runCommand(getInterfaceString)
 }
 
-func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
-	timeout := FIND_MAC_TIMEOUT
+func (m *MacNetwork) getIPAddress(t *Transfer) string {
 	var currentIP string
 	for currentIP == "" {
 		currentIPString := "ipconfig getifaddr " + m.getWifiInterface()
@@ -94,9 +93,13 @@ func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
 		}
 		currentIP = strings.TrimSpace(string(currentIPBytes))
 	}
+	t.output(fmt.Sprintf("Wi-Fi interface IP found: %s", currentIP))
+	return currentIP
+}
 
-	t.output(fmt.Sprintf("Self-assigned IP found: %s", currentIP))
-
+func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
+	timeout := FIND_MAC_TIMEOUT
+	currentIP := m.getIPAddress(t)
 	pingString := "ping -c 5 169.254.255.255 | " + // ping broadcast address
 		"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
 		"grep --line-buffered -vE '169.254.255.255' | " + // exclude broadcast address
@@ -122,8 +125,13 @@ func (m *MacNetwork) findMac(t *Transfer) (peerIP string, success bool) {
 	return
 }
 
-func (m *MacNetwork) findWindows() (peerIP string) {
-	return "192.168.173.1"
+func (m *MacNetwork) findWindows(t *Transfer) (peerIP string) {
+	currentIP := m.getIPAddress(t)
+	if strings.Contains(currentIP, "137") {
+		return "192.168.137.1"
+	} else {
+		return "192.168.173.1"
+	}
 }
 
 func (m MacNetwork) connectToPeer(t *Transfer) bool {
@@ -144,7 +152,7 @@ func (m MacNetwork) connectToPeer(t *Transfer) bool {
 				return false
 			}
 		} else if t.Peer == "windows" {
-			t.RecipientIP = m.findWindows()
+			t.RecipientIP = m.findWindows(t)
 		}
 	} else if m.Mode == "receiving" {
 		if t.Peer == "windows" {

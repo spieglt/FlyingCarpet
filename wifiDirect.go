@@ -11,28 +11,25 @@ import (
 	"time"
 )
 
-// TODO: error handling
-func (w *WindowsNetwork) startLegacyAP(t *Transfer) {
+// TODO: error handling, use chan
+func (w *WindowsNetwork) startLegacyAP(t *Transfer, startChan chan bool) {
 	// write legacyAP bin to file
 	tmpLoc := ".\\wdlap.exe"
 	os.Remove(tmpLoc)
 
 	data, err := Asset("static/wdlap.exe")
 	if err != nil {
-		t.output(fmt.Sprintf("Static file error: %s", err))
-		w.teardown(t)
-		// return false
+		bail(err, startChan, t, w)
+		return
 	}
 	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 	if err != nil {
-		t.output("Error creating temp file")
-		w.teardown(t)
-		// return false
+		bail(err, startChan, t, w)
+		return
 	}
 	if _, err = outFile.Write(data); err != nil {
-		t.output("Write error")
-		w.teardown(t)
-		// return false
+		bail(err, startChan, t, w)
+		return
 	}
 	outFile.Close()
 	defer os.Remove(tmpLoc)
@@ -40,21 +37,26 @@ func (w *WindowsNetwork) startLegacyAP(t *Transfer) {
 	// run it with proper options
 	cmd := exec.Command(tmpLoc)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	defer cmd.Process.Kill()
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		t.output(err.Error())
+		bail(err, startChan, t, w)
+		return
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		t.output(err.Error())
+		bail(err, startChan, t, w)
+		return
 	}
 	reader := bufio.NewReader(stdout)
 	if err != nil {
-		t.output(err.Error())
+		bail(err, startChan, t, w)
+		return
 	}
 	err = cmd.Start()
 	if err != nil {
-		t.output(err.Error())
+		bail(err, startChan, t, w)
+		return
 	}
 
 	go readStdout(reader, t)
@@ -63,6 +65,7 @@ func (w *WindowsNetwork) startLegacyAP(t *Transfer) {
 	io.WriteString(stdin, "autoaccept 1\n")
 	io.WriteString(stdin, "start\n")
 
+	startChan <- true
 	// in loop, listen on chan to commands from rest of program
 	for {
 		select {
@@ -92,4 +95,10 @@ func readStdout(reader *bufio.Reader, t *Transfer) {
 			t.output(strings.TrimSpace(string(resp)))
 		}
 	}
+}
+
+func bail(err error, startChan chan bool, t *Transfer, w *WindowsNetwork) {
+	t.output(fmt.Sprintf("Bailing: %s", err))
+	startChan <- false
+	w.teardown(t)
 }
