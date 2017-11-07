@@ -14,6 +14,7 @@ const START_BUTTON_ENABLE = wx.ID_HIGHEST + 4
 type MainFrame struct {
 	wx.Frame
 	menuBar wx.MenuBar
+	Panel   wx.Panel
 }
 
 func newGui() *MainFrame {
@@ -21,53 +22,59 @@ func newGui() *MainFrame {
 	mf.Frame = wx.NewFrame(wx.NullWindow, wx.ID_ANY, "Flying Carpet")
 
 	mf.SetSize(400, 400)
+	mf.Panel = wx.NewPanel(mf)
+	mf.Panel.SetSize(400, 400)
+
+	// big sizer
+	bSizerTotal := wx.NewBoxSizer(wx.VERTICAL)
 
 	// radio buttons box
 	radioSizer := wx.NewBoxSizer(wx.HORIZONTAL)
-
-	// peer os box
 	peerSizer := wx.NewBoxSizer(wx.VERTICAL)
-	radiobox1 := wx.NewRadioBox(mf, wx.ID_ANY, "Peer OS", wx.DefaultPosition, wx.DefaultSize, []string{"macOS", "Windows"}, 1, wx.HORIZONTAL)
+	radiobox1 := wx.NewRadioBox(mf.Panel, wx.ID_ANY, "Peer OS", wx.DefaultPosition, wx.DefaultSize, []string{"macOS", "Windows"}, 1, wx.HORIZONTAL)
 	peerSizer.Add(radiobox1, 1, wx.ALL|wx.EXPAND, 5)
+	radioSizer.Add(peerSizer, 1, wx.EXPAND, 5)
+	modeSizer := wx.NewBoxSizer(wx.VERTICAL)
+	radiobox2 := wx.NewRadioBox(mf.Panel, wx.ID_ANY, "Mode", wx.DefaultPosition, wx.DefaultSize, []string{"Send", "Receive"}, 1, wx.HORIZONTAL)
+	modeSizer.Add(radiobox2, 1, wx.ALL|wx.EXPAND, 5)
+	radioSizer.Add(modeSizer, 1, wx.EXPAND, 5)
 
-	// bottom half and big container
+	// bottom half
 	bSizerBottom := wx.NewBoxSizer(wx.VERTICAL)
-	bSizerTotal := wx.NewBoxSizer(wx.VERTICAL)
 
 	// file selection box
 	fileSizer := wx.NewBoxSizer(wx.HORIZONTAL)
-	sendButton := wx.NewButton(mf, wx.ID_ANY, "Select File", wx.DefaultPosition, wx.DefaultSize, 0)
-	receiveButton := wx.NewButton(mf, wx.ID_ANY, "Select Folder", wx.DefaultPosition, wx.DefaultSize, 0)
+	sendButton := wx.NewButton(mf.Panel, wx.ID_ANY, "Select File", wx.DefaultPosition, wx.DefaultSize, 0)
+	receiveButton := wx.NewButton(mf.Panel, wx.ID_ANY, "Select Folder", wx.DefaultPosition, wx.DefaultSize, 0)
 	receiveButton.Hide()
-	fileBox := wx.NewTextCtrl(mf, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, 0)
+	fileBox := wx.NewTextCtrl(mf.Panel, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, 0)
 	fileSizer.Add(sendButton, 0, wx.ALL|wx.EXPAND, 5)
 	fileSizer.Add(receiveButton, 0, wx.ALL|wx.EXPAND, 5)
 	fileSizer.Add(fileBox, 1, wx.ALL|wx.EXPAND, 5)
-
 	bSizerBottom.Add(fileSizer, 0, wx.ALL|wx.EXPAND, 5)
 
-	radioSizer.Add(peerSizer, 1, wx.EXPAND, 5)
-	modeSizer := wx.NewBoxSizer(wx.VERTICAL)
-
-	radiobox2 := wx.NewRadioBox(mf, wx.ID_ANY, "Mode", wx.DefaultPosition, wx.DefaultSize, []string{"Send", "Receive"}, 1, wx.HORIZONTAL)
-	modeSizer.Add(radiobox2, 1, wx.ALL|wx.EXPAND, 5)
-
-	startButton := wx.NewButton(mf, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
+	// start button
+	startButton := wx.NewButton(mf.Panel, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
 	bSizerBottom.Add(startButton, 0, wx.ALL|wx.EXPAND, 5)
-	outputBox := wx.NewTextCtrl(mf, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE|wx.TE_READONLY)
+
+	// output box
+	outputBox := wx.NewTextCtrl(mf.Panel, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE|wx.TE_READONLY)
 	outputBox.AppendText("Welcome to Flying Carpet!\n")
-
-	progressBar := wx.NewGauge(mf, wx.ID_ANY, 100, wx.DefaultPosition, wx.DefaultSize, wx.GA_HORIZONTAL)
-	progressBar.Hide()
-
 	bSizerBottom.Add(outputBox, 1, wx.ALL|wx.EXPAND, 0)
 	outputBox.SetSize(200, 200)
+
+	// progress bar
+	progressBar := wx.NewGauge(mf.Panel, wx.ID_ANY, 100, wx.DefaultPosition, wx.DefaultSize, wx.GA_HORIZONTAL)
+	progressBar.Hide()
 	bSizerBottom.Add(progressBar, 0, wx.ALL|wx.EXPAND, 5)
 
-	radioSizer.Add(modeSizer, 1, wx.EXPAND, 5)
-
+	// stack top and bottom halves
 	bSizerTotal.Add(radioSizer, 0, wx.EXPAND, 5)
 	bSizerTotal.Add(bSizerBottom, 1, wx.EXPAND, 5)
+
+	//////////////////////////////
+	/////////// ACTIONS //////////
+	//////////////////////////////
 
 	// mode button action
 	wx.Bind(mf, wx.EVT_RADIOBOX, func(e wx.Event) {
@@ -78,7 +85,7 @@ func newGui() *MainFrame {
 			sendButton.Hide()
 			receiveButton.Show()
 		}
-		mf.Layout()
+		mf.Panel.Layout()
 	}, radiobox2.GetId())
 
 	// send button action
@@ -129,7 +136,7 @@ func newGui() *MainFrame {
 		}
 
 		if mode == "send" {
-			pd := wx.NewPasswordEntryDialog(mf, "Enter password from receiving end:", "", "", wx.OK|wx.CANCEL, wx.DefaultPosition)
+			pd := wx.NewPasswordEntryDialog(mf.Panel, "Enter password from receiving end:", "", "", wx.OK|wx.CANCEL, wx.DefaultPosition)
 			ret := pd.ShowModal()
 			if ret == wx.ID_OK {
 				_, err := os.Stat(t.Filepath)
@@ -171,16 +178,16 @@ func newGui() *MainFrame {
 	// progress bar display event
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
 		progressBar.Show()
-		mf.Layout()
+		mf.Panel.Layout()
 	}, PROGRESS_BAR_SHOW)
 
 	// start button enable event
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
 		startButton.Enable(true)
-		mf.Layout()
+		mf.Panel.Layout()
 	}, START_BUTTON_ENABLE)
 
-	mf.SetSizer(bSizerTotal)
+	mf.Panel.SetSizer(bSizerTotal)
 	mf.Layout()
 	mf.Centre(wx.BOTH)
 
