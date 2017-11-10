@@ -21,6 +21,21 @@ func newGui() *MainFrame {
 	mf := &MainFrame{}
 	mf.Frame = wx.NewFrame(wx.NullWindow, wx.ID_ANY, "Flying Carpet")
 
+	// menu
+
+    mf.menuBar = wx.NewMenuBar()
+    fileMenu := wx.NewMenu()
+    fileMenu.Append(wx.ID_EXIT)
+
+    wx.Bind(mf, wx.EVT_MENU, func(e wx.Event){
+        mf.Close(true)
+    }, wx.ID_EXIT)
+
+    mf.menuBar.Append(fileMenu, "&File")
+    mf.SetMenuBar(mf.menuBar)
+
+	// window
+
 	mf.SetSize(400, 400)
 	mf.Panel = wx.NewPanel(mf)
 	mf.Panel.SetSize(400, 400)
