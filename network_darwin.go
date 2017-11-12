@@ -169,6 +169,12 @@ func (n Network) connectToPeer(t *Transfer) bool {
 	return true
 }
 
+func (n Network) removeSSID(t *Transfer) {
+	wifiInterface := n.getWifiInterface()
+	cmdString := "networksetup -removepreferredwirelessnetwork " + wifiInterface + " " + t.SSID
+	t.output(n.runCommand(cmdString))
+}
+
 func (n Network) resetWifi(t *Transfer) {
 
 	wifiInterface := n.getWifiInterface()
@@ -213,5 +219,6 @@ func (n Network) teardown(t *Transfer) {
 	if n.Mode == "receiving" {
 		os.Remove(t.Filepath)
 	}
+	n.removeSSID(t)
 	n.resetWifi(t)
 }

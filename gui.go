@@ -10,10 +10,11 @@ const OUTPUT_BOX_UPDATE = wx.ID_HIGHEST + 1
 const PROGRESS_BAR_UPDATE = wx.ID_HIGHEST + 2
 const PROGRESS_BAR_SHOW = wx.ID_HIGHEST + 3
 const START_BUTTON_ENABLE = wx.ID_HIGHEST + 4
+const HIDE_OPTION_ID = wx.ID_HIGHEST + 5
 
 type MainFrame struct {
 	wx.Frame
-	menuBar wx.MenuBar
+	MenuBar wx.MenuBar
 	Panel   wx.Panel
 }
 
@@ -21,18 +22,6 @@ func newGui() *MainFrame {
 	mf := &MainFrame{}
 	mf.Frame = wx.NewFrame(wx.NullWindow, wx.ID_ANY, "Flying Carpet")
 
-	// menu
-
-    mf.menuBar = wx.NewMenuBar()
-    fileMenu := wx.NewMenu()
-    fileMenu.Append(wx.ID_EXIT)
-
-    wx.Bind(mf, wx.EVT_MENU, func(e wx.Event){
-        mf.Close(true)
-    }, wx.ID_EXIT)
-
-    mf.menuBar.Append(fileMenu, "&File")
-    mf.SetMenuBar(mf.menuBar)
 
 	// window
 
@@ -205,6 +194,12 @@ func newGui() *MainFrame {
 	mf.Panel.SetSizer(bSizerTotal)
 	mf.Layout()
 	mf.Centre(wx.BOTH)
+
+
+	// menu
+
+	mf.MenuBar = wx.NewMenuBar()
+	mf.SetMenuBar(mf.MenuBar)
 
 	return mf
 }

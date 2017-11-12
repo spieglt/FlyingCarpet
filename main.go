@@ -18,7 +18,7 @@ const FIND_MAC_TIMEOUT = 60
 // need different thread event for each post to output box, so need helper function that's receiver on Transfer?
 
 func main() {
-	wx1 := wx.NewApp()
+	wx1 := wx.NewApp("Flying Carpet")
 	mf := newGui()
 	mf.Show()
 	wx1.MainLoop()
