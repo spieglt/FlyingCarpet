@@ -141,6 +141,10 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 			return
 		}
 	}
+	if runtime.GOOS == "darwin" && t.Peer == "windows" {
+		t.AdHocChan <- false
+		<-t.AdHocChan
+	}
 	t.output(fmt.Sprintf("Received file size: %d", getSize(outFile)))
 	t.output(fmt.Sprintf("Received file hash: %x", getHash(t.Filepath)))
 	t.output(fmt.Sprintf("Receiving took %s", time.Since(start)))

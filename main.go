@@ -26,9 +26,16 @@ func main() {
 }
 
 func (t *Transfer) mainRoutine(mode string) {
+
 	receiveChan := make(chan bool)
 	sendChan := make(chan bool)
 	var n Network
+	
+	defer func() {
+		t.enableStartButton()
+		n.removeSSID(t)
+		n.resetWifi(t)
+	}()
 
 	if mode == "send" {
 		pwBytes := md5.Sum([]byte(t.Passphrase))
@@ -40,24 +47,20 @@ func (t *Transfer) mainRoutine(mode string) {
 			n.PreviousSSID = n.getCurrentWifi()
 		}
 		if !n.connectToPeer(t) {
-			t.enableStartButton()
 			t.output("Aborting transfer.")
 			return
 		}
 
 		if connected := t.sendFile(sendChan, n); connected == false {
-			t.enableStartButton()
 			t.output("Could not establish TCP connection with peer. Aborting transfer.")
 			return
 		}
 		t.output("Connected")
 		sendSuccess := <-sendChan
 		if !sendSuccess {
-			t.enableStartButton()
 			t.output("Aborting transfer.")
 			return
 		}
-		t.enableStartButton()
 		t.output("Send complete, resetting WiFi and exiting.")
 
 	} else if mode == "receive" {
@@ -72,7 +75,6 @@ func (t *Transfer) mainRoutine(mode string) {
 		n = Network{Mode: "receiving"}
 
 		if !n.connectToPeer(t) {
-			t.enableStartButton()
 			t.output("Aborting transfer.")
 			return
 		}
@@ -81,20 +83,17 @@ func (t *Transfer) mainRoutine(mode string) {
 		// wait for listener to be up
 		listenerIsUp := <-receiveChan
 		if !listenerIsUp {
-			t.enableStartButton()
 			t.output("Aborting transfer.")
 			return
 		}
 		// wait for reception to finish
 		receiveSuccess := <-receiveChan
 		if !receiveSuccess {
-			t.enableStartButton()
 			t.output("Aborting transfer.")
 			return
 		}
 		t.output("Reception complete, resetting WiFi and exiting.")
 	}
-	n.resetWifi(t)
 }
 
 func (t *Transfer) receiveFile(receiveChan chan bool, n Network) {
