@@ -35,7 +35,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 	bytesLeft := fileSize
 	var i int64
 
-	ticker := time.NewTicker(time.Millisecond * 250)
+	ticker := time.NewTicker(time.Millisecond * 1000)
 	go func() {
 		for _ = range ticker.C {
 			percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
