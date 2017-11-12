@@ -213,6 +213,11 @@ func (n Network) connectToPeer(t *Transfer) bool {
 	return true
 }
 
+func (n Network) removeSSID(t *Transfer) {
+	cmdString := "netsh wlan delete profile name=\"" + t.SSID + "\""
+	t.output(n.runCommand(cmdString))
+}
+
 func (n Network) resetWifi(t *Transfer) {
 
 	if n.Mode == "receiving" || t.Peer == "mac" {
@@ -282,5 +287,6 @@ func (n Network) teardown(t *Transfer) {
 	if n.Mode == "receiving" {
 		os.Remove(t.Filepath)
 	}
+	n.removeSSID(t)
 	n.resetWifi(t)
 }

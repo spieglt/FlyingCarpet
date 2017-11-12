@@ -41,20 +41,20 @@ func (t *Transfer) mainRoutine(mode string) {
 		}
 		if !n.connectToPeer(t) {
 			t.enableStartButton()
-			t.output("Exiting mainRoutine.")
+			t.output("Aborting transfer.")
 			return
 		}
 
 		if connected := t.sendFile(sendChan, n); connected == false {
 			t.enableStartButton()
-			t.output("Could not establish TCP connection with peer. Exiting mainRoutine.")
+			t.output("Could not establish TCP connection with peer. Aborting transfer.")
 			return
 		}
 		t.output("Connected")
 		sendSuccess := <-sendChan
 		if !sendSuccess {
 			t.enableStartButton()
-			t.output("Exiting mainRoutine.")
+			t.output("Aborting transfer.")
 			return
 		}
 		t.enableStartButton()
@@ -73,7 +73,7 @@ func (t *Transfer) mainRoutine(mode string) {
 
 		if !n.connectToPeer(t) {
 			t.enableStartButton()
-			t.output("Exiting mainRoutine.")
+			t.output("Aborting transfer.")
 			return
 		}
 
@@ -82,14 +82,14 @@ func (t *Transfer) mainRoutine(mode string) {
 		listenerIsUp := <-receiveChan
 		if !listenerIsUp {
 			t.enableStartButton()
-			t.output("Exiting mainRoutine.")
+			t.output("Aborting transfer.")
 			return
 		}
 		// wait for reception to finish
 		receiveSuccess := <-receiveChan
 		if !receiveSuccess {
 			t.enableStartButton()
-			t.output("Exiting mainRoutine.")
+			t.output("Aborting transfer.")
 			return
 		}
 		t.output("Reception complete, resetting WiFi and exiting.")
