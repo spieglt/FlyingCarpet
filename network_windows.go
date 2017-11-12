@@ -50,6 +50,7 @@ func (n *Network) stopAdHoc(t *Transfer) {
 		n.wifiDirectChan <- "quit"
 		reply := <-n.wifiDirectChan
 		t.output(reply)
+		// close(n.wifiDirectChan)
 	}
 }
 
@@ -157,17 +158,17 @@ func (n *Network) findPeer(t *Transfer) (peerIP string) {
 
 	// run arp for that ip
 	for !ipPattern.Match([]byte(peerIP)) {
-
-		peerCmd := "$(arp -a -N " + ifAddr + " | Select-String -Pattern '(?<ip>192\\.168\\." + thirdOctet + "\\.\\d{1,3})' | Select-String -NotMatch '(?<nm>(" + ifAddr + "|192.168." + thirdOctet + ".255)\\s)').Matches.Value"
-		peerBytes, err := exec.Command("powershell", "-c", peerCmd).CombinedOutput()
+		peerString := "$(arp -a -N " + ifAddr + " | Select-String -Pattern '(?<ip>192\\.168\\." + thirdOctet + "\\.\\d{1,3})' | Select-String -NotMatch '(?<nm>(" + ifAddr + "|192.168." + thirdOctet + ".255)\\s)').Matches.Value"
+		peerCmd := exec.Command("powershell", "-c", peerString)
+		peerCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		peerBytes, err := peerCmd.CombinedOutput()
 		if err != nil {
 			t.output("Error getting ad hoc IP, retrying.")
 		}
 		peerIP = strings.TrimSpace(string(peerBytes))
-
-		t.output(fmt.Sprintf("peer IP: %s", peerIP))
 		time.Sleep(time.Second * time.Duration(2))
 	}
+	t.output(fmt.Sprintf("peer IP: %s", peerIP))
 	return
 }
 

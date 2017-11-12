@@ -71,6 +71,7 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	for {
 		select {
 		case msg, ok := <-n.wifiDirectChan:
+			t.output("Message received over wifiDirectChan")
 			if !ok || msg == "quit" {
 				io.WriteString(stdin, "quit\n")
 			}
