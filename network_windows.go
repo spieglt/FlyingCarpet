@@ -16,7 +16,7 @@ func (n *Network) startAdHoc(t *Transfer) bool {
 	n.runCommand("netsh winsock reset")
 	n.runCommand("netsh wlan stop hostednetwork")
 	t.output("SSID: " + t.SSID)
-	t.output(n.runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Passphrase))
+	n.runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Passphrase)
 	cmd := exec.Command("netsh", "wlan", "start", "hostednetwork")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err := cmd.CombinedOutput()
@@ -47,10 +47,10 @@ func (n *Network) stopAdHoc(t *Transfer) {
 	} else {
 		t.output("Stopping Wi-Fi Direct.")
 		// TODO: blocking operation, check wifiDirect function is running.
-		n.wifiDirectChan <- "quit"
-		reply := <-n.wifiDirectChan
+		n.WifiDirectChan <- "quit"
+		reply := <-n.WifiDirectChan
 		t.output(reply)
-		// close(n.wifiDirectChan)
+		close(n.WifiDirectChan)
 	}
 }
 
@@ -138,15 +138,16 @@ func (n *Network) findPeer(t *Transfer) (peerIP string) {
 	// get ad hoc ip
 	var ifAddr string
 	for !ipPattern.Match([]byte(ifAddr)) {
-		ifCmd := "$(ipconfig | Select-String -Pattern '(?<ipaddr>192\\.168\\.\\d{1,3}\\..*)').Matches.Groups[1].Value.Trim()"
-		ifBytes, err := exec.Command("powershell", "-c", ifCmd).CombinedOutput()
+		ifString := "$(ipconfig | Select-String -Pattern '(?<ipaddr>192\\.168\\.\\d{1,3}\\..*)').Matches.Groups[1].Value.Trim()"
+		ifCmd := exec.Command("powershell", "-c", ifString)
+		ifCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		ifBytes, err := ifCmd.CombinedOutput()
 		if err != nil {
 			t.output("Error getting ad hoc IP, retrying.")
 		}
 		ifAddr = strings.TrimSpace(string(ifBytes))
 		time.Sleep(time.Second * time.Duration(2))
 	}
-	t.output("Starting findPeer")
 
 	// necessary for wifi direct ip addresses
 	var thirdOctet string
@@ -207,20 +208,13 @@ func (n Network) connectToPeer(t *Transfer) bool {
 			if !n.startAdHoc(t) {
 				return false
 			}
-			t.output("Ad hoc started, running findPeer")
 			t.RecipientIP = n.findPeer(t)
 		}
 	}
 	return true
 }
 
-func (n Network) removeSSID(t *Transfer) {
-	cmdString := "netsh wlan delete profile name=\"" + t.SSID + "\""
-	t.output(n.runCommand(cmdString))
-}
-
 func (n Network) resetWifi(t *Transfer) {
-
 	if n.Mode == "receiving" || t.Peer == "mac" {
 		n.deleteFirewallRule(t)
 		n.stopAdHoc(t)
@@ -248,7 +242,7 @@ func (n Network) addFirewallRule(t *Transfer) bool {
 		t.output("Could not create firewall rule. You must run as administrator to receive. (Press Win+X and then A to start an administrator command prompt.)")
 		return false
 	}
-	t.output("Firewall rule created.")
+	// t.output("Firewall rule created.")
 	return true
 }
 
@@ -288,6 +282,5 @@ func (n Network) teardown(t *Transfer) {
 	if n.Mode == "receiving" {
 		os.Remove(t.Filepath)
 	}
-	n.removeSSID(t)
 	n.resetWifi(t)
 }

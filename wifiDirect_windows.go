@@ -38,7 +38,7 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	// run it with proper options
 	cmd := exec.Command(tmpLoc, strconv.Itoa(os.Getpid()))
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	defer cmd.Process.Kill()
+	
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		bail(err, startChan, t, n)
@@ -70,12 +70,11 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	// in loop, listen on chan to commands from rest of program
 	for {
 		select {
-		case msg, ok := <-n.wifiDirectChan:
-			t.output("Message received over wifiDirectChan")
+		case msg, ok := <-n.WifiDirectChan:
 			if !ok || msg == "quit" {
 				io.WriteString(stdin, "quit\n")
 			}
-			n.wifiDirectChan <- "Exiting WifiDirect."
+			n.WifiDirectChan <- "Wifi-Direct stopped."
 			return
 		default:
 			time.Sleep(time.Second * 3)
@@ -87,12 +86,16 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 func readStdout(reader *bufio.Reader, t *Transfer) {
 	for {
 		resp, err := reader.ReadString('\n')
-		if err != nil {
+		if err != nil && err.Error() != "EOF" {
 			t.output(fmt.Sprintf("WifiDirect stdout error: %s", err))
 			return
-			// time.Sleep(time.Second * 3)
 		}
-		if resp != "\r\n" && resp != ">\r\n" {
+		// restricting output in hacky way for now, need to rewrite wdlap.
+		// if resp != "\r\n" && resp != ">\r\n" {
+		if !strings.Contains(resp, "Setting") && !strings.Contains(resp, "Starting") && !strings.Contains(resp, ">") &&
+			!strings.Contains(resp, "Peers can connect") && !strings.Contains(resp, "Passphrase") &&
+			!strings.Contains(resp, "is ready") && !strings.Contains(resp, "Exiting") && 
+			!strings.Contains(resp, "Requested") && resp != "\r\n" {
 			// write to window
 			t.output(strings.TrimSpace(string(resp)))
 		}

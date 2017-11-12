@@ -83,6 +83,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 		<-t.AdHocChan
 	}
 	ticker.Stop()
+	t.updateProgressBar(100)
 	t.output(fmt.Sprintf("Sending took %s\n", time.Since(start)))
 	sendChan <- true
 	return

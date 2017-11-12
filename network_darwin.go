@@ -169,17 +169,14 @@ func (n Network) connectToPeer(t *Transfer) bool {
 	return true
 }
 
-func (n Network) removeSSID(t *Transfer) {
-	wifiInterface := n.getWifiInterface()
-	cmdString := "networksetup -removepreferredwirelessnetwork " + wifiInterface + " " + t.SSID
-	t.output(n.runCommand(cmdString))
-}
-
 func (n Network) resetWifi(t *Transfer) {
-
 	wifiInterface := n.getWifiInterface()
 	cmdString := "networksetup -setairportpower " + wifiInterface + " off && networksetup -setairportpower " + wifiInterface + " on"
 	t.output(n.runCommand(cmdString))
+	if t.Peer == "windows" || n.Mode == "sending" {
+		cmdString = "networksetup -removepreferredwirelessnetwork " + wifiInterface + " " + t.SSID
+		t.output(n.runCommand(cmdString))
+	}
 }
 
 func (n Network) stayOnAdHoc(t *Transfer) {
@@ -219,6 +216,5 @@ func (n Network) teardown(t *Transfer) {
 	if n.Mode == "receiving" {
 		os.Remove(t.Filepath)
 	}
-	n.removeSSID(t)
 	n.resetWifi(t)
 }

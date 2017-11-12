@@ -15,8 +15,6 @@ const DIAL_TIMEOUT = 60
 const JOIN_ADHOC_TIMEOUT = 60
 const FIND_MAC_TIMEOUT = 60
 
-// need different thread event for each post to output box, so need helper function that's receiver on Transfer?
-
 func main() {
 	wx1 := wx.NewApp("Flying Carpet")
 	mf := newGui()
@@ -26,14 +24,13 @@ func main() {
 }
 
 func (t *Transfer) mainRoutine(mode string) {
-
 	receiveChan := make(chan bool)
 	sendChan := make(chan bool)
-	var n Network
+	wfdc := make(chan string)
+	n := Network{WifiDirectChan: wfdc}
 	
 	defer func() {
 		t.enableStartButton()
-		n.removeSSID(t)
 		n.resetWifi(t)
 	}()
 
@@ -42,7 +39,7 @@ func (t *Transfer) mainRoutine(mode string) {
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
-		n = Network{Mode: "sending"}
+		n.Mode = "sending"
 		if runtime.GOOS == "windows" {
 			n.PreviousSSID = n.getCurrentWifi()
 		}
@@ -72,7 +69,7 @@ func (t *Transfer) mainRoutine(mode string) {
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
 			"=============================\n", t.Passphrase))
 
-		n = Network{Mode: "receiving"}
+		n.Mode = "receiving"
 
 		if !n.connectToPeer(t) {
 			t.output("Aborting transfer.")
@@ -168,5 +165,5 @@ type Network struct {
 	Mode           string // sending or receiving
 	PreviousSSID   string
 	AdHocCapable   bool
-	wifiDirectChan chan string
+	WifiDirectChan chan string
 }

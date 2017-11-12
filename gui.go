@@ -232,6 +232,15 @@ func (t *Transfer) output(msg string) {
 	threadEvt := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
 	threadEvt.SetString(msg)
 	t.Frame.QueueEvent(threadEvt)
+
+	// for testing
+	// file, err := os.OpenFile("err.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// defer file.Close()
+	// file.WriteString(msg)
+	// file.WriteString("\r\n")
 }
 
 func (t *Transfer) enableStartButton() {
