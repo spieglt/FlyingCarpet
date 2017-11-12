@@ -3,19 +3,6 @@ Wireless, encrypted file transfer over automatically configured ad hoc networkin
 
 Don't have a flash drive? Don't have access to a wireless network or don't trust one? Need to move a file larger than 2GB between Mac and Windows but don't want to set up a file share? Try it out!
 
-# Sample Usage
-**On receiving end (Mac):**
-
-`./flyingcarpet -receive transferred_movie.avi -peer windows`
-
-*\[Write down password\]*
-
-**On sending end (Windows):**
-
-`flyingcarpet.exe -send movie.avi -peer mac`
-
-*\[Enter password from Mac\]*
-
 # Features:
 + Cross-platform, Mac and Windows.
 
@@ -30,24 +17,20 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + Standalone binary, no installation required.
 
 # Compilation instructions:
-(Ready-to-use x64 binaries in `/bin` as well, must run `chmod u+x flyingcarpet` for Mac.)
+(Ready-to-use x64 binaries in `/bin`.)
 
-`cd flyingcarpet`
++ Install wxGo. For Windows, I recommend the tdm-gcc link from this page rather than mingw-w64: https://github.com/dontpanic92/wxGo/wiki/Installation-Guide.
 
-`go get ./...`
++ `go get -x github.com/spieglt/flyingcarpet`
 
-`go build`
++ `go build`
 
 # Restrictions:
 + Disables your wireless internet connection while in use (does not apply to Windows when receiving)
 
-+ On Mac: May have to click Allow or enter username and password at prompt to join ad-hoc network. (Clicking cancel may still work.)
++ On Mac: May have to click Allow or enter username and password at prompt to join ad-hoc network and clear Flying Carpet SSID from your preferred networks list.
 
-+ On Windows: Must run as administrator to receive files (to allow connection through firewall and clear ARP cache). Right-click Command Prompt icon in Start menu and select "Run as administrator," or press Win+X, A. 
-
-+ Windows laptop must support hosted networking. To find out if yours does, run `netsh wlan show drivers`. If the `Hosted network supported : ` line says `No`, you can't use this product. Known issue on Surface Pro 3 and later.
-
-+ If you choose to receive a filename that is already present in your current directory, it will be overwritten.
++ On Windows: Must run as administrator to receive files (to allow connection through firewall and clear ARP cache). Right-click flyingcarpet.exe and select "Run as administrator."
 
 + After a successful transfer, Flying Carpet will attempt to rejoin you to your previous wireless networks. If there is an error midway through the process, this may fail.
 
@@ -63,10 +46,6 @@ Licenses for third-party tools and libraries used can be found in the "3rd_party
 
 # Planned features
 
-+ Ubuntu support
++ Linux support
 
-+ GUI
-
-+ On Windows, add support for WiFi Direct API so that chips/drivers without support for ad hoc (IBSS) hosted networks can use Flying Carpet (applies to Surface 3 Pro and later and some other newer Windows 10 PCs).
-
-I will not have much time to work on this until mid-October, so it may be until November that progress is made on these items. If you've used Flying Carpet, please tell me whether it worked or not. I have had very little testing and feedback so far. Thank you for your interest!
+If you've used Flying Carpet, please send me feedback! Thank you for your interest!
