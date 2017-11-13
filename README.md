@@ -3,6 +3,10 @@ Wireless, encrypted file transfer over automatically configured ad hoc networkin
 
 Don't have a flash drive? Don't have access to a wireless network or don't trust one? Need to move a file larger than 2GB between Mac and Windows but don't want to set up a file share? Try it out!
 
+# Screenshots:
+
+![](pictures/macDemo.png)  ![](pictures/winDemo.png)
+
 # Features:
 + Cross-platform, Mac and Windows.
 
@@ -34,16 +38,22 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + After a successful transfer, Flying Carpet will attempt to rejoin you to your previous wireless networks. If there is an error midway through the process, this may fail.
 
+# Planned features:
+
++ Linux support
+
++ Sending filename and size before transfer begins so user does not have to select filename and receiving end can have a progress bar
+
++ Cancel button
+
++ Get back-to-back transfers working without reopening program
+
++ Rewrite Wi-Fi Direct C++ code (currently using sample utility from Microsoft)
+
++ Make an icon
+
 Disclaimer: I am not a cryptography expert. This is a usable product in its current state, but is also an experiment and a work in progress. Do not use for private files if you think a skilled attacker is less than 100 feet from you and trying to intercept them.
 
 Licenses for third-party tools and libraries used can be found in the "3rd_party_licenses" folder.
-
-# Screenshots
-
-![](pictures/macDemo.png)  ![](pictures/winDemo.png)
-
-# Planned features
-
-+ Linux support
 
 If you've used Flying Carpet, please send me feedback! Thank you for your interest!
