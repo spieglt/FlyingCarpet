@@ -17,7 +17,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + Standalone binary, no installation required.
 
 # Compilation instructions:
-(Ready-to-use x64 binaries in `/bin`.)
+(Ready-to-use x64 .app and .exe in `/bin`.)
 
 + Install wxGo. For Windows, I recommend the tdm-gcc link from this page rather than mingw-w64: https://github.com/dontpanic92/wxGo/wiki/Installation-Guide.
 
