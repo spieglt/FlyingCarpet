@@ -86,8 +86,10 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 func readStdout(reader *bufio.Reader, t *Transfer) {
 	for {
 		resp, err := reader.ReadString('\n')
-		if err != nil && err.Error() != "EOF" {
-			t.output(fmt.Sprintf("WifiDirect stdout error: %s", err))
+		if err != nil {
+			if err.Error() != "EOF" {
+				t.output(fmt.Sprintf("WifiDirect stdout error: %s", err))
+			}
 			return
 		}
 		// restricting output in hacky way for now, need to rewrite wdlap.
