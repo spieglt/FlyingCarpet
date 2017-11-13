@@ -40,9 +40,7 @@ Licenses for third-party tools and libraries used can be found in the "3rd_party
 
 # Screenshots
 
-![](pictures/macDemo.png)
-
-![](pictures/winDemo.png)
+![](pictures/macDemo.png)  ![](pictures/winDemo.png)
 
 # Planned features
 
