@@ -1,4 +1,6 @@
 # Flying Carpet
+Ready-to-use x64 `Flying Carpet.app` (for Mac) and `Flying Carpet.exe` (for Windows) in ![`/bin`](bin)!
+
 Wireless, encrypted file transfer over automatically configured ad hoc networking. No network infrastructure required (access point, router, switch). Just two laptops (Mac and/or Windows) with wireless chips in close range.
 
 Don't have a flash drive? Don't have access to a wireless network or don't trust one? Need to move a file larger than 2GB between Mac and Windows but don't want to set up a file share? Try it out!
@@ -21,7 +23,6 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + Standalone binary, no installation required.
 
 # Compilation instructions:
-(Ready-to-use x64 .app and .exe in `/bin`.)
 
 + Install wxGo. For Windows, I recommend the tdm-gcc link from this page rather than mingw-w64: https://github.com/dontpanic92/wxGo/wiki/Installation-Guide.
 
