@@ -111,7 +111,7 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 	// join network
 	t.output("Looking for ad-hoc network " + t.SSID + "...")
 	timeout := JOIN_ADHOC_TIMEOUT
-	for t.SSID != n.getCurrentWifi() {
+	for t.SSID != n.getCurrentWifi(t) {
 		if timeout <= 0 {
 			t.output("Could not find the ad hoc network within the timeout period.")
 			return false
@@ -173,8 +173,15 @@ func (n *Network) findPeer(t *Transfer) (peerIP string) {
 	return
 }
 
-func (n Network) getCurrentWifi() (SSID string) {
-	SSID = n.runCommand("$(netsh wlan show interfaces | Select-String -Pattern 'Profile *: (?<profile>.*)').Matches.Groups[1].Value.Trim()")
+func (n Network) getCurrentWifi(t *Transfer) (SSID string) {
+	cmdStr := "$(netsh wlan show interfaces | Select-String -Pattern 'Profile *: (?<profile>.*)').Matches.Groups[1].Value.Trim()"
+	cmd := exec.Command("powershell", "-c", cmdStr)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	cmdBytes, err := cmd.CombinedOutput()
+	if err != nil {
+		t.output("Error getting current SSID.")
+	}
+	SSID = strings.TrimSpace(string(cmdBytes))
 	return
 }
 
