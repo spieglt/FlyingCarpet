@@ -1,47 +1,49 @@
 package main
 
+/*
+#cgo CFLAGS: -x objective-c
+#cgo LDFLAGS: -framework Foundation
+#cgo LDFLAGS: -framework CoreWLAN
+#import <Foundation/Foundation.h>
+#import <CoreWLAN/CoreWLAN.h>
+
+int startAdHoc(char * cSSID, char * cPassword) {
+	NSString * SSID = [[NSString alloc] initWithUTF8String:cSSID];
+	NSString * password = [[NSString alloc] initWithUTF8String:cPassword];
+	CWInterface * iface = CWWiFiClient.sharedWiFiClient.interface;
+	NSError *ibssErr = nil;
+	BOOL result = [iface startIBSSModeWithSSID:[SSID dataUsingEncoding:NSUTF8StringEncoding] security:kCWIBSSModeSecurityNone channel:11 password:password error:&ibssErr];
+	// NSLog(@"%d", result);
+	return result;
+}
+*/
+import "C"
 import (
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
+	"unsafe"
 )
 
 func (n *Network) startAdHoc(t *Transfer) bool {
 
-	tmpLoc := "/private/tmp/adhocnet"
-	os.Remove(tmpLoc)
+	ssid := C.CString(t.SSID)
+	password := C.CString(t.Passphrase)
+	var cRes C.int = C.startAdHoc(ssid, password)
+	res := int(cRes)
+	
+	C.free(unsafe.Pointer(ssid))
+	C.free(unsafe.Pointer(password))
 
-	data, err := Asset("static/adhocnet")
-	if err != nil {
-		n.teardown(t)
-		t.output("Static file error")
+	if res == 1 {
+		t.output("SSID " + t.SSID + " started.")
+		return true
+	} else {
+		t.output("Failed to start ad hoc network.")
 		return false
 	}
-	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
-	if err != nil {
-		n.teardown(t)
-		t.output("Error creating temp file")
-		return false
-	}
-	if _, err = outFile.Write(data); err != nil {
-		n.teardown(t)
-		t.output("Write error")
-		return false
-	}
-	defer os.Remove(tmpLoc)
-
-	cmd := exec.Command(tmpLoc, t.SSID, t.Passphrase)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.output(string(output))
-		n.teardown(t)
-		t.output("Error creating ad hoc network")
-		return false
-	}
-	t.output(fmt.Sprintf("startAdHoc: %sSSID: %s\n", output, t.SSID))
-	return true
 }
 
 func (n *Network) joinAdHoc(t *Transfer) bool {
@@ -70,7 +72,7 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 	return true
 }
 
-func (n Network) getCurrentWifi() (SSID string) {
+func (n Network) getCurrentWifi(t *Transfer) (SSID string) {
 	cmdStr := "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I | awk '/ SSID/ {print substr($0, index($0, $2))}'"
 	SSID = n.runCommand(cmdStr)
 	return
@@ -188,7 +190,7 @@ func (n Network) stayOnAdHoc(t *Transfer) {
 			t.AdHocChan <- true
 			return
 		default:
-			if n.getCurrentWifi() != t.SSID {
+			if n.getCurrentWifi(t) != t.SSID {
 				n.joinAdHoc(t)
 			}
 			time.Sleep(time.Second * 1)
