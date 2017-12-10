@@ -25,7 +25,7 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	}
 	tmpLoc := strings.TrimSpace(string(cmdBytes)) + "\\wfd.dll"
 	t.output(tmpLoc)
-	
+
 	// write dll to file
 	os.Remove(tmpLoc)
 
@@ -55,11 +55,11 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 
 	ConsoleInit.Call()
 
-	ssid		:= unsafe.Pointer(C.CString("ssid " + t.SSID))
-	password	:= unsafe.Pointer(C.CString("pass " + t.Passphrase))
-	autoaccept	:= unsafe.Pointer(C.CString("autoaccept 1"))
-	start		:= unsafe.Pointer(C.CString("start"))
-	stop		:= unsafe.Pointer(C.CString("stop"))
+	ssid := unsafe.Pointer(C.CString("ssid " + t.SSID))
+	password := unsafe.Pointer(C.CString("pass " + t.Passphrase))
+	autoaccept := unsafe.Pointer(C.CString("autoaccept 1"))
+	start := unsafe.Pointer(C.CString("start"))
+	stop := unsafe.Pointer(C.CString("stop"))
 
 	defer C.free(ssid)
 	defer C.free(password)
@@ -71,7 +71,6 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	ExecuteCommand.Call(uintptr(password))
 	ExecuteCommand.Call(uintptr(autoaccept))
 	ExecuteCommand.Call(uintptr(start))
-
 
 	startChan <- true
 	// in loop, listen on chan to commands from rest of program
@@ -96,4 +95,3 @@ func bail(err error, startChan chan bool, t *Transfer, n *Network) {
 	startChan <- false
 	n.teardown(t)
 }
-

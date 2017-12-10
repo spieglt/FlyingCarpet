@@ -28,7 +28,7 @@ func (t *Transfer) mainRoutine(mode string) {
 	sendChan := make(chan bool)
 	wfdc := make(chan string)
 	n := Network{WifiDirectChan: wfdc}
-	
+
 	defer func() {
 		t.enableStartButton()
 		n.resetWifi(t)
