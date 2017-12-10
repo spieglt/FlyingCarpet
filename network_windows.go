@@ -20,7 +20,7 @@ func (n *Network) startAdHoc(t *Transfer) bool {
 	cmd := exec.Command("netsh", "wlan", "start", "hostednetwork")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err := cmd.CombinedOutput()
-	// TODO: replace with "echo %errorlevel%" == 1
+	// TODO: replace with "echo %errorlevel%" == "1"
 	if err.Error() == "exit status 1" {
 		t.output("Could not start hosted network, trying Wi-Fi Direct.")
 		n.AdHocCapable = false

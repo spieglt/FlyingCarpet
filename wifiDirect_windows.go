@@ -1,24 +1,35 @@
 package main
 
+//#include <stdlib.h>
+import "C"
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 )
 
 // TODO: error handling, use chan
 func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
-	// write legacyAP bin to file
-	tmpLoc := ".\\wdlap.exe"
+	// echo %TEMP%
+	cmd := exec.Command("cmd", "/C", "echo %TEMP%")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	cmdBytes, err := cmd.CombinedOutput()
+	if err != nil {
+		t.output("Error getting temp location.")
+		startChan <- false
+		return
+	}
+	tmpLoc := strings.TrimSpace(string(cmdBytes)) + "\\wfd.dll"
+	t.output(tmpLoc)
+	
+	// write dll to file
 	os.Remove(tmpLoc)
 
-	data, err := Asset("static/wdlap.exe")
+	data, err := Asset("static/wfd.dll")
 	if err != nil {
 		bail(err, startChan, t, n)
 		return
@@ -35,36 +46,32 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	outFile.Close()
 	defer os.Remove(tmpLoc)
 
-	// run it with proper options
-	cmd := exec.Command(tmpLoc, strconv.Itoa(os.Getpid()))
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		bail(err, startChan, t, n)
-		return
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		bail(err, startChan, t, n)
-		return
-	}
-	reader := bufio.NewReader(stdout)
-	if err != nil {
-		bail(err, startChan, t, n)
-		return
-	}
-	err = cmd.Start()
-	if err != nil {
-		bail(err, startChan, t, n)
-		return
-	}
+	// Use DLL
+	dll := syscall.NewLazyDLL(tmpLoc)
 
-	go readStdout(reader, t)
-	io.WriteString(stdin, "ssid "+t.SSID+"\n")
-	io.WriteString(stdin, "pass "+t.Passphrase+"\n")
-	io.WriteString(stdin, "autoaccept 1\n")
-	io.WriteString(stdin, "start\n")
+	ConsoleInit := dll.NewProc("GoConsoleInit")
+	ConsoleFree := dll.NewProc("GoConsoleFree")
+	ExecuteCommand := dll.NewProc("GoConsoleExecuteCommand")
+
+	ConsoleInit.Call()
+
+	ssid		:= unsafe.Pointer(C.CString("ssid " + t.SSID))
+	password	:= unsafe.Pointer(C.CString("pass " + t.Passphrase))
+	autoaccept	:= unsafe.Pointer(C.CString("autoaccept 1"))
+	start		:= unsafe.Pointer(C.CString("start"))
+	stop		:= unsafe.Pointer(C.CString("stop"))
+
+	defer C.free(ssid)
+	defer C.free(password)
+	defer C.free(autoaccept)
+	defer C.free(start)
+	defer C.free(stop)
+
+	ExecuteCommand.Call(uintptr(ssid))
+	ExecuteCommand.Call(uintptr(password))
+	ExecuteCommand.Call(uintptr(autoaccept))
+	ExecuteCommand.Call(uintptr(start))
+
 
 	startChan <- true
 	// in loop, listen on chan to commands from rest of program
@@ -72,7 +79,7 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 		select {
 		case msg, ok := <-n.WifiDirectChan:
 			if !ok || msg == "quit" {
-				io.WriteString(stdin, "quit\n")
+				ConsoleFree.Call()
 			}
 			n.WifiDirectChan <- "Wifi-Direct stopped."
 			return
@@ -81,27 +88,7 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 		}
 	}
 
-}
-
-func readStdout(reader *bufio.Reader, t *Transfer) {
-	for {
-		resp, err := reader.ReadString('\n')
-		if err != nil {
-			if err.Error() != "EOF" {
-				t.output(fmt.Sprintf("WifiDirect stdout error: %s", err))
-			}
-			return
-		}
-		// restricting output in hacky way for now, need to rewrite wdlap.
-		// if resp != "\r\n" && resp != ">\r\n" {
-		if !strings.Contains(resp, "Setting") && !strings.Contains(resp, "Starting") && !strings.Contains(resp, ">") &&
-			!strings.Contains(resp, "Peers can connect") && !strings.Contains(resp, "Passphrase") &&
-			!strings.Contains(resp, "is ready") && !strings.Contains(resp, "Exiting") && 
-			!strings.Contains(resp, "Requested") && resp != "\r\n" {
-			// write to window
-			t.output(strings.TrimSpace(string(resp)))
-		}
-	}
+	return
 }
 
 func bail(err error, startChan chan bool, t *Transfer, n *Network) {
@@ -109,3 +96,4 @@ func bail(err error, startChan chan bool, t *Transfer, n *Network) {
 	startChan <- false
 	n.teardown(t)
 }
+
