@@ -24,7 +24,6 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 		return
 	}
 	tmpLoc := strings.TrimSpace(string(cmdBytes)) + "\\wfd.dll"
-	t.output(tmpLoc)
 
 	// write dll to file
 	os.Remove(tmpLoc)
