@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"crypto/md5"
 	"encoding/binary"
 	"fmt"
 	"github.com/dontpanic92/wxGo/wx"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"time"
 )
@@ -42,6 +44,24 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 			t.updateProgressBar(int(percentDone))
 		}
 	}()
+
+	// transmit filename and size
+	filename := filepath.Base(t.Filepath)
+	_, err = t.Conn.Write([]byte(fmt.Sprintf("%s\n", filename)))
+	if err != nil {
+		n.teardown(t)
+		t.output(fmt.Sprintf("Error reading out file: %s\n Please quit and restart Flying Carpet.", err))
+		sendChan <- false
+		return
+	}
+	err = binary.Write(t.Conn, binary.BigEndian, fileSize)	
+	if err != nil {
+		n.teardown(t)
+		t.output(fmt.Sprintf("Error transmitting file size: %s\n Please quit and restart Flying Carpet.", err))
+		sendChan <- false
+		return
+	}
+	/////////////////////////////
 
 	for i = 0; i < numChunks; i++ {
 		bufferSize := min(CHUNKSIZE, bytesLeft)
@@ -92,8 +112,35 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 	start := time.Now()
 	defer t.Conn.Close()
-	os.Remove(t.Filepath)
 
+	// receive filename and size
+	connBufReader := bufio.NewReader(t.Conn)
+	filename, err := connBufReader.ReadString('\n')
+	if err != nil {
+		n.teardown(t)
+		t.output(fmt.Sprintf("Error receiving file name: %s\nPlease quit and restart Flying Carpet.",err))
+		receiveChan <- false
+		return
+	}
+	var fileSize int64
+	err = binary.Read(t.Conn, binary.BigEndian, &fileSize)
+	if err != nil {
+		n.teardown(t)
+		t.output(fmt.Sprintf("Error receiving file size: %s\nPlease quit and restart Flying Carpet.",err))
+		receiveChan <- false
+		return
+	}
+	// TODO: set textbox to filename and add progress bar
+	if _, err := os.Open(t.Filepath + filename); err != nil {
+		t.Filepath += filename
+	} else {
+		t.Filepath = t.Filepath + t.SSID + "_" + filename
+	}
+	t.output(fmt.Sprintf("Filename: %s\nFile size: %i", filename, fileSize))
+	t.updateFilename(t.Filepath)
+	/////////////////////////////
+	
+	// os.Remove(t.Filepath)
 	outFile, err := os.OpenFile(t.Filepath, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		n.teardown(t)
@@ -184,6 +231,12 @@ func (t *Transfer) updateProgressBar(percentage int) {
 func (t *Transfer) showProgressBar() {
 	progressEvt := wx.NewThreadEvent(wx.EVT_THREAD, PROGRESS_BAR_SHOW)
 	t.Frame.QueueEvent(progressEvt)
+}
+
+func (t *Transfer) updateFilename(filename string) {
+	filenameEvt := wx.NewThreadEvent(wx.EVT_THREAD, RECEIVE_FILE_UPDATE)
+	filenameEvt.SetString(filename)
+	t.Frame.QueueEvent(filenameEvt)
 }
 
 func ceil(x, y int64) int64 {

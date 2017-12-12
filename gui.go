@@ -12,6 +12,7 @@ const PROGRESS_BAR_UPDATE = wx.ID_HIGHEST + 2
 const PROGRESS_BAR_SHOW = wx.ID_HIGHEST + 3
 const START_BUTTON_ENABLE = wx.ID_HIGHEST + 4
 const HIDE_OPTION_ID = wx.ID_HIGHEST + 5
+const RECEIVE_FILE_UPDATE = wx.ID_HIGHEST + 6
 
 type MainFrame struct {
 	wx.Frame
@@ -90,7 +91,7 @@ func newGui() *MainFrame {
 			sendButton.Hide()
 			receiveButton.Show()
 			usr, _ := user.Current()
-			fileBox.SetValue(usr.HomeDir + string(os.PathSeparator) + "Desktop" + string(os.PathSeparator) + "file.out")
+			fileBox.SetValue(usr.HomeDir + string(os.PathSeparator) + "Desktop" + string(os.PathSeparator))
 		}
 		mf.Panel.Layout()
 	}, radiobox2.GetId())
@@ -116,7 +117,7 @@ func newGui() *MainFrame {
 
 		if fd.ShowModal() != wx.ID_CANCEL {
 			folder := fd.GetPath()
-			fileBox.SetValue(folder + string(os.PathSeparator) + "file.out")
+			fileBox.SetValue(folder + string(os.PathSeparator))
 		}
 	}, receiveButton.GetId())
 
@@ -160,13 +161,15 @@ func newGui() *MainFrame {
 				outputBox.AppendText("Password entry was cancelled.")
 			}
 		} else if mode == "receive" {
-			_, err := os.Stat(t.Filepath)
-			if err != nil {
-				startButton.Enable(false)
-				go t.mainRoutine(mode)
-			} else {
-				outputBox.AppendText("Error: destination file already exists.")
-			}
+			// _, err := os.Stat(t.Filepath)
+			// if err != nil {
+			// 	startButton.Enable(false)
+			// 	go t.mainRoutine(mode)
+			// } else {
+			// 	outputBox.AppendText("Error: destination file already exists.")
+			// }
+			startButton.Enable(false)
+			go t.mainRoutine(mode)
 		}
 	}, startButton.GetId())
 
@@ -193,6 +196,12 @@ func newGui() *MainFrame {
 		startButton.Enable(true)
 		mf.Panel.Layout()
 	}, START_BUTTON_ENABLE)
+
+	// receiving filename update event
+	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
+		threadEvent := wx.ToThreadEvent(e)
+		fileBox.SetValue(threadEvent.GetString())
+	}, RECEIVE_FILE_UPDATE)
 
 	mf.Panel.SetSizer(bSizerTotal)
 	mf.Layout()
