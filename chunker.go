@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bufio"
+	// "bufio"
 	"crypto/md5"
 	"encoding/binary"
 	"fmt"
@@ -47,10 +47,18 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 
 	// transmit filename and size
 	filename := filepath.Base(t.Filepath)
-	_, err = t.Conn.Write([]byte(fmt.Sprintf("%s\n", filename)))
+	filenameLen := len(filename)
+	err = binary.Write(t.Conn, binary.BigEndian, filenameLen)
 	if err != nil {
 		n.teardown(t)
-		t.output(fmt.Sprintf("Error reading out file: %s\n Please quit and restart Flying Carpet.", err))
+		t.output(fmt.Sprintf("Error writing filename length: %s\n Please quit and restart Flying Carpet.", err))
+		sendChan <- false
+		return
+	}
+	_, err = t.Conn.Write([]byte(filename))
+	if err != nil {
+		n.teardown(t)
+		t.output(fmt.Sprintf("Error writing filename: %s\n Please quit and restart Flying Carpet.", err))
 		sendChan <- false
 		return
 	}
@@ -114,14 +122,23 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 	defer t.Conn.Close()
 
 	// receive filename and size
-	connBufReader := bufio.NewReader(t.Conn)
-	filename, err := connBufReader.ReadString('\n')
+	var filenameLen int64
+	err := binary.Read(t.Conn, binary.BigEndian, &filenameLen)
 	if err != nil {
 		n.teardown(t)
-		t.output(fmt.Sprintf("Error receiving file name: %s\nPlease quit and restart Flying Carpet.",err))
+		t.output(fmt.Sprintf("Error receiving filename length: %s\nPlease quit and restart Flying Carpet.",err))
 		receiveChan <- false
 		return
 	}
+	filenameBytes := make([]byte, filenameLen)	
+	_, err = io.ReadFull(t.Conn, filenameBytes)
+	if err != nil {
+		n.teardown(t)
+		t.output(fmt.Sprintf("Error receiving filename: %s\nPlease quit and restart Flying Carpet.",err))
+		receiveChan <- false
+		return
+	}
+	filename := string(filenameBytes)
 	var fileSize int64
 	err = binary.Read(t.Conn, binary.BigEndian, &fileSize)
 	if err != nil {
