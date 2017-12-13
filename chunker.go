@@ -47,7 +47,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 
 	// transmit filename and size
 	filename := filepath.Base(t.Filepath)
-	filenameLen := len(filename)
+	filenameLen := int64(len(filename))
 	err = binary.Write(t.Conn, binary.BigEndian, filenameLen)
 	if err != nil {
 		n.teardown(t)
@@ -147,14 +147,23 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 		receiveChan <- false
 		return
 	}
-	// TODO: set textbox to filename and add progress bar
 	if _, err := os.Open(t.Filepath + filename); err != nil {
 		t.Filepath += filename
 	} else {
 		t.Filepath = t.Filepath + t.SSID + "_" + filename
 	}
-	t.output(fmt.Sprintf("Filename: %s\nFile size: %i", filename, fileSize))
+	t.output(fmt.Sprintf("Filename: %s\nFile size: %d", filename, fileSize))
 	t.updateFilename(t.Filepath)
+	// progress bar
+	t.showProgressBar()
+	bytesLeft := fileSize
+	ticker := time.NewTicker(time.Millisecond * 1000)
+	go func() {
+		for _ = range ticker.C {
+			percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
+			t.updateProgressBar(int(percentDone))
+		}
+	}()
 	/////////////////////////////
 	
 	// os.Remove(t.Filepath)
@@ -205,11 +214,14 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 			receiveChan <- false
 			return
 		}
+		bytesLeft -= int64(len(decryptedChunk))
 	}
 	if runtime.GOOS == "darwin" && t.Peer == "windows" {
 		t.AdHocChan <- false
 		<-t.AdHocChan
 	}
+	ticker.Stop()
+	t.updateProgressBar(100)
 	t.output(fmt.Sprintf("Received file size: %d", getSize(outFile)))
 	t.output(fmt.Sprintf("Received file hash: %x", getHash(t.Filepath)))
 	t.output(fmt.Sprintf("Receiving took %s", time.Since(start)))
