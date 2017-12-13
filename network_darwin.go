@@ -33,7 +33,7 @@ func (n *Network) startAdHoc(t *Transfer) bool {
 	password := C.CString(t.Passphrase)
 	var cRes C.int = C.startAdHoc(ssid, password)
 	res := int(cRes)
-	
+
 	C.free(unsafe.Pointer(ssid))
 	C.free(unsafe.Pointer(password))
 

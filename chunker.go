@@ -62,7 +62,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 		sendChan <- false
 		return
 	}
-	err = binary.Write(t.Conn, binary.BigEndian, fileSize)	
+	err = binary.Write(t.Conn, binary.BigEndian, fileSize)
 	if err != nil {
 		n.teardown(t)
 		t.output(fmt.Sprintf("Error transmitting file size: %s\n Please quit and restart Flying Carpet.", err))
@@ -126,15 +126,15 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 	err := binary.Read(t.Conn, binary.BigEndian, &filenameLen)
 	if err != nil {
 		n.teardown(t)
-		t.output(fmt.Sprintf("Error receiving filename length: %s\nPlease quit and restart Flying Carpet.",err))
+		t.output(fmt.Sprintf("Error receiving filename length: %s\nPlease quit and restart Flying Carpet.", err))
 		receiveChan <- false
 		return
 	}
-	filenameBytes := make([]byte, filenameLen)	
+	filenameBytes := make([]byte, filenameLen)
 	_, err = io.ReadFull(t.Conn, filenameBytes)
 	if err != nil {
 		n.teardown(t)
-		t.output(fmt.Sprintf("Error receiving filename: %s\nPlease quit and restart Flying Carpet.",err))
+		t.output(fmt.Sprintf("Error receiving filename: %s\nPlease quit and restart Flying Carpet.", err))
 		receiveChan <- false
 		return
 	}
@@ -143,7 +143,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 	err = binary.Read(t.Conn, binary.BigEndian, &fileSize)
 	if err != nil {
 		n.teardown(t)
-		t.output(fmt.Sprintf("Error receiving file size: %s\nPlease quit and restart Flying Carpet.",err))
+		t.output(fmt.Sprintf("Error receiving file size: %s\nPlease quit and restart Flying Carpet.", err))
 		receiveChan <- false
 		return
 	}
@@ -165,7 +165,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
 		}
 	}()
 	/////////////////////////////
-	
+
 	// os.Remove(t.Filepath)
 	outFile, err := os.OpenFile(t.Filepath, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
