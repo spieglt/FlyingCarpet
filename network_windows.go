@@ -173,7 +173,7 @@ func (n *Network) findPeer(t *Transfer) (peerIP string) {
 	return
 }
 
-func (n Network) getCurrentWifi(t *Transfer) (SSID string) {
+func (n *Network) getCurrentWifi(t *Transfer) (SSID string) {
 	cmdStr := "$(netsh wlan show interfaces | Select-String -Pattern 'Profile *: (?<profile>.*)').Matches.Groups[1].Value.Trim()"
 	cmd := exec.Command("powershell", "-c", cmdStr)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
@@ -189,7 +189,7 @@ func (n *Network) getWifiInterface() string {
 	return ""
 }
 
-func (n Network) connectToPeer(t *Transfer) bool {
+func (n *Network) connectToPeer(t *Transfer) bool {
 
 	if n.Mode == "receiving" {
 		if !n.addFirewallRule(t) {
@@ -221,7 +221,7 @@ func (n Network) connectToPeer(t *Transfer) bool {
 	return true
 }
 
-func (n Network) resetWifi(t *Transfer) {
+func (n *Network) resetWifi(t *Transfer) {
 	if n.Mode == "receiving" || t.Peer == "mac" {
 		n.deleteFirewallRule(t)
 		n.stopAdHoc(t)
@@ -232,7 +232,7 @@ func (n Network) resetWifi(t *Transfer) {
 	}
 }
 
-func (n Network) addFirewallRule(t *Transfer) bool {
+func (n *Network) addFirewallRule(t *Transfer) bool {
 
 	execPath, err := os.Executable()
 	if err != nil {
@@ -253,12 +253,12 @@ func (n Network) addFirewallRule(t *Transfer) bool {
 	return true
 }
 
-func (n Network) deleteFirewallRule(t *Transfer) {
+func (n *Network) deleteFirewallRule(t *Transfer) {
 	fwStr := "netsh advfirewall firewall delete rule name=flyingcarpet"
 	t.output(n.runCommand(fwStr))
 }
 
-func (n Network) checkForFile(t *Transfer) bool {
+func (n *Network) checkForFile(t *Transfer) bool {
 	_, err := os.Stat(t.Filepath)
 	if err != nil {
 		return false
@@ -285,7 +285,7 @@ func (n *Network) runCommand(cmdStr string) (output string) {
 	return strings.TrimSpace(string(cmdBytes))
 }
 
-func (n Network) teardown(t *Transfer) {
+func (n *Network) teardown(t *Transfer) {
 	if n.Mode == "receiving" {
 		os.Remove(t.Filepath)
 	}

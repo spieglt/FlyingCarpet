@@ -12,6 +12,8 @@ import (
 	"unsafe"
 )
 
+var dll *syscall.DLL
+
 // TODO: error handling, use chan
 func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	// echo %TEMP%
@@ -25,34 +27,67 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	}
 	tmpLoc := strings.TrimSpace(string(cmdBytes)) + "\\wfd.dll"
 
-	// write dll to file
-	os.Remove(tmpLoc)
+	if dll == nil {
+		// write dll to file
+		err = os.Remove(tmpLoc)
+		if err != nil {
+			t.output(err.Error())
+		}
+		data, err := Asset("static/wfd.dll")
+		if err != nil {
+			bail(err, startChan, t, n)
+			return
+		}
+		outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
+		if err != nil {
+			bail(err, startChan, t, n)
+			return
+		}
+		if _, err = outFile.Write(data); err != nil {
+			bail(err, startChan, t, n)
+			return
+		}
+		outFile.Close()
+		defer os.Remove(tmpLoc)
 
-	data, err := Asset("static/wfd.dll")
+		// Use DLL
+		dll, err = syscall.LoadDLL(tmpLoc)
+		if err != nil {
+			t.output(fmt.Sprintf("Loading DLL failed: %s", err))
+			startChan <- false
+			n.teardown(t)
+			return
+		}
+	}
+
+	ConsoleInit, err := dll.FindProc("GoConsoleInit")
 	if err != nil {
-		bail(err, startChan, t, n)
-		return
+		t.output(err.Error())
 	}
-	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
+	ConsoleFree, err := dll.FindProc("GoConsoleFree")
 	if err != nil {
-		bail(err, startChan, t, n)
+		t.output(err.Error())
+	}
+	ExecuteCommand, err := dll.FindProc("GoConsoleExecuteCommand")
+	if err != nil {
+		t.output(err.Error())
+	}
+
+	cInitRes, _, initErr := ConsoleInit.Call()
+	initRes := int(cInitRes)
+	if initRes == 0 {
+		t.output(fmt.Sprintf("Initializing Windows Runtime for Wi-Fi Direct failed: %s", initErr))
+		startChan <- false
+		n.teardown(t)
+		return
+	} else if initRes == 1 {
+		t.output("Initialized Windows Runtime.")
+	} else {
+		t.output(fmt.Sprintf("Something went wrong with initializing Windows Runtime: %d.", initRes))
+		startChan <- false
+		n.teardown(t)
 		return
 	}
-	if _, err = outFile.Write(data); err != nil {
-		bail(err, startChan, t, n)
-		return
-	}
-	outFile.Close()
-	defer os.Remove(tmpLoc)
-
-	// Use DLL
-	dll := syscall.NewLazyDLL(tmpLoc)
-
-	ConsoleInit := dll.NewProc("GoConsoleInit")
-	ConsoleFree := dll.NewProc("GoConsoleFree")
-	ExecuteCommand := dll.NewProc("GoConsoleExecuteCommand")
-
-	ConsoleInit.Call()
 
 	ssid := unsafe.Pointer(C.CString("ssid " + t.SSID))
 	password := unsafe.Pointer(C.CString("pass " + t.Passphrase))
@@ -77,7 +112,11 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 		select {
 		case msg, ok := <-n.WifiDirectChan:
 			if !ok || msg == "quit" {
-				ConsoleFree.Call()
+				cFreeRes, _, _ := ConsoleFree.Call()
+				freeRes := int(cFreeRes)
+				if freeRes == 0 {
+					t.output("Failed to uninitialize Windows Runtime.")
+				}
 			}
 			n.WifiDirectChan <- "Wifi-Direct stopped."
 			return
@@ -85,7 +124,10 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 			time.Sleep(time.Second * 3)
 		}
 	}
-
+	// err = dll.Release()
+	// if err != nil {
+	// 	t.output(fmt.Sprintf("Error releasing DLL: %s", err))
+	// }
 	return
 }
 

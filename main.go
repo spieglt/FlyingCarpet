@@ -48,7 +48,7 @@ func (t *Transfer) mainRoutine(mode string) {
 			return
 		}
 
-		if connected := t.sendFile(sendChan, n); connected == false {
+		if connected := t.sendFile(sendChan, &n); connected == false {
 			t.output("Could not establish TCP connection with peer. Aborting transfer.")
 			return
 		}
@@ -76,7 +76,7 @@ func (t *Transfer) mainRoutine(mode string) {
 			return
 		}
 
-		go t.receiveFile(receiveChan, n)
+		go t.receiveFile(receiveChan, &n)
 		// wait for listener to be up
 		listenerIsUp := <-receiveChan
 		if !listenerIsUp {
@@ -93,12 +93,12 @@ func (t *Transfer) mainRoutine(mode string) {
 	}
 }
 
-func (t *Transfer) receiveFile(receiveChan chan bool, n Network) {
+func (t *Transfer) receiveFile(receiveChan chan bool, n *Network) {
 
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(t.Port))
 	if err != nil {
 		n.teardown(t)
-		t.output(fmt.Sprintf("Could not listen on :%d", t.Port))
+		t.output(fmt.Sprintf("Could not listen on :%d. Err: %s", t.Port, err))
 		receiveChan <- false
 		return
 	}
@@ -118,7 +118,7 @@ func (t *Transfer) receiveFile(receiveChan chan bool, n Network) {
 	}
 }
 
-func (t *Transfer) sendFile(sendChan chan bool, n Network) bool {
+func (t *Transfer) sendFile(sendChan chan bool, n *Network) bool {
 
 	var conn net.Conn
 	var err error

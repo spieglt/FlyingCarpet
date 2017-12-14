@@ -72,7 +72,7 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 	return true
 }
 
-func (n Network) getCurrentWifi(t *Transfer) (SSID string) {
+func (n *Network) getCurrentWifi(t *Transfer) (SSID string) {
 	cmdStr := "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I | awk '/ SSID/ {print substr($0, index($0, $2))}'"
 	SSID = n.runCommand(cmdStr)
 	return
@@ -136,7 +136,7 @@ func (n *Network) findWindows(t *Transfer) (peerIP string) {
 	}
 }
 
-func (n Network) connectToPeer(t *Transfer) bool {
+func (n *Network) connectToPeer(t *Transfer) bool {
 
 	if n.Mode == "sending" {
 		if !n.checkForFile(t) {
@@ -171,7 +171,7 @@ func (n Network) connectToPeer(t *Transfer) bool {
 	return true
 }
 
-func (n Network) resetWifi(t *Transfer) {
+func (n *Network) resetWifi(t *Transfer) {
 	wifiInterface := n.getWifiInterface()
 	cmdString := "networksetup -setairportpower " + wifiInterface + " off && networksetup -setairportpower " + wifiInterface + " on"
 	t.output(n.runCommand(cmdString))
@@ -181,7 +181,7 @@ func (n Network) resetWifi(t *Transfer) {
 	}
 }
 
-func (n Network) stayOnAdHoc(t *Transfer) {
+func (n *Network) stayOnAdHoc(t *Transfer) {
 
 	for {
 		select {
@@ -198,7 +198,7 @@ func (n Network) stayOnAdHoc(t *Transfer) {
 	}
 }
 
-func (n Network) checkForFile(t *Transfer) bool {
+func (n *Network) checkForFile(t *Transfer) bool {
 	_, err := os.Stat(t.Filepath)
 	if err != nil {
 		return false
@@ -214,7 +214,7 @@ func (n *Network) runCommand(cmd string) (output string) {
 	return strings.TrimSpace(string(cmdBytes))
 }
 
-func (n Network) teardown(t *Transfer) {
+func (n *Network) teardown(t *Transfer) {
 	if n.Mode == "receiving" {
 		os.Remove(t.Filepath)
 	}

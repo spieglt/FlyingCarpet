@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/dontpanic92/wxGo/wx"
 	"io"
+	// "net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,7 +16,7 @@ import (
 
 const CHUNKSIZE = 1000000 // 1MB
 
-func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
+func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 
 	start := time.Now()
 	defer t.Conn.Close()
@@ -117,7 +118,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n Network) {
 	return
 }
 
-func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n Network) {
+func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network) {
 	start := time.Now()
 	defer t.Conn.Close()
 

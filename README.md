@@ -43,13 +43,9 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + Linux support
 
-+ Sending filename and size before transfer begins so user does not have to select filename and receiving end can have a progress bar
-
 + Cancel button
 
 + Get back-to-back transfers working without reopening program
-
-+ Rewrite Wi-Fi Direct C++ code (currently using sample utility from Microsoft)
 
 + Make an icon
 
