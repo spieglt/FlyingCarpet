@@ -4,6 +4,7 @@ import (
 	"github.com/dontpanic92/wxGo/wx"
 	"os"
 	"os/user"
+	"path/filepath"
 	"runtime"
 )
 
@@ -161,13 +162,13 @@ func newGui() *MainFrame {
 				outputBox.AppendText("Password entry was cancelled.")
 			}
 		} else if mode == "receive" {
-			// _, err := os.Stat(t.Filepath)
-			// if err != nil {
-			// 	startButton.Enable(false)
-			// 	go t.mainRoutine(mode)
-			// } else {
-			// 	outputBox.AppendText("Error: destination file already exists.")
-			// }
+			fpStat, err := os.Stat(t.Filepath)
+			if err != nil {
+				t.output("Please select valid folder.")
+			} else if !fpStat.IsDir() {
+				t.Filepath = filepath.Dir(t.Filepath) + string(os.PathSeparator)
+			}
+
 			startButton.Enable(false)
 			go t.mainRoutine(mode)
 		}
