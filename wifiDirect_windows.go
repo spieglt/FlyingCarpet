@@ -14,7 +14,6 @@ import (
 
 var dll *syscall.DLL
 
-// TODO: error handling, use chan
 func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	// echo %TEMP%
 	cmd := exec.Command("cmd", "/C", "echo %TEMP%")

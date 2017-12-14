@@ -104,7 +104,7 @@ func (t *Transfer) receiveFile(receiveChan chan bool, n *Network) {
 	}
 	t.output("Listening on :" + strconv.Itoa(t.Port))
 	receiveChan <- true
-	
+
 	conn, err := ln.Accept()
 	if err != nil {
 		n.teardown(t)
