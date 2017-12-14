@@ -104,18 +104,17 @@ func (t *Transfer) receiveFile(receiveChan chan bool, n *Network) {
 	}
 	t.output("Listening on :" + strconv.Itoa(t.Port))
 	receiveChan <- true
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			n.teardown(t)
-			t.output(fmt.Sprintf("Error accepting connection on :%d", t.Port))
-			receiveChan <- false
-			return
-		}
-		t.Conn = conn
-		t.output("Connection accepted")
-		go t.receiveAndAssemble(receiveChan, n)
+	
+	conn, err := ln.Accept()
+	if err != nil {
+		n.teardown(t)
+		t.output(fmt.Sprintf("Error accepting connection on :%d", t.Port))
+		receiveChan <- false
+		return
 	}
+	t.Conn = conn
+	t.output("Connection accepted")
+	go t.receiveAndAssemble(receiveChan, n, &ln)
 }
 
 func (t *Transfer) sendFile(sendChan chan bool, n *Network) bool {

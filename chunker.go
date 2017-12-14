@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/dontpanic92/wxGo/wx"
 	"io"
-	// "net"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -118,9 +118,10 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 	return
 }
 
-func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network) {
+func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net.Listener) {
 	start := time.Now()
 	defer t.Conn.Close()
+	defer (*ln).Close()
 
 	// receive filename and size
 	var filenameLen int64
