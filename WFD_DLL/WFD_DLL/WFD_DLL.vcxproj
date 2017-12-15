@@ -23,7 +23,7 @@
     <ProjectGuid>{58EEAB48-F05B-4B32-A70C-50384319C24A}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>WFD_DLL</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
