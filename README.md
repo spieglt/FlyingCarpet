@@ -45,8 +45,6 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + Cancel button
 
-+ Get back-to-back transfers working without reopening program
-
 + Make an icon
 
 Disclaimer: I am not a cryptography expert. This is a usable product in its current state, but is also an experiment and a work in progress. Do not use for private files if you think a skilled attacker is less than 100 feet from you and trying to intercept them.
