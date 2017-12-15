@@ -25,8 +25,11 @@ type MainFrame struct {
 func newGui() *MainFrame {
 	mf := &MainFrame{}
 	mf.Frame = wx.NewFrame(wx.NullWindow, wx.ID_ANY, "Flying Carpet")
-	icon := wx.NewIcon("appicon", wx.BITMAP_TYPE_ICO_RESOURCE, -1, -1)
-	mf.Frame.SetIcon(icon)
+	
+	if runtime.GOOS == "windows" {
+		icon := wx.NewIcon("appicon", wx.BITMAP_TYPE_ICO_RESOURCE, -1, -1)
+		mf.Frame.SetIcon(icon)
+	}
 
 	// window
 
