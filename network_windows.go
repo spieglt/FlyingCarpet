@@ -16,7 +16,7 @@ func (n *Network) startAdHoc(t *Transfer) bool {
 	n.runCommand("netsh winsock reset")
 	n.runCommand("netsh wlan stop hostednetwork")
 	t.output("SSID: " + t.SSID)
-	n.runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Passphrase)
+	n.runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Passphrase + t.Passphrase)
 	cmd := exec.Command("netsh", "wlan", "start", "hostednetwork")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err := cmd.CombinedOutput()
@@ -55,8 +55,14 @@ func (n *Network) stopAdHoc(t *Transfer) {
 }
 
 func (n *Network) joinAdHoc(t *Transfer) bool {
-
-	tmpLoc := ".\\adhoc.xml"
+	cmd := exec.Command("cmd", "/C", "echo %TEMP%")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	cmdBytes, err := cmd.CombinedOutput()
+	if err != nil {
+		t.output("Error getting temp location.")
+		return false
+	}
+	tmpLoc := strings.TrimSpace(string(cmdBytes)) + "\\adhoc.xml"
 
 	// make doc
 	xmlDoc := "<?xml version=\"1.0\"?>\r\n" +
@@ -79,7 +85,7 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 		"			<sharedKey>\r\n" +
 		"				<keyType>passPhrase</keyType>\r\n" +
 		"				<protected>false</protected>\r\n" +
-		"				<keyMaterial>" + t.Passphrase + "</keyMaterial>\r\n" +
+		"				<keyMaterial>" + t.Passphrase + t.Passphrase + "</keyMaterial>\r\n" +
 		"			</sharedKey>\r\n" +
 		"		</security>\r\n" +
 		"	</MSM>\r\n" +
@@ -286,8 +292,8 @@ func (n *Network) runCommand(cmdStr string) (output string) {
 }
 
 func (n *Network) teardown(t *Transfer) {
-	if n.Mode == "receiving" {
-		os.Remove(t.Filepath)
-	}
+	// if n.Mode == "receiving" {
+	// 	os.Remove(t.Filepath)
+	// }
 	n.resetWifi(t)
 }

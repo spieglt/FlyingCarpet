@@ -15,6 +15,26 @@ const DIAL_TIMEOUT = 60
 const JOIN_ADHOC_TIMEOUT = 60
 const FIND_MAC_TIMEOUT = 60
 
+type Transfer struct {
+	Filepath    string
+	Passphrase  string
+	SSID        string
+	Conn        net.Conn
+	Port        int
+	RecipientIP string
+	Peer        string
+	AdHocChan   chan bool
+	Frame       *MainFrame
+}
+
+type Network struct {
+	Mode           string // sending or receiving
+	PreviousSSID   string
+	AdHocCapable   bool
+	WifiDirectChan chan string
+}
+
+
 func main() {
 	wx1 := wx.NewApp("Flying Carpet")
 	mf := newGui()
@@ -65,6 +85,10 @@ func (t *Transfer) mainRoutine(mode string) {
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
+
+		showPassphraseEvt := wx.NewThreadEvent(wx.EVT_THREAD, POP_UP_PASSWORD)
+		showPassphraseEvt.SetString(t.Passphrase)
+		t.Frame.QueueEvent(showPassphraseEvt)
 		t.output(fmt.Sprintf("=============================\n"+
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
 			"=============================\n", t.Passphrase))
@@ -139,30 +163,12 @@ func (t *Transfer) sendFile(sendChan chan bool, n *Network) bool {
 }
 
 func generatePassword() string {
+	// no l, I, or O because they look too similar to each other, 1, and 0
 	const chars = "0123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
 	rand.Seed(time.Now().UTC().UnixNano())
-	pwBytes := make([]byte, 8)
+	pwBytes := make([]byte, 4)
 	for i := range pwBytes {
 		pwBytes[i] = chars[rand.Intn(len(chars))]
 	}
 	return string(pwBytes)
-}
-
-type Transfer struct {
-	Filepath    string
-	Passphrase  string
-	SSID        string
-	Conn        net.Conn
-	Port        int
-	RecipientIP string
-	Peer        string
-	AdHocChan   chan bool
-	Frame       *MainFrame
-}
-
-type Network struct {
-	Mode           string // sending or receiving
-	PreviousSSID   string
-	AdHocCapable   bool
-	WifiDirectChan chan string
 }

@@ -89,7 +89,7 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	}
 
 	ssid := unsafe.Pointer(C.CString("ssid " + t.SSID))
-	password := unsafe.Pointer(C.CString("pass " + t.Passphrase))
+	password := unsafe.Pointer(C.CString("pass " + t.Passphrase + t.Passphrase))
 	autoaccept := unsafe.Pointer(C.CString("autoaccept 1"))
 	start := unsafe.Pointer(C.CString("start"))
 	stop := unsafe.Pointer(C.CString("stop"))

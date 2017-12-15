@@ -30,7 +30,7 @@ import (
 func (n *Network) startAdHoc(t *Transfer) bool {
 
 	ssid := C.CString(t.SSID)
-	password := C.CString(t.Passphrase)
+	password := C.CString(t.Passphrase + t.Passphrase)
 	var cRes C.int = C.startAdHoc(ssid, password)
 	res := int(cRes)
 
@@ -52,7 +52,7 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 	t.output("Looking for ad-hoc network " + t.SSID + "...")
 	timeout := JOIN_ADHOC_TIMEOUT
 
-	joinAdHocStr := "networksetup -setairportnetwork " + wifiInterface + " " + t.SSID + " " + t.Passphrase
+	joinAdHocStr := "networksetup -setairportnetwork " + wifiInterface + " " + t.SSID + " " + t.Passphrase + t.Passphrase
 	joinAdHocBytes, err := exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
 	for len(joinAdHocBytes) != 0 {
 		if timeout <= 0 {
@@ -215,8 +215,8 @@ func (n *Network) runCommand(cmd string) (output string) {
 }
 
 func (n *Network) teardown(t *Transfer) {
-	if n.Mode == "receiving" {
-		os.Remove(t.Filepath)
-	}
+	// if n.Mode == "receiving" {
+	// 	os.Remove(t.Filepath)
+	// }
 	n.resetWifi(t)
 }

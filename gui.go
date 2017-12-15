@@ -14,6 +14,7 @@ const PROGRESS_BAR_SHOW = wx.ID_HIGHEST + 3
 const START_BUTTON_ENABLE = wx.ID_HIGHEST + 4
 const HIDE_OPTION_ID = wx.ID_HIGHEST + 5
 const RECEIVE_FILE_UPDATE = wx.ID_HIGHEST + 6
+const POP_UP_PASSWORD = wx.ID_HIGHEST + 7
 
 type MainFrame struct {
 	wx.Frame
@@ -145,21 +146,21 @@ func newGui() *MainFrame {
 		}
 
 		if mode == "send" {
-			pd := wx.NewPasswordEntryDialog(mf.Panel, "Enter password from receiving end:", "", "", wx.OK|wx.CANCEL, wx.DefaultPosition)
+			pd := wx.NewTextEntryDialog(mf.Panel, "Enter password from receiving end:", "", "", wx.OK|wx.CANCEL, wx.DefaultPosition)
 			ret := pd.ShowModal()
 			if ret == wx.ID_OK {
 				_, err := os.Stat(t.Filepath)
 				if err == nil {
 					startButton.Enable(false)
-					outputBox.AppendText("Entered password: " + pd.GetValue())
+					t.output("Entered password: " + pd.GetValue())
 					t.Passphrase = pd.GetValue()
 					// pd.Destroy()
 					go t.mainRoutine(mode)
 				} else {
-					outputBox.AppendText("Could not find output file.")
+					t.output("Could not find output file.")
 				}
 			} else {
-				outputBox.AppendText("Password entry was cancelled.")
+				t.output("Password entry was cancelled.")
 			}
 		} else if mode == "receive" {
 			fpStat, err := os.Stat(t.Filepath)
@@ -204,6 +205,13 @@ func newGui() *MainFrame {
 		fileBox.SetValue(threadEvent.GetString())
 	}, RECEIVE_FILE_UPDATE)
 
+	// password pop-up event
+	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
+		threadEvent := wx.ToThreadEvent(e)
+		dialog := wx.NewMessageDialog(mf.Panel, "Enter this password into sending\nend after pressing Start:\n\n" + threadEvent.GetString(), "Transfer Password", wx.OK, wx.DefaultPosition)
+		dialog.ShowModal()
+	}, POP_UP_PASSWORD)
+
 	mf.Panel.SetSizer(bSizerTotal)
 	mf.Layout()
 	mf.Centre(wx.BOTH)
@@ -242,13 +250,13 @@ func (t *Transfer) output(msg string) {
 	t.Frame.QueueEvent(threadEvt)
 
 	//for testing
-	file, err := os.OpenFile("err.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-	file.WriteString(msg)
-	file.WriteString("\r\n")
+	// file, err := os.OpenFile("err.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// defer file.Close()
+	// file.WriteString(msg)
+	// file.WriteString("\r\n")
 }
 
 func (t *Transfer) enableStartButton() {
