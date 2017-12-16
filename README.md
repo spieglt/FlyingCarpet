@@ -26,9 +26,11 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + Install wxGo. For Windows, I recommend the tdm-gcc link from this page rather than mingw-w64: https://github.com/dontpanic92/wxGo/wiki/Installation-Guide.
 
++ Windows only: Compile WFD_DLL project with Visual Studio (Release, x64) and then run `makeIconSyso.bat` while in `icons/Windows` folder.
+
 + `go get -x github.com/spieglt/flyingcarpet`
 
-+ `go build`
++ Run `.\rebuild.ps1` from Powershell (for Windows) or `./rebuild` from Terminal (for Mac).
 
 # Restrictions:
 + Disables your wireless internet connection while in use (does not apply to Windows when receiving).
@@ -45,7 +47,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + Cancel button
 
-Disclaimer: I am not a cryptography expert. This is a usable product in its current state, but is also an experiment and a work in progress. Do not use for private files if you think a skilled attacker is less than 100 feet from you and trying to intercept them.
+Disclaimer: I am not a cryptography expert. Do not use for private files if you think a skilled attacker is less than 100 feet from you and trying to intercept them.
 
 Licenses for third-party tools and libraries used can be found in the "3rd_party_licenses" folder.
 
