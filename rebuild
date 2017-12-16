@@ -9,7 +9,7 @@ cp './flyingcarpet' './Flying Carpet.app/Contents/MacOS/Flying Carpet'
 cp './icons/Mac/info.plist' './Flying Carpet.app/Contents/'
 cp './icons/Mac/fc.icns' './Flying Carpet.app/Contents/Resources/'
 
-zip './bin/Flying Carpet (Mac).zip' './Flying Carpet.app'
+zip -r './bin/Flying Carpet (Mac).zip' './Flying Carpet.app'
 
 rm './flyingcarpet'
 
