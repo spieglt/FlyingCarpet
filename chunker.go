@@ -183,7 +183,9 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 		var chunkSize int64
 		err := binary.Read(t.Conn, binary.BigEndian, &chunkSize)
 		if err != nil {
-			t.output(fmt.Sprintf("err: %s", err.Error()))
+			if err.Error() != "EOF" {
+				t.output(fmt.Sprintf("err: %s", err.Error()))	
+			}
 		}
 		if chunkSize == 0 {
 			// done receiving

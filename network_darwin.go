@@ -50,7 +50,7 @@ func (n *Network) startAdHoc(t *Transfer) bool {
 func (n *Network) joinAdHoc(t *Transfer) bool {
 
 	wifiInterface := n.getWifiInterface()
-	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + "seconds...")
+	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
 
 	joinAdHocStr := "networksetup -setairportnetwork " + wifiInterface + " " + t.SSID + " " + t.Passphrase + t.Passphrase
@@ -86,11 +86,12 @@ func (n *Network) getWifiInterface() string {
 
 func (n *Network) getIPAddress(t *Transfer) string {
 	var currentIP string
+	t.output("Waiting for local IP...")
 	for currentIP == "" {
 		currentIPString := "ipconfig getifaddr " + n.getWifiInterface()
 		currentIPBytes, err := exec.Command("sh", "-c", currentIPString).CombinedOutput()
 		if err != nil {
-			t.output(fmt.Sprintf("Waiting for self-assigned IP... %s", err))
+
 			time.Sleep(time.Second * time.Duration(4))
 			continue
 		}
