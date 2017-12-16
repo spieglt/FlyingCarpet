@@ -25,7 +25,7 @@ type MainFrame struct {
 func newGui() *MainFrame {
 	mf := &MainFrame{}
 	mf.Frame = wx.NewFrame(wx.NullWindow, wx.ID_ANY, "Flying Carpet")
-	
+
 	if runtime.GOOS == "windows" {
 		icon := wx.NewIcon("appicon", wx.BITMAP_TYPE_ICO_RESOURCE, -1, -1)
 		mf.Frame.SetIcon(icon)
@@ -213,7 +213,7 @@ func newGui() *MainFrame {
 	// password pop-up event
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
 		threadEvent := wx.ToThreadEvent(e)
-		dialog := wx.NewMessageDialog(mf.Panel, "Enter this password into sending\nend after pressing Start:\n\n" + threadEvent.GetString(), "Transfer Password", wx.OK, wx.DefaultPosition)
+		dialog := wx.NewMessageDialog(mf.Panel, "Enter this password into sending\nend after pressing Start:\n\n"+threadEvent.GetString(), "Transfer Password", wx.OK, wx.DefaultPosition)
 		dialog.ShowModal()
 	}, POP_UP_PASSWORD)
 

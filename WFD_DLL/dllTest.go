@@ -3,11 +3,11 @@ package main
 //#include <stdlib.h>
 import "C"
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"syscall"
 	"unsafe"
-	"bufio"
 )
 
 func main() {
@@ -20,11 +20,11 @@ func main() {
 	a, b, err := ConsoleInit.Call()
 	fmt.Printf("a: %# x\nb: %# x\nerr: %s\n", a, b, err)
 
-	ssid		:= unsafe.Pointer(C.CString("ssid tester"))
-	password	:= unsafe.Pointer(C.CString("pass testing123"))
-	autoaccept	:= unsafe.Pointer(C.CString("autoaccept 1"))
-	start		:= unsafe.Pointer(C.CString("start"))
-	stop		:= unsafe.Pointer(C.CString("stop"))
+	ssid := unsafe.Pointer(C.CString("ssid tester"))
+	password := unsafe.Pointer(C.CString("pass testing123"))
+	autoaccept := unsafe.Pointer(C.CString("autoaccept 1"))
+	start := unsafe.Pointer(C.CString("start"))
+	stop := unsafe.Pointer(C.CString("stop"))
 
 	defer C.free(ssid)
 	defer C.free(password)

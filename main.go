@@ -34,7 +34,6 @@ type Network struct {
 	WifiDirectChan chan string
 }
 
-
 func main() {
 	wx1 := wx.NewApp("Flying Carpet")
 	mf := newGui()
