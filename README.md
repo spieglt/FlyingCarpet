@@ -35,9 +35,9 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 # Restrictions:
 + Disables your wireless internet connection while in use (does not apply to Windows when receiving).
 
-+ On Mac: May have to click Allow or enter username and password at prompt to join ad-hoc network and clear Flying Carpet SSID from your preferred networks list.
++ On Mac: May have to click Allow or enter username and password at prompt to join ad-hoc network and clear Flying Carpet SSID from your preferred networks list. You may also have to right-click and select "Open" if your settings don't allow running unsigned applications. 
 
-+ On Windows: Must run as administrator (to allow connection through firewall and clear ARP cache). Right-click "Flying Carpet.exe" and select "Run as administrator."
++ On Windows: Must run as administrator (to allow connection through firewall and clear ARP cache). Right-click "Flying Carpet.exe" and select "Run as administrator." You may also have to click "More info" and "Run anyway" if you receive a Windows SmartScreen prompt.
 
 + After a successful transfer, Flying Carpet will attempt to rejoin you to your previous wireless networks. If there is an error midway through the process, this may fail.
 
@@ -46,6 +46,8 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + Linux support
 
 + Cancel button
+
++ Maybe warn about running as administrator upon start on Windows, and try to decrease number of security prompts on Mac.
 
 Disclaimer: I am not a cryptography expert. Do not use for private files if you think a skilled attacker is less than 100 feet from you and trying to intercept them.
 
