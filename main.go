@@ -145,11 +145,12 @@ func (t *Transfer) sendFile(sendChan chan bool, n *Network) bool {
 
 	var conn net.Conn
 	var err error
+	t.output("Trying to connect to " + t.RecipientIP + " for " + strconv.Itoa(DIAL_TIMEOUT) + " seconds.")
 	for i := 0; i < DIAL_TIMEOUT; i++ {
 		err = nil
 		conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond*10)
 		if err != nil {
-			t.output(fmt.Sprintf("Failed connection %2d to %s, retrying.", i, t.RecipientIP))
+			// t.output(fmt.Sprintf("Failed connection %2d to %s, retrying.", i, t.RecipientIP))
 			time.Sleep(time.Second * 1)
 			continue
 		}

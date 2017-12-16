@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -115,21 +116,23 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 	t.output(n.runCommand("netsh wlan add profile filename=" + tmpLoc + " user=current"))
 
 	// join network
-	t.output("Looking for ad-hoc network " + t.SSID + "...")
+	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
 	for t.SSID != n.getCurrentWifi(t) {
 		if timeout <= 0 {
-			t.output("Could not find the ad hoc network within the timeout period.")
+			t.output("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
 			return false
 		}
 		cmdStr := "netsh wlan connect name=" + t.SSID
 		cmdSlice := strings.Split(cmdStr, " ")
-		_, cmdErr := exec.Command(cmdSlice[0], cmdSlice[1:]...).CombinedOutput()
-		if cmdErr != nil {
-			t.output(fmt.Sprintf("Failed to find the ad hoc network. Trying for %2d more seconds. %s", timeout, cmdErr))
-		}
-		timeout -= 5
-		time.Sleep(time.Second * time.Duration(5))
+		joinCmd := exec.Command(cmdSlice[0], cmdSlice[1:]...)
+		joinCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		/*_, cmdErr :=*/ joinCmd.CombinedOutput()
+		// if cmdErr != nil {
+		// 	t.output(fmt.Sprintf("Failed to find the ad hoc network. Trying for %2d more seconds. %s", timeout, cmdErr))
+		// }
+		timeout -= 3
+		time.Sleep(time.Second * time.Duration(3))
 	}
 	return true
 }
@@ -175,7 +178,7 @@ func (n *Network) findPeer(t *Transfer) (peerIP string) {
 		peerIP = strings.TrimSpace(string(peerBytes))
 		time.Sleep(time.Second * time.Duration(2))
 	}
-	t.output(fmt.Sprintf("peer IP: %s", peerIP))
+	t.output(fmt.Sprintf("Peer IP found: %s", peerIP))
 	return
 }
 

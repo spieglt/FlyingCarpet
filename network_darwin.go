@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 	"unsafe"
@@ -49,17 +50,17 @@ func (n *Network) startAdHoc(t *Transfer) bool {
 func (n *Network) joinAdHoc(t *Transfer) bool {
 
 	wifiInterface := n.getWifiInterface()
-	t.output("Looking for ad-hoc network " + t.SSID + "...")
+	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + "seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
 
 	joinAdHocStr := "networksetup -setairportnetwork " + wifiInterface + " " + t.SSID + " " + t.Passphrase + t.Passphrase
 	joinAdHocBytes, err := exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
 	for len(joinAdHocBytes) != 0 {
 		if timeout <= 0 {
-			t.output("Could not find the ad hoc network within the timeout period.")
+			t.output("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
 			return false
 		}
-		t.output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
+		// t.output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(5))
 		joinAdHocBytes, err = exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
@@ -107,14 +108,15 @@ func (n *Network) findMac(t *Transfer) (peerIP string, success bool) {
 		"grep --line-buffered -vE '169.254.255.255' | " + // exclude broadcast address
 		"grep -vE '" + currentIP + "'" // exclude current IP
 
+	t.output("Looking for peer IP for " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
 	for peerIP == "" {
 		if timeout <= 0 {
-			t.output("Could not find the peer computer within the timeout period.")
+			t.output("Could not find the peer computer within " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
 			return "", false
 		}
 		pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 		if pingErr != nil {
-			t.output(fmt.Sprintf("Could not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
+			// t.output(fmt.Sprintf("Could not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
 			timeout -= 2
 			time.Sleep(time.Second * time.Duration(2))
 			continue
@@ -129,7 +131,7 @@ func (n *Network) findMac(t *Transfer) (peerIP string, success bool) {
 
 func (n *Network) findWindows(t *Transfer) (peerIP string) {
 	currentIP := n.getIPAddress(t)
-	if strings.Contains(currentIP, "137") {
+	if strings.Contains(currentIP, "192.168.137") {
 		return "192.168.137.1"
 	} else {
 		return "192.168.173.1"
