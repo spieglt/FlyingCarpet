@@ -31,11 +31,11 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + `go build`
 
 # Restrictions:
-+ Disables your wireless internet connection while in use (does not apply to Windows when receiving)
++ Disables your wireless internet connection while in use (does not apply to Windows when receiving).
 
 + On Mac: May have to click Allow or enter username and password at prompt to join ad-hoc network and clear Flying Carpet SSID from your preferred networks list.
 
-+ On Windows: Must run as administrator to receive files (to allow connection through firewall and clear ARP cache). Right-click flyingcarpet.exe and select "Run as administrator."
++ On Windows: Must run as administrator (to allow connection through firewall and clear ARP cache). Right-click "Flying Carpet.exe" and select "Run as administrator."
 
 + After a successful transfer, Flying Carpet will attempt to rejoin you to your previous wireless networks. If there is an error midway through the process, this may fail.
 
@@ -44,8 +44,6 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + Linux support
 
 + Cancel button
-
-+ Make an icon
 
 Disclaimer: I am not a cryptography expert. This is a usable product in its current state, but is also an experiment and a work in progress. Do not use for private files if you think a skilled attacker is less than 100 feet from you and trying to intercept them.
 
