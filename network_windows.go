@@ -56,14 +56,14 @@ func (n *Network) stopAdHoc(t *Transfer) {
 }
 
 func (n *Network) joinAdHoc(t *Transfer) bool {
-	cmd := exec.Command("cmd", "/C", "echo %TEMP%")
+	cmd := exec.Command("cmd", "/C", "echo %USERPROFILE%")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmdBytes, err := cmd.CombinedOutput()
 	if err != nil {
 		t.output("Error getting temp location.")
 		return false
 	}
-	tmpLoc := strings.TrimSpace(string(cmdBytes)) + "\\adhoc.xml"
+	tmpLoc := strings.TrimSpace(string(cmdBytes)) + "\\AppData\\Local\\Temp\\adhoc.xml"
 
 	// make doc
 	xmlDoc := "<?xml version=\"1.0\"?>\r\n" +

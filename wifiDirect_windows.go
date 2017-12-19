@@ -15,8 +15,7 @@ import (
 var dll *syscall.DLL
 
 func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
-	// echo %TEMP%
-	cmd := exec.Command("cmd", "/C", "echo %TEMP%")
+	cmd := exec.Command("cmd", "/C", "echo %USERPROFILE%")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmdBytes, err := cmd.CombinedOutput()
 	if err != nil {
@@ -24,7 +23,7 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 		startChan <- false
 		return
 	}
-	tmpLoc := strings.TrimSpace(string(cmdBytes)) + "\\wfd.dll"
+	tmpLoc := strings.TrimSpace(string(cmdBytes)) + "\\AppData\\Local\\Temp\\wfd.dll"
 
 	if dll == nil {
 		// write dll to file
