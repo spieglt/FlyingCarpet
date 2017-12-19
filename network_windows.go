@@ -147,7 +147,7 @@ func (n *Network) findPeer(t *Transfer) (peerIP string) {
 	// get ad hoc ip
 	var ifAddr string
 	for !ipPattern.Match([]byte(ifAddr)) {
-		ifString := "$(ipconfig | Select-String -Pattern '(?<ipaddr>192\\.168\\.\\d{1,3}\\..*)').Matches.Groups[1].Value.Trim()"
+		ifString := "$(ipconfig | Select-String -Pattern '(?<ipaddr>192\\.168\\.(137|173)\\..*)').Matches.Groups[2].Value.Trim()"
 		ifCmd := exec.Command("powershell", "-c", ifString)
 		ifCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 		ifBytes, err := ifCmd.CombinedOutput()
