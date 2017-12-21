@@ -248,14 +248,13 @@ func (n *Network) addFirewallRule(t *Transfer) bool {
 		t.output("Failed to get executable path.")
 		return false
 	}
-	fwStr := "netsh advfirewall firewall add rule name=flyingcarpet dir=in action=allow program=" +
-		execPath + " enable=yes profile=any localport=3290 protocol=tcp"
-	fwSlice := strings.Split(fwStr, " ")
-	cmd := exec.Command(fwSlice[0], fwSlice[1:]...)
+	cmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name=flyingcarpet", "dir=in",
+		"action=allow", "program='" + execPath + "'", "enable=yes", "profile=any", "localport=3290", "protocol=tcp")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err = cmd.CombinedOutput()
 	if err != nil {
 		t.output("Could not create firewall rule. You must run as administrator to receive. (Press Win+X and then A to start an administrator command prompt.)")
+		t.output(err.Error())
 		return false
 	}
 	// t.output("Firewall rule created.")
