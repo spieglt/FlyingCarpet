@@ -249,7 +249,7 @@ func (n *Network) addFirewallRule(t *Transfer) bool {
 		return false
 	}
 	cmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name=flyingcarpet", "dir=in",
-		"action=allow", "program='" + execPath + "'", "enable=yes", "profile=any", "localport=3290", "protocol=tcp")
+		"action=allow", "program='"+execPath+"'", "enable=yes", "profile=any", "localport=3290", "protocol=tcp")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err = cmd.CombinedOutput()
 	if err != nil {

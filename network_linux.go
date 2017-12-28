@@ -1,13 +1,13 @@
 package main
 
 import (
-	"fmt"
-	"os/exec"
-	"strings"
-	"os"
-	"strconv"
-	"time"
 	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+	"time"
 )
 
 func (n *Network) startAdHoc(t *Transfer) bool {
@@ -16,7 +16,7 @@ func (n *Network) startAdHoc(t *Transfer) bool {
 		"nmcli con modify " + t.SSID + " wifi-sec.key-mgmt wpa-psk",
 		"nmcli con modify " + t.SSID + " wifi-sec.psk \"" + t.Passphrase + t.Passphrase + "\"",
 		"nmcli con up " + t.SSID}
-	for _, cmd := range(commands) {
+	for _, cmd := range commands {
 		t.output(n.runCommand(cmd))
 	}
 	return true
@@ -38,7 +38,7 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 		"nmcli con modify \"" + t.SSID + "\" wifi-sec.key-mgmt wpa-psk",
 		"nmcli con modify \"" + t.SSID + "\" wifi-sec.psk \"" + t.Passphrase + t.Passphrase + "\"",
 		"nmcli con up \"" + t.SSID + "\""}
-	for _, cmd := range(commands) {
+	for _, cmd := range commands {
 		outBytes := n.runCommand(cmd)
 		t.output(string(outBytes))
 	}
@@ -50,7 +50,7 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 		// t.output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(5))
-		outBytes, err = exec.Command("sh", "-c", "nmcli con up \"" + t.SSID + "\"").CombinedOutput()
+		outBytes, err = exec.Command("sh", "-c", "nmcli con up \""+t.SSID+"\"").CombinedOutput()
 		if err != nil {
 			n.teardown(t)
 			t.output("Error joining ad hoc network.")
@@ -181,7 +181,8 @@ func (n *Network) connectToPeer(t *Transfer) bool {
 }
 
 func (n *Network) teardown(t *Transfer) {
-	// nmcli con delete t.SSID
+	command := "nmcli con delete " + t.SSID
+	t.output(n.runCommand(command))
 	fmt.Println("tearing down")
 }
 
