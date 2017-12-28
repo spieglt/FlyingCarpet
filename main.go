@@ -61,6 +61,8 @@ func (t *Transfer) mainRoutine(mode string) {
 		n.Mode = "sending"
 		if runtime.GOOS == "windows" {
 			n.PreviousSSID = n.getCurrentWifi(t)
+		} else if runtime.GOOS == "linux" {
+			n.PreviousSSID = n.getCurrentUUID(t)
 		}
 		if !n.connectToPeer(t) {
 			t.output("Aborting transfer.")

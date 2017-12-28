@@ -220,6 +220,8 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 		}
 		bytesLeft -= int64(len(decryptedChunk))
 	}
+	// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
+	// and thus don't need to shut down the goroutine trying to stay on it.
 	if runtime.GOOS == "darwin" && t.Peer == "windows" {
 		t.AdHocChan <- false
 		<-t.AdHocChan

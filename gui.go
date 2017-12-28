@@ -43,7 +43,7 @@ func newGui() *MainFrame {
 	// radio buttons box
 	radioSizer := wx.NewBoxSizer(wx.HORIZONTAL)
 	peerSizer := wx.NewBoxSizer(wx.VERTICAL)
-	radiobox1 := wx.NewRadioBox(mf.Panel, wx.ID_ANY, "Peer OS", wx.DefaultPosition, wx.DefaultSize, []string{"macOS", "Windows"}, 1, wx.HORIZONTAL)
+	radiobox1 := wx.NewRadioBox(mf.Panel, wx.ID_ANY, "Peer OS", wx.DefaultPosition, wx.DefaultSize, []string{"macOS", "Windows", "Linux"}, 1, wx.HORIZONTAL)
 	peerSizer.Add(radiobox1, 1, wx.ALL|wx.EXPAND, 5)
 	radioSizer.Add(peerSizer, 1, wx.EXPAND, 5)
 	modeSizer := wx.NewBoxSizer(wx.VERTICAL)
@@ -140,6 +140,8 @@ func newGui() *MainFrame {
 			peer = "mac"
 		} else if radiobox1.GetSelection() == 1 {
 			peer = "windows"
+		} else if radiobox1.GetSelection() == 2 {
+			peer = "linux"
 		}
 
 		t := Transfer{
@@ -224,7 +226,7 @@ func newGui() *MainFrame {
 	// menu
 
 	mf.MenuBar = wx.NewMenuBar()
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == "windows" || runtime.GOOS == "linux" {
 		fileMenu := wx.NewMenu()
 		fileMenu.Append(wx.ID_ABOUT)
 		fileMenu.Append(wx.ID_EXIT)
