@@ -299,3 +299,5 @@ func (n *Network) teardown(t *Transfer) {
 	// }
 	n.resetWifi(t)
 }
+
+func (n *Network) getCurrentUUID(t *Transfer) (uuid string) { return "" }
