@@ -30,9 +30,11 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + `go get -x github.com/spieglt/flyingcarpet`
 
-+ Run `.\rebuild.ps1` from Powershell (for Windows) or `./rebuild` from Terminal (for Mac).
++ Run `.\rebuild.ps1` from Powershell (for Windows), `./rebuild_mac` from Terminal (for Mac), or `./rebuild_linux` (for Linux).
 
 # Restrictions:
++ 64-bit only. Supported Operating Systems: macOS 10.12+, Windows 10, and Linux Mint 18. Other versions may work, though I believe Windows 7 does not. I only have access to so many laptops, so if you've tried on other platforms please let me know whether it worked. 
+
 + Disables your wireless internet connection while in use (does not apply to Windows when receiving).
 
 + On Mac: May have to click Allow or enter username and password at prompt to join ad-hoc network and clear Flying Carpet SSID from your preferred networks list. You may also have to right-click and select "Open" if your settings don't allow running unsigned applications. 
@@ -43,7 +45,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Planned features:
 
-+ Linux support
++ Linux support (Work in progress. Have only tested between Mint 18 and Windows 10).
 
 + Cancel button
 
