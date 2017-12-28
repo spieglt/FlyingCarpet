@@ -1,0 +1,9 @@
+rm './bin/Flying Carpet (Linux).zip'
+
+go build
+
+mv './flyingcarpet' './Flying Carpet'
+
+zip './bin/Flying Carpet (Linux).zip' './Flying Carpet'
+
+'./Flying Carpet'

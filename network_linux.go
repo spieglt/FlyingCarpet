@@ -28,8 +28,6 @@ func (n *Network) stopAdHoc(t *Transfer) {
 }
 
 func (n *Network) joinAdHoc(t *Transfer) bool {
-
-	// wifiInterface := n.getWifiInterface()
 	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
 	var outBytes []byte
@@ -38,31 +36,40 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 		"nmcli con modify \"" + t.SSID + "\" wifi-sec.key-mgmt wpa-psk",
 		"nmcli con modify \"" + t.SSID + "\" wifi-sec.psk \"" + t.Passphrase + t.Passphrase + "\"",
 		"nmcli con up \"" + t.SSID + "\""}
-	for _, cmd := range commands {
-		outBytes := n.runCommand(cmd)
-		t.output(string(outBytes))
+	for i, cmd := range commands {
+		outBytes, err = exec.Command("sh", "-c", cmd).CombinedOutput()
+		t.output(fmt.Sprintf("outBytes %d: %s", i, string(outBytes)))
+		if err != nil {
+			t.output(fmt.Sprintf("Error %d: %s", i, err.Error()))
+		}
 	}
-	for len(outBytes) != 0 {
+	for string(outBytes)[:5] == "Error" {
 		if timeout <= 0 {
 			t.output("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
 			return false
 		}
-		// t.output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(5))
 		outBytes, err = exec.Command("sh", "-c", "nmcli con up \""+t.SSID+"\"").CombinedOutput()
+		t.output(string(outBytes))
 		if err != nil {
-			n.teardown(t)
-			t.output("Error joining ad hoc network.")
-			return false
+			t.output(fmt.Sprintf("Error joining ad hoc network: %s", err))
 		}
 	}
+	t.output(string(outBytes))
 	return true
 }
 
 func (n *Network) resetWifi(t *Transfer) {
 	command := "nmcli con down \"" + t.SSID + "\""
 	n.runCommand(command)
+
+	if n.Mode == "sending" || t.Peer == "windows" {
+		// To delete all FC SSIDs:
+		// nmcli -t -f name con | grep flyingCarpet* | xargs nmcli con delete
+		command := "nmcli con delete " + t.SSID
+		t.output(n.runCommand(command))
+	}
 
 	command = "nmcli con up " + n.PreviousSSID
 	n.runCommand(command)
@@ -181,9 +188,8 @@ func (n *Network) connectToPeer(t *Transfer) bool {
 }
 
 func (n *Network) teardown(t *Transfer) {
-	command := "nmcli con delete " + t.SSID
-	t.output(n.runCommand(command))
-	fmt.Println("tearing down")
+
+	t.output("tearing down")
 }
 
 func (n *Network) runCommand(cmd string) (output string) {

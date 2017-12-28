@@ -33,7 +33,7 @@ func newGui() *MainFrame {
 
 	// window
 
-	mf.SetSize(400, 400)
+	mf.SetSize(400, 600)
 	mf.Panel = wx.NewPanel(mf)
 	mf.Panel.SetSize(400, 400)
 
