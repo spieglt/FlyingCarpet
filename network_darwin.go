@@ -139,7 +139,7 @@ func (n *Network) findWindows(t *Transfer) (peerIP string) {
 	}
 }
 
-func (n *Network) findLinux(t *transfer) (peerIP string, success bool) {
+func (n *Network) findLinux(t *Transfer) (peerIP string, success bool) {
 	return n.findMac(t)
 }
 
@@ -163,7 +163,11 @@ func (n *Network) connectToPeer(t *Transfer) bool {
 		} else if t.Peer == "windows" {
 			t.RecipientIP = n.findWindows(t)
 		} else if t.Peer == "linux" {
-			t.RecipientIP = n.findLinux(t)
+			ip, ok := n.findLinux(t)
+			t.RecipientIP = ip
+			if !ok {
+				return false
+			}
 		}
 	} else if n.Mode == "receiving" {
 		if t.Peer == "windows" {
@@ -171,7 +175,7 @@ func (n *Network) connectToPeer(t *Transfer) bool {
 				return false
 			}
 			go n.stayOnAdHoc(t)
-		} else if t.Peer == "mac" {
+		} else if t.Peer == "mac" || t.Peer == "linux" {
 			if !n.startAdHoc(t) {
 				return false
 			}
