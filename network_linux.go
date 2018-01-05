@@ -11,6 +11,9 @@ import (
 )
 
 func (n *Network) startAdHoc(t *Transfer) bool {
+	// or just:
+	// nmcli dev wifi hotspot ssid t.SSID band bg channel 11 password t.Passphrase + t.Passphrase
+	// ??
 	commands := []string{"nmcli con add type wifi ifname " + n.getWifiInterface() + " con-name " + t.SSID + " autoconnect yes ssid " + t.SSID,
 		"nmcli con modify " + t.SSID + " 802-11-wireless.mode ap 802-11-wireless.band bg ipv4.method shared",
 		"nmcli con modify " + t.SSID + " wifi-sec.key-mgmt wpa-psk",
@@ -66,7 +69,7 @@ func (n *Network) resetWifi(t *Transfer) {
 
 	if n.Mode == "sending" || t.Peer == "windows" {
 		// To delete all FC SSIDs:
-		// nmcli -t -f name con | grep flyingCarpet* | xargs nmcli con delete
+		// nmcli -t -f name con | grep flyingCarpet* | xargs -d '\n' nmcli con delete
 		command := "nmcli con delete " + t.SSID
 		t.output(n.runCommand(command))
 	}
@@ -149,19 +152,24 @@ func (n *Network) connectToPeer(t *Transfer) bool {
 			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
 			return false
 		}
-		if !n.joinAdHoc(t) {
-			return false
-		}
-		// go n.stayOnAdHoc(t)
 		if t.Peer == "mac" {
+			if !n.startAdHoc(t) {
+				return false
+			}
 			var ok bool
 			t.RecipientIP, ok = n.findMac(t)
 			if !ok {
 				return false
 			}
 		} else if t.Peer == "windows" {
+			if !n.joinAdHoc(t) {
+				return false
+			}
 			t.RecipientIP = n.findWindows(t)
 		} else if t.Peer == "linux" {
+			if !n.joinAdHoc(t) {
+				return false
+			}
 			var ok bool
 			t.RecipientIP, ok = n.findLinux(t)
 			if !ok {

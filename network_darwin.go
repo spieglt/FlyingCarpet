@@ -170,12 +170,12 @@ func (n *Network) connectToPeer(t *Transfer) bool {
 			}
 		}
 	} else if n.Mode == "receiving" {
-		if t.Peer == "windows" {
+		if t.Peer == "windows" || t.Peer == "linux" {
 			if !n.joinAdHoc(t) {
 				return false
 			}
 			go n.stayOnAdHoc(t)
-		} else if t.Peer == "mac" || t.Peer == "linux" {
+		} else if t.Peer == "mac" {
 			if !n.startAdHoc(t) {
 				return false
 			}
