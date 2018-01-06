@@ -107,9 +107,9 @@ func (n *Network) getIPAddress(t *Transfer) (ip string) {
 func (n *Network) findMac(t *Transfer) (peerIP string, success bool) {
 	timeout := FIND_MAC_TIMEOUT
 	currentIP := n.getIPAddress(t)
-	pingString := "ping -c 5 169.254.255.255 | " + // ping broadcast address
+	pingString := "ping -b -c 5 $(ifconfig | awk '/Bcast/ {print substr($3,7)}') 2>&1 | " + // ping broadcast address, include stderr
 		"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
-		"grep --line-buffered -vE '169.254.255.255' | " + // exclude broadcast address
+		"grep --line-buffered -vE $(ifconfig | awk '/Bcast/ {print substr($3,7)}') | " + // exclude broadcast address
 		"grep -vE '" + currentIP + "'" // exclude current IP
 
 	t.output("Looking for peer IP for " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
