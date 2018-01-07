@@ -16,6 +16,17 @@ int startAdHoc(char * cSSID, char * cPassword) {
 	// NSLog(@"%d", result);
 	return result;
 }
+
+int joinAdHoc(char * cSSID, char * cPassword) {
+	NSString * SSID = [[NSString alloc] initWithUTF8String:cSSID];
+	NSString * password = [[NSString alloc] initWithUTF8String:cPassword];
+	CWInterface * iface = CWWiFiClient.sharedWiFiClient.interface;
+	NSError * ibssErr = nil;
+	NSSet<CWNetwork *> * network = [iface scanForNetworksWithName:SSID error:&ibssErr];
+	BOOL result = [iface associateToNetwork:network.anyObject password:password error:&ibssErr];
+	NSLog(@"%d", result);
+	return result;
+}
 */
 import "C"
 import (
@@ -89,14 +100,14 @@ func (n *Network) startAdHoc(t *Transfer) bool {
 }
 
 func (n *Network) joinAdHoc(t *Transfer) bool {
-
-	wifiInterface := n.getWifiInterface()
 	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
+	ssid := C.CString(t.SSID)
+	password := C.CString(t.Passphrase + t.Passphrase)
+	var cRes C.int = C.joinAdHoc(ssid, password)
+	res := int(cRes)
 
-	joinAdHocStr := "networksetup -setairportnetwork " + wifiInterface + " " + t.SSID + " " + t.Passphrase + t.Passphrase
-	joinAdHocBytes, err := exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
-	for len(joinAdHocBytes) != 0 {
+	for res == 0 {
 		if timeout <= 0 {
 			t.output("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
 			return false
@@ -104,12 +115,7 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 		// t.output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(5))
-		joinAdHocBytes, err = exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
-		if err != nil {
-			n.resetWifi(t)
-			t.output("Error joining ad hoc network.")
-			return false
-		}
+		res = int(C.joinAdHoc(ssid, password))
 	}
 	return true
 }
@@ -181,7 +187,34 @@ func (n *Network) findWindows(t *Transfer) (peerIP string) {
 }
 
 func (n *Network) findLinux(t *Transfer) (peerIP string, success bool) {
-	return n.findMac(t)
+	// timeout := FIND_MAC_TIMEOUT
+	// currentIP := n.getIPAddress(t)
+	// pingString := "ping -b -c 5 $(ifconfig | awk '/" + n.getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') 2>&1 | " + // ping broadcast address
+	// 	"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
+	// 	"grep --line-buffered -vE $(ifconfig | awk '/" + n.getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') | " + // exclude broadcast address
+	// 	"grep -vE '" + currentIP + "'" // exclude current IP
+
+	// t.output("Looking for peer IP for " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
+	// for peerIP == "" {
+	// 	if timeout <= 0 {
+	// 		t.output("Could not find the peer computer within " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
+	// 		return "", false
+	// 	}
+	// 	pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
+	// 	if pingErr != nil {
+	// 		t.output(fmt.Sprintf("Could not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
+	// 		t.output(fmt.Sprintf("peer IP: %s",string(pingBytes)))
+	// 		timeout -= 2
+	// 		time.Sleep(time.Second * time.Duration(2))
+	// 		continue
+	// 	}
+	// 	peerIPs := string(pingBytes)
+	// 	peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
+	// }
+	// t.output(fmt.Sprintf("Peer IP found: %s", peerIP))
+	// success = true
+	// return
+	return "10.42.0.1", true
 }
 
 func (n *Network) resetWifi(t *Transfer) {
