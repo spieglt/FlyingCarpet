@@ -31,7 +31,7 @@ func (n *Network) connectToPeer(t *Transfer) bool {
 				return false
 			}
 			t.RecipientIP = n.findPeer(t)
-		} else if t.Peer == "mac" || t.Peer == "windows" {
+		} else if t.Peer == "mac" || t.Peer == "linux" {
 			if !n.addFirewallRule(t) {
 				return false
 			}
@@ -205,7 +205,7 @@ func (n *Network) findPeer(t *Transfer) (peerIP string) {
 		peerCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 		peerBytes, err := peerCmd.CombinedOutput()
 		if err != nil {
-			t.output("Error getting ad hoc IP, retrying.")
+			t.output("Error getting peer IP, retrying.")
 		}
 		peerIP = strings.TrimSpace(string(peerBytes))
 		time.Sleep(time.Second * time.Duration(2))
