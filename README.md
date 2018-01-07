@@ -45,11 +45,13 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Planned features:
 
-+ Linux support (Work in progress. Have only tested between Mint 18 and Windows 10).
++ Linux support. (Work in progress. Help testing on different distros and improving network_linux.go would be greatly appreciated.)
 
 + Cancel button
 
-+ Maybe warn about running as administrator upon start on Windows, and try to decrease number of security prompts on Mac.
++ Multifile (and possibly folder) support.
+
++ Maybe warn about running as administrator upon start on Windows.
 
 Disclaimer: I am not a cryptography expert. Do not use for private files if you think a skilled attacker is less than 100 feet from you and trying to intercept them.
 
