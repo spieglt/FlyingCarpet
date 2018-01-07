@@ -28,6 +28,47 @@ import (
 	"unsafe"
 )
 
+func (n *Network) connectToPeer(t *Transfer) bool {
+
+	if n.Mode == "sending" {
+		if !n.checkForFile(t) {
+			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
+			return false
+		}
+		if !n.joinAdHoc(t) {
+			return false
+		}
+		go n.stayOnAdHoc(t)
+		if t.Peer == "mac" {
+			var ok bool
+			t.RecipientIP, ok = n.findMac(t)
+			if !ok {
+				return false
+			}
+		} else if t.Peer == "windows" {
+			t.RecipientIP = n.findWindows(t)
+		} else if t.Peer == "linux" {
+			ip, ok := n.findLinux(t)
+			t.RecipientIP = ip
+			if !ok {
+				return false
+			}
+		}
+	} else if n.Mode == "receiving" {
+		if t.Peer == "windows" || t.Peer == "linux" {
+			if !n.joinAdHoc(t) {
+				return false
+			}
+			go n.stayOnAdHoc(t)
+		} else if t.Peer == "mac" {
+			if !n.startAdHoc(t) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (n *Network) startAdHoc(t *Transfer) bool {
 
 	ssid := C.CString(t.SSID)
@@ -65,7 +106,7 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 		time.Sleep(time.Second * time.Duration(5))
 		joinAdHocBytes, err = exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
 		if err != nil {
-			n.teardown(t)
+			n.resetWifi(t)
 			t.output("Error joining ad hoc network.")
 			return false
 		}
@@ -143,52 +184,11 @@ func (n *Network) findLinux(t *Transfer) (peerIP string, success bool) {
 	return n.findMac(t)
 }
 
-func (n *Network) connectToPeer(t *Transfer) bool {
-
-	if n.Mode == "sending" {
-		if !n.checkForFile(t) {
-			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
-			return false
-		}
-		if !n.joinAdHoc(t) {
-			return false
-		}
-		go n.stayOnAdHoc(t)
-		if t.Peer == "mac" {
-			var ok bool
-			t.RecipientIP, ok = n.findMac(t)
-			if !ok {
-				return false
-			}
-		} else if t.Peer == "windows" {
-			t.RecipientIP = n.findWindows(t)
-		} else if t.Peer == "linux" {
-			ip, ok := n.findLinux(t)
-			t.RecipientIP = ip
-			if !ok {
-				return false
-			}
-		}
-	} else if n.Mode == "receiving" {
-		if t.Peer == "windows" || t.Peer == "linux" {
-			if !n.joinAdHoc(t) {
-				return false
-			}
-			go n.stayOnAdHoc(t)
-		} else if t.Peer == "mac" {
-			if !n.startAdHoc(t) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
 func (n *Network) resetWifi(t *Transfer) {
 	wifiInterface := n.getWifiInterface()
 	cmdString := "networksetup -setairportpower " + wifiInterface + " off && networksetup -setairportpower " + wifiInterface + " on"
 	t.output(n.runCommand(cmdString))
-	if t.Peer == "windows" || n.Mode == "sending" {
+	if t.Peer == "windows" || t.Peer == "linux" || n.Mode == "sending" {
 		cmdString = "networksetup -removepreferredwirelessnetwork " + wifiInterface + " " + t.SSID
 		t.output(n.runCommand(cmdString))
 	}
@@ -225,13 +225,6 @@ func (n *Network) runCommand(cmd string) (output string) {
 		return err.Error()
 	}
 	return strings.TrimSpace(string(cmdBytes))
-}
-
-func (n *Network) teardown(t *Transfer) {
-	// if n.Mode == "receiving" {
-	// 	os.Remove(t.Filepath)
-	// }
-	n.resetWifi(t)
 }
 
 func (n *Network) getCurrentUUID(t *Transfer) (uuid string) { return "" }

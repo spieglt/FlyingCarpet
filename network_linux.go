@@ -10,6 +10,55 @@ import (
 	"time"
 )
 
+func (n *Network) connectToPeer(t *Transfer) bool {
+	if n.Mode == "sending" {
+		if !n.checkForFile(t) {
+			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
+			return false
+		}
+		if t.Peer == "mac" {
+			if !n.startAdHoc(t) {
+				return false
+			}
+			var ok bool
+			t.RecipientIP, ok = n.findMac(t)
+			if !ok {
+				return false
+			}
+		} else if t.Peer == "windows" {
+			if !n.joinAdHoc(t) {
+				return false
+			}
+			t.RecipientIP = n.findWindows(t)
+		} else if t.Peer == "linux" {
+			if !n.joinAdHoc(t) {
+				return false
+			}
+			var ok bool
+			t.RecipientIP, ok = n.findLinux(t)
+			if !ok {
+				return false
+			}
+		}
+	} else if n.Mode == "receiving" {
+		if t.Peer == "windows" {
+			if !n.joinAdHoc(t) {
+				return false
+			}
+			// go n.stayOnAdHoc(t)
+		} else if t.Peer == "mac" {
+			if !n.startAdHoc(t) {
+				return false
+			}
+		} else if t.Peer == "linux" {
+			if !n.startAdHoc(t) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (n *Network) startAdHoc(t *Transfer) bool {
 	// or just:
 	// nmcli dev wifi hotspot ssid t.SSID band bg channel 11 password t.Passphrase + t.Passphrase
@@ -144,60 +193,6 @@ func (n *Network) findWindows(t *Transfer) (peerIP string) {
 
 func (n *Network) findLinux(t *Transfer) (peerIP string, success bool) {
 	return n.findMac(t)
-}
-
-func (n *Network) connectToPeer(t *Transfer) bool {
-	if n.Mode == "sending" {
-		if !n.checkForFile(t) {
-			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
-			return false
-		}
-		if t.Peer == "mac" {
-			if !n.startAdHoc(t) {
-				return false
-			}
-			var ok bool
-			t.RecipientIP, ok = n.findMac(t)
-			if !ok {
-				return false
-			}
-		} else if t.Peer == "windows" {
-			if !n.joinAdHoc(t) {
-				return false
-			}
-			t.RecipientIP = n.findWindows(t)
-		} else if t.Peer == "linux" {
-			if !n.joinAdHoc(t) {
-				return false
-			}
-			var ok bool
-			t.RecipientIP, ok = n.findLinux(t)
-			if !ok {
-				return false
-			}
-		}
-	} else if n.Mode == "receiving" {
-		if t.Peer == "windows" {
-			if !n.joinAdHoc(t) {
-				return false
-			}
-			// go n.stayOnAdHoc(t)
-		} else if t.Peer == "mac" {
-			if !n.startAdHoc(t) {
-				return false
-			}
-		} else if t.Peer == "linux" {
-			if !n.startAdHoc(t) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func (n *Network) teardown(t *Transfer) {
-
-	t.output("tearing down")
 }
 
 func (n *Network) runCommand(cmd string) (output string) {

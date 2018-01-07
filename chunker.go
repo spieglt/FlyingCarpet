@@ -23,7 +23,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 
 	file, err := os.Open(t.Filepath)
 	if err != nil {
-		n.teardown(t)
+		n.resetWifi(t)
 		t.output("Error opening out file. Please quit and restart Flying Carpet.")
 		sendChan <- false
 		return
@@ -51,21 +51,21 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 	filenameLen := int64(len(filename))
 	err = binary.Write(t.Conn, binary.BigEndian, filenameLen)
 	if err != nil {
-		n.teardown(t)
+		n.resetWifi(t)
 		t.output(fmt.Sprintf("Error writing filename length: %s\n Please quit and restart Flying Carpet.", err))
 		sendChan <- false
 		return
 	}
 	_, err = t.Conn.Write([]byte(filename))
 	if err != nil {
-		n.teardown(t)
+		n.resetWifi(t)
 		t.output(fmt.Sprintf("Error writing filename: %s\n Please quit and restart Flying Carpet.", err))
 		sendChan <- false
 		return
 	}
 	err = binary.Write(t.Conn, binary.BigEndian, fileSize)
 	if err != nil {
-		n.teardown(t)
+		n.resetWifi(t)
 		t.output(fmt.Sprintf("Error transmitting file size: %s\n Please quit and restart Flying Carpet.", err))
 		sendChan <- false
 		return
@@ -77,7 +77,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 		buffer := make([]byte, bufferSize)
 		bytesRead, err := file.Read(buffer)
 		if int64(bytesRead) != bufferSize {
-			n.teardown(t)
+			n.resetWifi(t)
 			t.output(fmt.Sprintf("bytesRead: %d\nbufferSize: %d\n", bytesRead, bufferSize))
 			t.output("Error reading out file. Please quit and restart Flying Carpet.")
 			sendChan <- false
@@ -92,7 +92,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 		chunkSize := int64(len(encryptedBuffer))
 		err = binary.Write(t.Conn, binary.BigEndian, chunkSize)
 		if err != nil {
-			n.teardown(t)
+			n.resetWifi(t)
 			t.output("Error writing chunk length. Please quit and restart Flying Carpet.")
 			sendChan <- false
 			return
@@ -101,7 +101,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 		// send buffer
 		bytes, err := t.Conn.Write(encryptedBuffer)
 		if bytes != len(encryptedBuffer) {
-			n.teardown(t)
+			n.resetWifi(t)
 			t.output("Send error. Please quit and restart Flying Carpet.")
 			sendChan <- false
 			return
@@ -127,7 +127,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 	var filenameLen int64
 	err := binary.Read(t.Conn, binary.BigEndian, &filenameLen)
 	if err != nil {
-		n.teardown(t)
+		n.resetWifi(t)
 		t.output(fmt.Sprintf("Error receiving filename length: %s\nPlease quit and restart Flying Carpet.", err))
 		receiveChan <- false
 		return
@@ -135,7 +135,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 	filenameBytes := make([]byte, filenameLen)
 	_, err = io.ReadFull(t.Conn, filenameBytes)
 	if err != nil {
-		n.teardown(t)
+		n.resetWifi(t)
 		t.output(fmt.Sprintf("Error receiving filename: %s\nPlease quit and restart Flying Carpet.", err))
 		receiveChan <- false
 		return
@@ -144,7 +144,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 	var fileSize int64
 	err = binary.Read(t.Conn, binary.BigEndian, &fileSize)
 	if err != nil {
-		n.teardown(t)
+		n.resetWifi(t)
 		t.output(fmt.Sprintf("Error receiving file size: %s\nPlease quit and restart Flying Carpet.", err))
 		receiveChan <- false
 		return
@@ -171,7 +171,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 	// os.Remove(t.Filepath)
 	outFile, err := os.OpenFile(t.Filepath, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
-		n.teardown(t)
+		n.resetWifi(t)
 		t.output("Error creating out file. Please quit and restart Flying Carpet.")
 		receiveChan <- false
 		return
@@ -200,7 +200,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 			t.output("Error reading from stream. Retrying.")
 			t.output(err.Error())
 			continue
-			// n.teardown(t)
+			// n.resetWifi(t)
 			// t.output("Error reading from stream. Please quit and restart Flying Carpet. " + err.Error())
 			// receiveChan <- false
 			// return
@@ -213,7 +213,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 		decryptedChunk := decrypt(chunk, t.Passphrase)
 		_, err = outFile.Write(decryptedChunk)
 		if err != nil {
-			n.teardown(t)
+			n.resetWifi(t)
 			t.output("Error writing to out file. Please quit and restart Flying Carpet.")
 			receiveChan <- false
 			return

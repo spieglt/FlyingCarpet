@@ -12,6 +12,38 @@ import (
 	"time"
 )
 
+func (n *Network) connectToPeer(t *Transfer) bool {
+
+	if n.Mode == "receiving" {
+		if !n.addFirewallRule(t) {
+			return false
+		}
+		if !n.startAdHoc(t) {
+			return false
+		}
+	} else if n.Mode == "sending" {
+		if !n.checkForFile(t) {
+			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
+			return false
+		}
+		if t.Peer == "windows" {
+			if !n.joinAdHoc(t) {
+				return false
+			}
+			t.RecipientIP = n.findPeer(t)
+		} else if t.Peer == "mac" {
+			if !n.addFirewallRule(t) {
+				return false
+			}
+			if !n.startAdHoc(t) {
+				return false
+			}
+			t.RecipientIP = n.findPeer(t)
+		}
+	}
+	return true
+}
+
 func (n *Network) startAdHoc(t *Transfer) bool {
 
 	n.runCommand("netsh winsock reset")
@@ -37,7 +69,7 @@ func (n *Network) startAdHoc(t *Transfer) bool {
 		return true
 	} else {
 		t.output(fmt.Sprintf("Could not start hosted network."))
-		n.teardown(t)
+		n.resetWifi(t)
 		return false
 	}
 }
@@ -100,13 +132,13 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 	// write file
 	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 	if err != nil {
-		n.teardown(t)
+		n.resetWifi(t)
 		t.output("Write error")
 		return false
 	}
 	data := []byte(xmlDoc)
 	if _, err = outFile.Write(data); err != nil {
-		n.teardown(t)
+		n.resetWifi(t)
 		t.output("Write error")
 		return false
 	}
@@ -198,38 +230,6 @@ func (n *Network) getWifiInterface() string {
 	return ""
 }
 
-func (n *Network) connectToPeer(t *Transfer) bool {
-
-	if n.Mode == "receiving" {
-		if !n.addFirewallRule(t) {
-			return false
-		}
-		if !n.startAdHoc(t) {
-			return false
-		}
-	} else if n.Mode == "sending" {
-		if !n.checkForFile(t) {
-			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
-			return false
-		}
-		if t.Peer == "windows" {
-			if !n.joinAdHoc(t) {
-				return false
-			}
-			t.RecipientIP = n.findPeer(t)
-		} else if t.Peer == "mac" {
-			if !n.addFirewallRule(t) {
-				return false
-			}
-			if !n.startAdHoc(t) {
-				return false
-			}
-			t.RecipientIP = n.findPeer(t)
-		}
-	}
-	return true
-}
-
 func (n *Network) resetWifi(t *Transfer) {
 	if n.Mode == "receiving" || t.Peer == "mac" {
 		n.deleteFirewallRule(t)
@@ -291,13 +291,6 @@ func (n *Network) runCommand(cmdStr string) (output string) {
 		return err.Error()
 	}
 	return strings.TrimSpace(string(cmdBytes))
-}
-
-func (n *Network) teardown(t *Transfer) {
-	// if n.Mode == "receiving" {
-	// 	os.Remove(t.Filepath)
-	// }
-	n.resetWifi(t)
 }
 
 func (n *Network) getCurrentUUID(t *Transfer) (uuid string) { return "" }

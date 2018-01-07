@@ -53,7 +53,7 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 		if err != nil {
 			t.output(fmt.Sprintf("Loading DLL failed: %s", err))
 			startChan <- false
-			n.teardown(t)
+			n.resetWifi(t)
 			return
 		}
 	}
@@ -76,14 +76,14 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	if initRes == 0 {
 		t.output(fmt.Sprintf("Initializing Windows Runtime for Wi-Fi Direct failed: %s", initErr))
 		startChan <- false
-		n.teardown(t)
+		n.resetWifi(t)
 		return
 	} else if initRes == 1 {
 		t.output("Initialized Windows Runtime.")
 	} else {
 		t.output(fmt.Sprintf("Something went wrong with initializing Windows Runtime: %d.", initRes))
 		startChan <- false
-		n.teardown(t)
+		n.resetWifi(t)
 		return
 	}
 
@@ -132,5 +132,5 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 func bail(err error, startChan chan bool, t *Transfer, n *Network) {
 	t.output(fmt.Sprintf("Bailing: %s", err))
 	startChan <- false
-	n.teardown(t)
+	n.resetWifi(t)
 }

@@ -122,7 +122,7 @@ func (t *Transfer) receiveFile(receiveChan chan bool, n *Network) {
 
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(t.Port))
 	if err != nil {
-		n.teardown(t)
+		n.resetWifi(t)
 		t.output(fmt.Sprintf("Could not listen on :%d. Err: %s", t.Port, err))
 		receiveChan <- false
 		return
@@ -132,7 +132,7 @@ func (t *Transfer) receiveFile(receiveChan chan bool, n *Network) {
 
 	conn, err := ln.Accept()
 	if err != nil {
-		n.teardown(t)
+		n.resetWifi(t)
 		t.output(fmt.Sprintf("Error accepting connection on :%d", t.Port))
 		receiveChan <- false
 		return
