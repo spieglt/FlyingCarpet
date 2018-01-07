@@ -140,7 +140,34 @@ func (n *Network) findWindows(t *Transfer) (peerIP string) {
 }
 
 func (n *Network) findLinux(t *Transfer) (peerIP string, success bool) {
-	return n.findMac(t)
+	// timeout := FIND_MAC_TIMEOUT
+	// currentIP := n.getIPAddress(t)
+	// pingString := "ping -b -c 5 $(ifconfig | awk '/" + n.getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') 2>&1 | " + // ping broadcast address
+	// 	"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
+	// 	"grep --line-buffered -vE $(ifconfig | awk '/" + n.getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') | " + // exclude broadcast address
+	// 	"grep -vE '" + currentIP + "'" // exclude current IP
+
+	// t.output("Looking for peer IP for " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
+	// for peerIP == "" {
+	// 	if timeout <= 0 {
+	// 		t.output("Could not find the peer computer within " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
+	// 		return "", false
+	// 	}
+	// 	pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
+	// 	if pingErr != nil {
+	// 		t.output(fmt.Sprintf("Could not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
+	// 		t.output(fmt.Sprintf("peer IP: %s",string(pingBytes)))
+	// 		timeout -= 2
+	// 		time.Sleep(time.Second * time.Duration(2))
+	// 		continue
+	// 	}
+	// 	peerIPs := string(pingBytes)
+	// 	peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
+	// }
+	// t.output(fmt.Sprintf("Peer IP found: %s", peerIP))
+	// success = true
+	// return
+	return "10.42.0.1", true
 }
 
 func (n *Network) connectToPeer(t *Transfer) bool {
