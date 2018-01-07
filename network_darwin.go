@@ -16,6 +16,17 @@ int startAdHoc(char * cSSID, char * cPassword) {
 	// NSLog(@"%d", result);
 	return result;
 }
+
+int joinAdHoc(char * cSSID, char * cPassword) {
+	NSString * SSID = [[NSString alloc] initWithUTF8String:cSSID];
+	NSString * password = [[NSString alloc] initWithUTF8String:cPassword];
+	CWInterface * iface = CWWiFiClient.sharedWiFiClient.interface;
+	NSError * ibssErr = nil;
+	NSSet<CWNetwork *> * network = [iface scanForNetworksWithName:SSID error:&ibssErr];
+	BOOL result = [iface associateToNetwork:network.anyObject password:password error:&ibssErr];
+	NSLog(@"%d", result);
+	return result;
+}
 */
 import "C"
 import (
@@ -48,14 +59,14 @@ func (n *Network) startAdHoc(t *Transfer) bool {
 }
 
 func (n *Network) joinAdHoc(t *Transfer) bool {
-
-	wifiInterface := n.getWifiInterface()
 	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
+	ssid := C.CString(t.SSID)
+	password := C.CString(t.Passphrase + t.Passphrase)
+	var cRes C.int = C.joinAdHoc(ssid, password)
+	res := int(cRes)
 
-	joinAdHocStr := "networksetup -setairportnetwork " + wifiInterface + " " + t.SSID + " " + t.Passphrase + t.Passphrase
-	joinAdHocBytes, err := exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
-	for len(joinAdHocBytes) != 0 {
+	for res == 0 {
 		if timeout <= 0 {
 			t.output("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
 			return false
@@ -63,12 +74,7 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 		// t.output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(5))
-		joinAdHocBytes, err = exec.Command("sh", "-c", joinAdHocStr).CombinedOutput()
-		if err != nil {
-			n.teardown(t)
-			t.output("Error joining ad hoc network.")
-			return false
-		}
+		res = int(C.joinAdHoc(ssid, password))
 	}
 	return true
 }
