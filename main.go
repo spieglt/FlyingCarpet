@@ -69,7 +69,7 @@ func (t *Transfer) mainRoutine(mode string) {
 			return
 		}
 
-		if connected := t.sendFile(sendChan, &n); connected == false {
+		if connected := t.sendFile(sendChan, &n); !connected {
 			t.output("Could not establish TCP connection with peer. Aborting transfer.")
 			return
 		}

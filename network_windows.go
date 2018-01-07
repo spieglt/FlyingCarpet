@@ -231,10 +231,10 @@ func (n *Network) getWifiInterface() string {
 }
 
 func (n *Network) resetWifi(t *Transfer) {
-	if n.Mode == "receiving" || t.Peer == "mac" {
+	if n.Mode == "receiving" || t.Peer == "mac" || t.Peer == "linux" {
 		n.deleteFirewallRule(t)
 		n.stopAdHoc(t)
-	} else {
+	} else { // if n.Mode == "sending" && t.Peer == "windows"
 		n.runCommand("netsh wlan delete profile name=" + t.SSID)
 		// rejoin previous wifi
 		t.output(n.runCommand("netsh wlan connect name=" + n.PreviousSSID))
