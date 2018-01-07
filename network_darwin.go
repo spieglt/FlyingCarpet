@@ -16,7 +16,6 @@ int startAdHoc(char * cSSID, char * cPassword) {
 	// NSLog(@"%d", result);
 	return result;
 }
-
 int joinAdHoc(char * cSSID, char * cPassword) {
 	NSString * SSID = [[NSString alloc] initWithUTF8String:cSSID];
 	NSString * password = [[NSString alloc] initWithUTF8String:cPassword];
@@ -114,7 +113,7 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 		}
 		// t.output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
 		timeout -= 5
-		time.Sleep(time.Second * time.Duration(5))
+		time.Sleep(time.Second * time.Duration(3))
 		res = int(C.joinAdHoc(ssid, password))
 	}
 	return true
