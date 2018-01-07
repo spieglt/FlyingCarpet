@@ -31,7 +31,7 @@ func (n *Network) connectToPeer(t *Transfer) bool {
 				return false
 			}
 			t.RecipientIP = n.findPeer(t)
-		} else if t.Peer == "mac" {
+		} else if t.Peer == "mac" || t.Peer == "windows" {
 			if !n.addFirewallRule(t) {
 				return false
 			}
