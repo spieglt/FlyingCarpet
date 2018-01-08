@@ -108,7 +108,8 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 		}
 	}
 
-	// wait until receiving end tells us they have everything.
+	// send chunkSize of 0 and then wait until receiving end tells us they have everything.
+	binary.Write(t.Conn, binary.BigEndian, int64(0))
 	t.output("done sending, waiting to hear from receiving end.")
 	var comp int64
 	binary.Read(t.Conn, binary.BigEndian, &comp)
@@ -191,10 +192,11 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 		var chunkSize int64
 		err := binary.Read(t.Conn, binary.BigEndian, &chunkSize)
 		if err != nil {
-			if err.Error() != "EOF" {
+			// if err.Error() != "EOF" {
 				t.output(fmt.Sprintf("err: %s", err.Error()))
-			}
+			// }
 		}
+		t.output(fmt.Sprintf("chunkSize: %d",chunkSize))
 		if chunkSize == 0 {
 			// done receiving
 			// don't close until we know we've received everything
@@ -204,6 +206,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 
 		// get chunk
 		chunk := make([]byte, chunkSize)
+		t.output("gonna read full")
 		bytesReceived, err := io.ReadFull(t.Conn, chunk)
 		if err != nil {
 			t.output("Error reading from stream. Retrying.")
@@ -214,6 +217,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 			// receiveChan <- false
 			// return
 		}
+		t.output(fmt.Sprintf("read %d bytes", bytesReceived))
 		if int64(bytesReceived) != chunkSize {
 			t.output(fmt.Sprintf("bytesReceived: %d\nchunkSize: %d", bytesReceived, chunkSize))
 		}
@@ -228,6 +232,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 			return
 		}
 		bytesLeft -= int64(len(decryptedChunk))
+		t.output("end of loop")
 	}
 
 	// wait till we've received everything before signalling to other end that it's okay to stop sending.
