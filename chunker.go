@@ -225,7 +225,6 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 			return
 		}
 		bytesLeft -= int64(len(decryptedChunk))
-		t.output("end of loop")
 	}
 
 	// wait till we've received everything before signalling to other end that it's okay to stop sending.
