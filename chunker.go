@@ -107,6 +107,14 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 			return
 		}
 	}
+
+	// wait until receiving end tells us they have everything.
+	t.output("done sending, waiting to hear from receiving end.")
+	var comp int64
+	binary.Read(t.Conn, binary.BigEndian, &comp)
+	t.output(fmt.Sprintf("receiving end says: %d", comp))
+	//////////
+	
 	if runtime.GOOS == "darwin" {
 		t.AdHocChan <- false
 		<-t.AdHocChan
@@ -189,7 +197,8 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 		}
 		if chunkSize == 0 {
 			// done receiving
-			t.Conn.Close()
+			// don't close until we know we've received everything
+			// t.Conn.Close()
 			break
 		}
 
@@ -220,9 +229,17 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 		}
 		bytesLeft -= int64(len(decryptedChunk))
 	}
+
+	// wait till we've received everything before signalling to other end that it's okay to stop sending.
+	t.output("sending completion notice")
+	binary.Write(t.Conn, binary.BigEndian, int64(1))
+	t.output("sent")
+	// unnecessary because it's in a defer
+	// t.Conn.Close()
+
 	// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
-	// and thus don't need to shut down the goroutine trying to stay on it.
-	if runtime.GOOS == "darwin" && t.Peer == "windows" {
+	// and thus don't need to shut down the goroutine trying to stay on it. does this need to happen when peer is linux? yes.
+	if runtime.GOOS == "darwin" && (t.Peer == "windows" || t.Peer == "linux") {
 		t.AdHocChan <- false
 		<-t.AdHocChan
 	}
