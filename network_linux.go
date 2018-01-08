@@ -192,7 +192,7 @@ func (n *Network) findWindows(t *Transfer) (peerIP string) {
 }
 
 func (n *Network) findLinux(t *Transfer) (peerIP string, success bool) {
-	return n.findMac(t)
+	return "10.42.0.1", true
 }
 
 func (n *Network) runCommand(cmd string) (output string) {
