@@ -110,10 +110,9 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 
 	// send chunkSize of 0 and then wait until receiving end tells us they have everything.
 	binary.Write(t.Conn, binary.BigEndian, int64(0))
-	t.output("done sending, waiting to hear from receiving end.")
 	var comp int64
 	binary.Read(t.Conn, binary.BigEndian, &comp)
-	t.output(fmt.Sprintf("receiving end says: %d", comp))
+	// t.output(fmt.Sprintf("receiving end says: %d", comp))
 	//////////
 	
 	if runtime.GOOS == "darwin" {
@@ -192,21 +191,15 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 		var chunkSize int64
 		err := binary.Read(t.Conn, binary.BigEndian, &chunkSize)
 		if err != nil {
-			// if err.Error() != "EOF" {
-				t.output(fmt.Sprintf("err: %s", err.Error()))
-			// }
+			t.output(fmt.Sprintf("err: %s", err.Error()))
 		}
-		t.output(fmt.Sprintf("chunkSize: %d",chunkSize))
 		if chunkSize == 0 {
 			// done receiving
-			// don't close until we know we've received everything
-			// t.Conn.Close()
 			break
 		}
 
 		// get chunk
 		chunk := make([]byte, chunkSize)
-		t.output("gonna read full")
 		bytesReceived, err := io.ReadFull(t.Conn, chunk)
 		if err != nil {
 			t.output("Error reading from stream. Retrying.")
@@ -236,11 +229,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 	}
 
 	// wait till we've received everything before signalling to other end that it's okay to stop sending.
-	t.output("sending completion notice")
 	binary.Write(t.Conn, binary.BigEndian, int64(1))
-	t.output("sent")
-	// unnecessary because it's in a defer
-	// t.Conn.Close()
 
 	// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
 	// and thus don't need to shut down the goroutine trying to stay on it. does this need to happen when peer is linux? yes.
