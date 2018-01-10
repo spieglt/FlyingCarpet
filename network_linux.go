@@ -69,7 +69,10 @@ func (n *Network) startAdHoc(t *Transfer) bool {
 		"nmcli con modify " + t.SSID + " wifi-sec.psk \"" + t.Passphrase + t.Passphrase + "\"",
 		"nmcli con up " + t.SSID}
 	for _, cmd := range commands {
-		t.output(n.runCommand(cmd))
+		out := n.runCommand(cmd)
+		if out != "" {
+			t.output(out)
+		}
 	}
 	return true
 }
@@ -90,7 +93,7 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 		"nmcli con up \"" + t.SSID + "\""}
 	for i, cmd := range commands {
 		outBytes, err = exec.Command("sh", "-c", cmd).CombinedOutput()
-		t.output(fmt.Sprintf("outBytes %d: %s", i, string(outBytes)))
+		// t.output(fmt.Sprintf("outBytes %d: %s", i, string(outBytes)))
 		if err != nil {
 			t.output(fmt.Sprintf("Error %d: %s", i, err.Error()))
 		}
