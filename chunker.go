@@ -210,6 +210,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 			// receiveChan <- false
 			// return
 		}
+		// t.output(fmt.Sprintf("read %d bytes", bytesReceived))
 		if int64(bytesReceived) != chunkSize {
 			t.output(fmt.Sprintf("bytesReceived: %d\nchunkSize: %d", bytesReceived, chunkSize))
 		}
