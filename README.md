@@ -1,16 +1,16 @@
 # Flying Carpet
 Ready-to-use x64 `Flying Carpet (Linux).zip`, `Flying Carpet (Mac).zip`, and `Flying Carpet (Windows).zip` in ![`/bin`](bin)!
 
-Wireless, encrypted file transfer over automatically configured ad hoc networking. No network infrastructure required (access point, router, switch). Just two laptops (Mac and/or Windows) with wireless chips in close range.
+Wireless, encrypted file transfer over automatically configured ad hoc networking. No network infrastructure required (access point, router, switch). Just two laptops (Mac, Linux, and Windows supported) with wireless chips in close range.
 
-Don't have a flash drive? Don't have access to a wireless network or don't trust one? Need to move a file larger than 2GB between Mac and Windows but don't want to set up a file share? Try it out!
+Don't have a flash drive? Don't have access to a wireless network or don't trust one? Need to move a file larger than 2GB between different filesystems but don't want to set up a file share? Try it out!
 
 # Screenshots:
 
 ![](pictures/linuxDemo.png)  ![](pictures/winDemo.png)  ![](pictures/macDemo.png)
 
 # Features:
-+ Cross-platform, Mac and Windows.
++ Cross-platform: Mac, Windows, and now Linux!
 
 + Speeds over 120mbps (with laptops close together).
 
@@ -40,6 +40,8 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + On Mac: May have to click Allow or enter username and password at prompt to join ad-hoc network and clear Flying Carpet SSID from your preferred networks list. You may also have to right-click and select "Open" if your settings don't allow running unsigned applications. 
 
 + On Windows: Must run as administrator (to allow connection through firewall and clear ARP cache). Right-click "Flying Carpet.exe" and select "Run as administrator." Click "More info" and "Run anyway" if you receive a Windows SmartScreen prompt. You may also need to disable WiFi Sense.
+
++ I need help testing on Linux and supporting non-Debian-based distributions! Currently only confirmed to work on Mint 18.
 
 + After a successful transfer, Flying Carpet will attempt to rejoin you to your previous wireless networks. If there is an error midway through the process, this may fail.
 
