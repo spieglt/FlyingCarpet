@@ -55,6 +55,8 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + Mac Only: Get rid of password prompt for removing Flying Carpet from preferred wireless networks list after transfer.
 
++ Replace `nmcli` and `netsh wlan` with proper WiFi APIs on Linux and Windows. 
+
 Disclaimer: I am not a cryptography expert. Do not use for private files if you think a skilled attacker is less than 100 feet from you and trying to intercept them.
 
 Licenses for third-party tools and libraries used can be found in the "3rd_party_licenses" folder.
