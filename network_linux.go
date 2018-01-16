@@ -11,7 +11,7 @@ import (
 )
 
 func connectToPeer(t *Transfer) bool {
-	if Mode == "sending" {
+	if t.Mode == "sending" {
 		if !checkForFile(t) {
 			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
 			return false
@@ -40,7 +40,7 @@ func connectToPeer(t *Transfer) bool {
 				return false
 			}
 		}
-	} else if Mode == "receiving" {
+	} else if t.Mode == "receiving" {
 		if t.Peer == "windows" {
 			if !joinAdHoc(t) {
 				return false
@@ -119,14 +119,14 @@ func resetWifi(t *Transfer) {
 	command := "nmcli con down \"" + t.SSID + "\""
 	runCommand(command)
 
-	if Mode == "sending" || t.Peer == "windows" {
+	if t.Mode == "sending" || t.Peer == "windows" {
 		// To delete all FC SSIDs:
 		// nmcli -t -f name con | grep flyingCarpet* | xargs -d '\n' nmcli con delete
 		command := "nmcli con delete " + t.SSID
 		t.output(runCommand(command))
 	}
 
-	command = "nmcli con up " + PreviousSSID
+	command = "nmcli con up " + t.PreviousSSID
 	runCommand(command)
 
 	return
