@@ -16,21 +16,21 @@ import (
 
 const CHUNKSIZE = 1000000 // 1MB
 
-func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
+func chunkAndSend(sendChan chan bool, t *Transfer) {
 
 	start := time.Now()
 	defer t.Conn.Close()
 
 	file, err := os.Open(t.Filepath)
 	if err != nil {
-		n.resetWifi(t)
+		resetWifi(t)
 		t.output("Error opening out file. Please quit and restart Flying Carpet.")
 		sendChan <- false
 		return
 	}
 	defer file.Close()
 
-	t.showProgressBar()
+	showProgressBar(t)
 	fileSize := getSize(file)
 	t.output(fmt.Sprintf("File size: %d\nMD5 hash: %x", fileSize, getHash(t.Filepath)))
 	numChunks := ceil(fileSize, CHUNKSIZE)
@@ -42,7 +42,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 	go func() {
 		for _ = range ticker.C {
 			percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
-			t.updateProgressBar(int(percentDone))
+			updateProgressBar(int(percentDone), t)
 		}
 	}()
 
@@ -51,21 +51,21 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 	filenameLen := int64(len(filename))
 	err = binary.Write(t.Conn, binary.BigEndian, filenameLen)
 	if err != nil {
-		n.resetWifi(t)
+		resetWifi(t)
 		t.output(fmt.Sprintf("Error writing filename length: %s\n Please quit and restart Flying Carpet.", err))
 		sendChan <- false
 		return
 	}
 	_, err = t.Conn.Write([]byte(filename))
 	if err != nil {
-		n.resetWifi(t)
+		resetWifi(t)
 		t.output(fmt.Sprintf("Error writing filename: %s\n Please quit and restart Flying Carpet.", err))
 		sendChan <- false
 		return
 	}
 	err = binary.Write(t.Conn, binary.BigEndian, fileSize)
 	if err != nil {
-		n.resetWifi(t)
+		resetWifi(t)
 		t.output(fmt.Sprintf("Error transmitting file size: %s\n Please quit and restart Flying Carpet.", err))
 		sendChan <- false
 		return
@@ -77,7 +77,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 		buffer := make([]byte, bufferSize)
 		bytesRead, err := file.Read(buffer)
 		if int64(bytesRead) != bufferSize {
-			n.resetWifi(t)
+			resetWifi(t)
 			t.output(fmt.Sprintf("bytesRead: %d\nbufferSize: %d\n", bytesRead, bufferSize))
 			t.output("Error reading out file. Please quit and restart Flying Carpet.")
 			sendChan <- false
@@ -92,7 +92,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 		chunkSize := int64(len(encryptedBuffer))
 		err = binary.Write(t.Conn, binary.BigEndian, chunkSize)
 		if err != nil {
-			n.resetWifi(t)
+			resetWifi(t)
 			t.output("Error writing chunk length. Please quit and restart Flying Carpet.")
 			sendChan <- false
 			return
@@ -101,7 +101,7 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 		// send buffer
 		bytes, err := t.Conn.Write(encryptedBuffer)
 		if bytes != len(encryptedBuffer) {
-			n.resetWifi(t)
+			resetWifi(t)
 			t.output("Send error. Please quit and restart Flying Carpet.")
 			sendChan <- false
 			return
@@ -114,19 +114,19 @@ func (t *Transfer) chunkAndSend(sendChan chan bool, n *Network) {
 	binary.Read(t.Conn, binary.BigEndian, &comp)
 	// t.output(fmt.Sprintf("receiving end says: %d", comp))
 	//////////
-	
+
 	if runtime.GOOS == "darwin" {
 		t.AdHocChan <- false
 		<-t.AdHocChan
 	}
 	ticker.Stop()
-	t.updateProgressBar(100)
+	updateProgressBar(100, t)
 	t.output(fmt.Sprintf("Sending took %s\n", time.Since(start)))
 	sendChan <- true
 	return
 }
 
-func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net.Listener) {
+func receiveAndAssemble(receiveChan chan bool, t *Transfer, ln *net.Listener) {
 	start := time.Now()
 	defer t.Conn.Close()
 	defer (*ln).Close()
@@ -135,7 +135,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 	var filenameLen int64
 	err := binary.Read(t.Conn, binary.BigEndian, &filenameLen)
 	if err != nil {
-		n.resetWifi(t)
+		resetWifi(t)
 		t.output(fmt.Sprintf("Error receiving filename length: %s\nPlease quit and restart Flying Carpet.", err))
 		receiveChan <- false
 		return
@@ -143,7 +143,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 	filenameBytes := make([]byte, filenameLen)
 	_, err = io.ReadFull(t.Conn, filenameBytes)
 	if err != nil {
-		n.resetWifi(t)
+		resetWifi(t)
 		t.output(fmt.Sprintf("Error receiving filename: %s\nPlease quit and restart Flying Carpet.", err))
 		receiveChan <- false
 		return
@@ -152,7 +152,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 	var fileSize int64
 	err = binary.Read(t.Conn, binary.BigEndian, &fileSize)
 	if err != nil {
-		n.resetWifi(t)
+		resetWifi(t)
 		t.output(fmt.Sprintf("Error receiving file size: %s\nPlease quit and restart Flying Carpet.", err))
 		receiveChan <- false
 		return
@@ -163,15 +163,15 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 		t.Filepath = t.Filepath + t.SSID + "_" + filename
 	}
 	t.output(fmt.Sprintf("Filename: %s\nFile size: %d", filename, fileSize))
-	t.updateFilename(t.Filepath)
+	updateFilename(t)
 	// progress bar
-	t.showProgressBar()
+	showProgressBar(t)
 	bytesLeft := fileSize
 	ticker := time.NewTicker(time.Millisecond * 1000)
 	go func() {
 		for _ = range ticker.C {
 			percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
-			t.updateProgressBar(int(percentDone))
+			updateProgressBar(int(percentDone), t)
 		}
 	}()
 	/////////////////////////////
@@ -179,7 +179,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 	// os.Remove(t.Filepath)
 	outFile, err := os.OpenFile(t.Filepath, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
-		n.resetWifi(t)
+		resetWifi(t)
 		t.output("Error creating out file. Please quit and restart Flying Carpet.")
 		receiveChan <- false
 		return
@@ -205,7 +205,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 			t.output("Error reading from stream. Retrying.")
 			t.output(err.Error())
 			continue
-			// n.resetWifi(t)
+			// resetWifi(t)
 			// t.output("Error reading from stream. Please quit and restart Flying Carpet. " + err.Error())
 			// receiveChan <- false
 			// return
@@ -219,7 +219,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 		decryptedChunk := decrypt(chunk, t.Passphrase)
 		_, err = outFile.Write(decryptedChunk)
 		if err != nil {
-			n.resetWifi(t)
+			resetWifi(t)
 			t.output("Error writing to out file. Please quit and restart Flying Carpet.")
 			receiveChan <- false
 			return
@@ -237,7 +237,7 @@ func (t *Transfer) receiveAndAssemble(receiveChan chan bool, n *Network, ln *net
 		<-t.AdHocChan
 	}
 	ticker.Stop()
-	t.updateProgressBar(100)
+	updateProgressBar(100, t)
 	t.output(fmt.Sprintf("Received file size: %d", getSize(outFile)))
 	t.output(fmt.Sprintf("Received file hash: %x", getHash(t.Filepath)))
 	t.output(fmt.Sprintf("Receiving took %s", time.Since(start)))
@@ -267,20 +267,20 @@ func getHash(filepath string) (md5hash []byte) {
 	return
 }
 
-func (t *Transfer) updateProgressBar(percentage int) {
+func updateProgressBar(percentage int, t *Transfer) {
 	progressEvt := wx.NewThreadEvent(wx.EVT_THREAD, PROGRESS_BAR_UPDATE)
 	progressEvt.SetInt(percentage)
 	t.Frame.QueueEvent(progressEvt)
 }
 
-func (t *Transfer) showProgressBar() {
+func showProgressBar(t *Transfer) {
 	progressEvt := wx.NewThreadEvent(wx.EVT_THREAD, PROGRESS_BAR_SHOW)
 	t.Frame.QueueEvent(progressEvt)
 }
 
-func (t *Transfer) updateFilename(filename string) {
+func updateFilename(t *Transfer) {
 	filenameEvt := wx.NewThreadEvent(wx.EVT_THREAD, RECEIVE_FILE_UPDATE)
-	filenameEvt.SetString(filename)
+	filenameEvt.SetString(t.Filepath)
 	t.Frame.QueueEvent(filenameEvt)
 }
 

@@ -16,22 +16,20 @@ const JOIN_ADHOC_TIMEOUT = 60
 const FIND_MAC_TIMEOUT = 60
 
 type Transfer struct {
-	Filepath    string
-	Passphrase  string
-	SSID        string
-	Conn        net.Conn
-	Port        int
-	RecipientIP string
-	Peer        string
-	AdHocChan   chan bool
-	Frame       *MainFrame
-}
-
-type Network struct {
-	Mode           string // sending or receiving
+	Filepath       string
+	Passphrase     string
+	SSID           string
+	RecipientIP    string
+	Peer           string // "mac", "windows", or "linux"
+	Mode           string // "sending" or "receiving"
 	PreviousSSID   string
+	Port           int
 	AdHocCapable   bool
+	AdHocChan      chan bool
 	WifiDirectChan chan string
+	Conn           net.Conn
+	Frame          *MainFrame
+	// cli?
 }
 
 func main() {
@@ -42,34 +40,33 @@ func main() {
 	return
 }
 
-func (t *Transfer) mainRoutine(mode string) {
+func mainRoutine(t *Transfer) {
 	receiveChan := make(chan bool)
 	sendChan := make(chan bool)
 	wfdc := make(chan string)
-	n := Network{WifiDirectChan: wfdc}
+	t.WifiDirectChan = wfdc
 
 	defer func() {
-		t.enableStartButton()
-		n.resetWifi(t)
+		enableStartButton(t)
+		resetWifi(t)
 	}()
 
-	if mode == "send" {
+	if t.Mode == "send" {
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
-		n.Mode = "sending"
 		if runtime.GOOS == "windows" {
-			n.PreviousSSID = n.getCurrentWifi(t)
+			t.PreviousSSID = getCurrentWifi(t)
 		} else if runtime.GOOS == "linux" {
-			n.PreviousSSID = n.getCurrentUUID(t)
+			t.PreviousSSID = getCurrentUUID(t)
 		}
-		if !n.connectToPeer(t) {
+		if !connectToPeer(t) {
 			t.output("Aborting transfer.")
 			return
 		}
 
-		if connected := t.sendFile(sendChan, &n); !connected {
+		if connected := sendFile(sendChan, t); !connected {
 			t.output("Could not establish TCP connection with peer. Aborting transfer.")
 			return
 		}
@@ -81,7 +78,7 @@ func (t *Transfer) mainRoutine(mode string) {
 		}
 		t.output("Send complete, resetting WiFi and exiting.")
 
-	} else if mode == "receive" {
+	} else if t.Mode == "receive" {
 		t.Passphrase = generatePassword()
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
@@ -94,14 +91,12 @@ func (t *Transfer) mainRoutine(mode string) {
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
 			"=============================\n", t.Passphrase))
 
-		n.Mode = "receiving"
-
-		if !n.connectToPeer(t) {
+		if connectToPeer(t) {
 			t.output("Aborting transfer.")
 			return
 		}
 
-		go t.receiveFile(receiveChan, &n)
+		go receiveFile(receiveChan, t)
 		// wait for listener to be up
 		listenerIsUp := <-receiveChan
 		if !listenerIsUp {
@@ -118,11 +113,11 @@ func (t *Transfer) mainRoutine(mode string) {
 	}
 }
 
-func (t *Transfer) receiveFile(receiveChan chan bool, n *Network) {
+func receiveFile(receiveChan chan bool, t *Transfer) {
 
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(t.Port))
 	if err != nil {
-		n.resetWifi(t)
+		resetWifi(t)
 		t.output(fmt.Sprintf("Could not listen on :%d. Err: %s", t.Port, err))
 		receiveChan <- false
 		return
@@ -132,17 +127,17 @@ func (t *Transfer) receiveFile(receiveChan chan bool, n *Network) {
 
 	conn, err := ln.Accept()
 	if err != nil {
-		n.resetWifi(t)
+		resetWifi(t)
 		t.output(fmt.Sprintf("Error accepting connection on :%d", t.Port))
 		receiveChan <- false
 		return
 	}
 	t.Conn = conn
 	t.output("Connection accepted")
-	go t.receiveAndAssemble(receiveChan, n, &ln)
+	go receiveAndAssemble(receiveChan, t, &ln)
 }
 
-func (t *Transfer) sendFile(sendChan chan bool, n *Network) bool {
+func sendFile(sendChan chan bool, t *Transfer) bool {
 
 	var conn net.Conn
 	var err error
@@ -157,7 +152,7 @@ func (t *Transfer) sendFile(sendChan chan bool, n *Network) bool {
 		}
 		t.output("Successfully dialed peer.")
 		t.Conn = conn
-		go t.chunkAndSend(sendChan, n)
+		go chunkAndSend(sendChan, t)
 		return true
 	}
 	t.output(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT))

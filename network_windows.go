@@ -12,82 +12,82 @@ import (
 	"time"
 )
 
-func (n *Network) connectToPeer(t *Transfer) bool {
+func connectToPeer(t *Transfer) bool {
 
-	if n.Mode == "receiving" {
-		if !n.addFirewallRule(t) {
+	if t.Mode == "receiving" {
+		if !addFirewallRule(t) {
 			return false
 		}
-		if !n.startAdHoc(t) {
+		if !startAdHoc(t) {
 			return false
 		}
-	} else if n.Mode == "sending" {
-		if !n.checkForFile(t) {
+	} else if t.Mode == "sending" {
+		if !checkForFile(t) {
 			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
 			return false
 		}
 		if t.Peer == "windows" {
-			if !n.joinAdHoc(t) {
+			if !joinAdHoc(t) {
 				return false
 			}
-			t.RecipientIP = n.findPeer(t)
+			t.RecipientIP = findPeer(t)
 		} else if t.Peer == "mac" || t.Peer == "linux" {
-			if !n.addFirewallRule(t) {
+			if !addFirewallRule(t) {
 				return false
 			}
-			if !n.startAdHoc(t) {
+			if !startAdHoc(t) {
 				return false
 			}
-			t.RecipientIP = n.findPeer(t)
+			t.RecipientIP = findPeer(t)
 		}
 	}
 	return true
 }
 
-func (n *Network) startAdHoc(t *Transfer) bool {
+func startAdHoc(t *Transfer) bool {
 
-	n.runCommand("netsh winsock reset")
-	n.runCommand("netsh wlan stop hostednetwork")
+	runCommand("netsh winsock reset")
+	runCommand("netsh wlan stop hostednetwork")
 	t.output("SSID: " + t.SSID)
-	n.runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Passphrase + t.Passphrase)
+	runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Passphrase + t.Passphrase)
 	cmd := exec.Command("netsh", "wlan", "start", "hostednetwork")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err := cmd.CombinedOutput()
 	// TODO: replace with "echo %errorlevel%" == "1"
 	if err.Error() == "exit status 1" {
 		t.output("Could not start hosted network, trying Wi-Fi Direct.")
-		n.AdHocCapable = false
+		t.AdHocCapable = false
 
 		startChan := make(chan bool)
-		go n.startLegacyAP(t, startChan)
+		go startLegacyAP(t, startChan)
 		if ok := <-startChan; !ok {
 			return false
 		}
 		return true
 	} else if err == nil {
-		n.AdHocCapable = true
+		t.AdHocCapable = true
 		return true
 	} else {
 		t.output(fmt.Sprintf("Could not start hosted network."))
-		n.resetWifi(t)
+		resetWifi(t)
 		return false
 	}
 }
 
-func (n *Network) stopAdHoc(t *Transfer) {
-	if n.AdHocCapable {
-		t.output(n.runCommand("netsh wlan stop hostednetwork"))
+func stopAdHoc(t *Transfer) {
+	if t.AdHocCapable {
+		t.output(runCommand("netsh wlan stop hostednetwork"))
 	} else {
 		t.output("Stopping Wi-Fi Direct.")
 		// TODO: blocking operation, check wifiDirect function is running.
-		n.WifiDirectChan <- "quit"
-		reply := <-n.WifiDirectChan
+		t.WifiDirectChan <- "quit"
+		reply := <-t.WifiDirectChan
 		t.output(reply)
-		close(n.WifiDirectChan)
+		close(t.WifiDirectChan)
 	}
 }
 
-func (n *Network) joinAdHoc(t *Transfer) bool {
+func joinAdHoc(t *Transfer) bool {
 	cmd := exec.Command("cmd", "/C", "echo %USERPROFILE%")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmdBytes, err := cmd.CombinedOutput()
@@ -132,25 +132,25 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 	// write file
 	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 	if err != nil {
-		n.resetWifi(t)
+		resetWifi(t)
 		t.output("Write error")
 		return false
 	}
 	data := []byte(xmlDoc)
 	if _, err = outFile.Write(data); err != nil {
-		n.resetWifi(t)
+		resetWifi(t)
 		t.output("Write error")
 		return false
 	}
 	defer os.Remove(tmpLoc)
 
 	// add profile
-	t.output(n.runCommand("netsh wlan add profile filename=" + tmpLoc + " user=current"))
+	t.output(runCommand("netsh wlan add profile filename=" + tmpLoc + " user=current"))
 
 	// join network
 	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
-	for t.SSID != n.getCurrentWifi(t) {
+	for t.SSID != getCurrentWifi(t) {
 		if timeout <= 0 {
 			t.output("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
 			return false
@@ -169,12 +169,12 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 	return true
 }
 
-func (n *Network) findPeer(t *Transfer) (peerIP string) {
+func findPeer(t *Transfer) (peerIP string) {
 
 	ipPattern, _ := regexp.Compile("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}")
 
 	// clear arp cache
-	n.runCommand("arp -d *")
+	runCommand("arp -d *")
 
 	// get ad hoc ip
 	var ifAddr string
@@ -214,7 +214,7 @@ func (n *Network) findPeer(t *Transfer) (peerIP string) {
 	return
 }
 
-func (n *Network) getCurrentWifi(t *Transfer) (SSID string) {
+func getCurrentWifi(t *Transfer) (SSID string) {
 	cmdStr := "$(netsh wlan show interfaces | Select-String -Pattern 'Profile *: (?<profile>.*)').Matches.Groups[1].Value.Trim()"
 	cmd := exec.Command("powershell", "-c", cmdStr)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
@@ -226,22 +226,22 @@ func (n *Network) getCurrentWifi(t *Transfer) (SSID string) {
 	return
 }
 
-func (n *Network) getWifiInterface() string {
+func getWifiInterface() string {
 	return ""
 }
 
-func (n *Network) resetWifi(t *Transfer) {
-	if n.Mode == "receiving" || t.Peer == "mac" || t.Peer == "linux" {
-		n.deleteFirewallRule(t)
-		n.stopAdHoc(t)
-	} else { // if n.Mode == "sending" && t.Peer == "windows"
-		n.runCommand("netsh wlan delete profile name=" + t.SSID)
+func resetWifi(t *Transfer) {
+	if t.Mode == "receiving" || t.Peer == "mac" || t.Peer == "linux" {
+		deleteFirewallRule(t)
+		stopAdHoc(t)
+	} else { // if Mode == "sending" && t.Peer == "windows"
+		runCommand("netsh wlan delete profile name=" + t.SSID)
 		// rejoin previous wifi
-		t.output(n.runCommand("netsh wlan connect name=" + n.PreviousSSID))
+		t.output(runCommand("netsh wlan connect name=" + t.PreviousSSID))
 	}
 }
 
-func (n *Network) addFirewallRule(t *Transfer) bool {
+func addFirewallRule(t *Transfer) bool {
 
 	execPath, err := os.Executable()
 	if err != nil {
@@ -261,12 +261,12 @@ func (n *Network) addFirewallRule(t *Transfer) bool {
 	return true
 }
 
-func (n *Network) deleteFirewallRule(t *Transfer) {
+func deleteFirewallRule(t *Transfer) {
 	fwStr := "netsh advfirewall firewall delete rule name=flyingcarpet"
-	t.output(n.runCommand(fwStr))
+	t.output(runCommand(fwStr))
 }
 
-func (n *Network) checkForFile(t *Transfer) bool {
+func checkForFile(t *Transfer) bool {
 	_, err := os.Stat(t.Filepath)
 	if err != nil {
 		return false
@@ -274,7 +274,7 @@ func (n *Network) checkForFile(t *Transfer) bool {
 	return true
 }
 
-func (n *Network) runCommand(cmdStr string) (output string) {
+func runCommand(cmdStr string) (output string) {
 	var cmdBytes []byte
 	err := errors.New("")
 	cmdSlice := strings.Split(cmdStr, " ")
@@ -293,4 +293,4 @@ func (n *Network) runCommand(cmdStr string) (output string) {
 	return strings.TrimSpace(string(cmdBytes))
 }
 
-func (n *Network) getCurrentUUID(t *Transfer) (uuid string) { return "" }
+func getCurrentUUID(t *Transfer) (uuid string) { return "" }

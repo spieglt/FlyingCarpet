@@ -14,7 +14,7 @@ import (
 
 var dll *syscall.DLL
 
-func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
+func startLegacyAP(t *Transfer, startChan chan bool) {
 	cmd := exec.Command("cmd", "/C", "echo %USERPROFILE%")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmdBytes, err := cmd.CombinedOutput()
@@ -33,16 +33,16 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 		}
 		data, err := Asset("static/wfd.dll")
 		if err != nil {
-			bail(err, startChan, t, n)
+			bail(err, startChan, t)
 			return
 		}
 		outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 		if err != nil {
-			bail(err, startChan, t, n)
+			bail(err, startChan, t)
 			return
 		}
 		if _, err = outFile.Write(data); err != nil {
-			bail(err, startChan, t, n)
+			bail(err, startChan, t)
 			return
 		}
 		outFile.Close()
@@ -53,7 +53,7 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 		if err != nil {
 			t.output(fmt.Sprintf("Loading DLL failed: %s", err))
 			startChan <- false
-			n.resetWifi(t)
+			resetWifi(t)
 			return
 		}
 	}
@@ -76,14 +76,14 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	if initRes == 0 {
 		t.output(fmt.Sprintf("Initializing Windows Runtime for Wi-Fi Direct failed: %s", initErr))
 		startChan <- false
-		n.resetWifi(t)
+		resetWifi(t)
 		return
 	} else if initRes == 1 {
 		t.output("Initialized Windows Runtime.")
 	} else {
 		t.output(fmt.Sprintf("Something went wrong with initializing Windows Runtime: %d.", initRes))
 		startChan <- false
-		n.resetWifi(t)
+		resetWifi(t)
 		return
 	}
 
@@ -108,7 +108,7 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	// in loop, listen on chan to commands from rest of program
 	for {
 		select {
-		case msg, ok := <-n.WifiDirectChan:
+		case msg, ok := <-t.WifiDirectChan:
 			if !ok || msg == "quit" {
 				cFreeRes, _, _ := ConsoleFree.Call()
 				freeRes := int(cFreeRes)
@@ -116,7 +116,7 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 					t.output("Failed to uninitialize Windows Runtime.")
 				}
 			}
-			n.WifiDirectChan <- "Wifi-Direct stopped."
+			t.WifiDirectChan <- "Wifi-Direct stopped."
 			return
 		default:
 			time.Sleep(time.Second * 3)
@@ -129,8 +129,8 @@ func (n *Network) startLegacyAP(t *Transfer, startChan chan bool) {
 	return
 }
 
-func bail(err error, startChan chan bool, t *Transfer, n *Network) {
+func bail(err error, startChan chan bool, t *Transfer) {
 	t.output(fmt.Sprintf("Bailing: %s", err))
 	startChan <- false
-	n.resetWifi(t)
+	resetWifi(t)
 }

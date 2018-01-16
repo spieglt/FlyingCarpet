@@ -38,40 +38,40 @@ import (
 	"unsafe"
 )
 
-func (n *Network) connectToPeer(t *Transfer) bool {
+func connectToPeer(t *Transfer) bool {
 
-	if n.Mode == "sending" {
-		if !n.checkForFile(t) {
+	if Mode == "sending" {
+		if !checkForFile(t) {
 			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
 			return false
 		}
-		if !n.joinAdHoc(t) {
+		if !joinAdHoc(t) {
 			return false
 		}
-		go n.stayOnAdHoc(t)
+		go stayOnAdHoc(t)
 		if t.Peer == "mac" {
 			var ok bool
-			t.RecipientIP, ok = n.findMac(t)
+			t.RecipientIP, ok = findMac(t)
 			if !ok {
 				return false
 			}
 		} else if t.Peer == "windows" {
-			t.RecipientIP = n.findWindows(t)
+			t.RecipientIP = findWindows(t)
 		} else if t.Peer == "linux" {
-			ip, ok := n.findLinux(t)
+			ip, ok := findLinux(t)
 			t.RecipientIP = ip
 			if !ok {
 				return false
 			}
 		}
-	} else if n.Mode == "receiving" {
+	} else if Mode == "receiving" {
 		if t.Peer == "windows" || t.Peer == "linux" {
-			if !n.joinAdHoc(t) {
+			if !joinAdHoc(t) {
 				return false
 			}
-			go n.stayOnAdHoc(t)
+			go stayOnAdHoc(t)
 		} else if t.Peer == "mac" {
-			if !n.startAdHoc(t) {
+			if !startAdHoc(t) {
 				return false
 			}
 		}
@@ -79,7 +79,7 @@ func (n *Network) connectToPeer(t *Transfer) bool {
 	return true
 }
 
-func (n *Network) startAdHoc(t *Transfer) bool {
+func startAdHoc(t *Transfer) bool {
 
 	ssid := C.CString(t.SSID)
 	password := C.CString(t.Passphrase + t.Passphrase)
@@ -98,7 +98,7 @@ func (n *Network) startAdHoc(t *Transfer) bool {
 	}
 }
 
-func (n *Network) joinAdHoc(t *Transfer) bool {
+func joinAdHoc(t *Transfer) bool {
 	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
 	ssid := C.CString(t.SSID)
@@ -119,22 +119,22 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 	return true
 }
 
-func (n *Network) getCurrentWifi(t *Transfer) (SSID string) {
+func getCurrentWifi(t *Transfer) (SSID string) {
 	cmdStr := "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I | awk '/ SSID/ {print substr($0, index($0, $2))}'"
-	SSID = n.runCommand(cmdStr)
+	SSID = runCommand(cmdStr)
 	return
 }
 
-func (n *Network) getWifiInterface() string {
+func getWifiInterface() string {
 	getInterfaceString := "networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}'"
-	return n.runCommand(getInterfaceString)
+	return runCommand(getInterfaceString)
 }
 
-func (n *Network) getIPAddress(t *Transfer) string {
+func getIPAddress(t *Transfer) string {
 	var currentIP string
 	t.output("Waiting for local IP...")
 	for currentIP == "" {
-		currentIPString := "ipconfig getifaddr " + n.getWifiInterface()
+		currentIPString := "ipconfig getifaddr " + getWifiInterface()
 		currentIPBytes, err := exec.Command("sh", "-c", currentIPString).CombinedOutput()
 		if err != nil {
 
@@ -147,9 +147,9 @@ func (n *Network) getIPAddress(t *Transfer) string {
 	return currentIP
 }
 
-func (n *Network) findMac(t *Transfer) (peerIP string, success bool) {
+func findMac(t *Transfer) (peerIP string, success bool) {
 	timeout := FIND_MAC_TIMEOUT
-	currentIP := n.getIPAddress(t)
+	currentIP := getIPAddress(t)
 	pingString := "ping -c 5 169.254.255.255 | " + // ping broadcast address
 		"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
 		"grep --line-buffered -vE '169.254.255.255' | " + // exclude broadcast address
@@ -176,8 +176,8 @@ func (n *Network) findMac(t *Transfer) (peerIP string, success bool) {
 	return
 }
 
-func (n *Network) findWindows(t *Transfer) (peerIP string) {
-	currentIP := n.getIPAddress(t)
+func findWindows(t *Transfer) (peerIP string) {
+	currentIP := getIPAddress(t)
 	if strings.Contains(currentIP, "192.168.137") {
 		return "192.168.137.1"
 	} else {
@@ -185,12 +185,12 @@ func (n *Network) findWindows(t *Transfer) (peerIP string) {
 	}
 }
 
-func (n *Network) findLinux(t *Transfer) (peerIP string, success bool) {
+func findLinux(t *Transfer) (peerIP string, success bool) {
 	// timeout := FIND_MAC_TIMEOUT
-	// currentIP := n.getIPAddress(t)
-	// pingString := "ping -b -c 5 $(ifconfig | awk '/" + n.getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') 2>&1 | " + // ping broadcast address
+	// currentIP := getIPAddress(t)
+	// pingString := "ping -b -c 5 $(ifconfig | awk '/" + getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') 2>&1 | " + // ping broadcast address
 	// 	"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
-	// 	"grep --line-buffered -vE $(ifconfig | awk '/" + n.getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') | " + // exclude broadcast address
+	// 	"grep --line-buffered -vE $(ifconfig | awk '/" + getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') | " + // exclude broadcast address
 	// 	"grep -vE '" + currentIP + "'" // exclude current IP
 
 	// t.output("Looking for peer IP for " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
@@ -216,17 +216,17 @@ func (n *Network) findLinux(t *Transfer) (peerIP string, success bool) {
 	return "10.42.0.1", true
 }
 
-func (n *Network) resetWifi(t *Transfer) {
-	wifiInterface := n.getWifiInterface()
+func resetWifi(t *Transfer) {
+	wifiInterface := getWifiInterface()
 	cmdString := "networksetup -setairportpower " + wifiInterface + " off && networksetup -setairportpower " + wifiInterface + " on"
-	t.output(n.runCommand(cmdString))
-	if t.Peer == "windows" || t.Peer == "linux" || n.Mode == "sending" {
+	t.output(runCommand(cmdString))
+	if t.Peer == "windows" || t.Peer == "linux" || Mode == "sending" {
 		cmdString = "networksetup -removepreferredwirelessnetwork " + wifiInterface + " " + t.SSID
-		t.output(n.runCommand(cmdString))
+		t.output(runCommand(cmdString))
 	}
 }
 
-func (n *Network) stayOnAdHoc(t *Transfer) {
+func stayOnAdHoc(t *Transfer) {
 
 	for {
 		select {
@@ -235,15 +235,15 @@ func (n *Network) stayOnAdHoc(t *Transfer) {
 			t.AdHocChan <- true
 			return
 		default:
-			if n.getCurrentWifi(t) != t.SSID {
-				n.joinAdHoc(t)
+			if getCurrentWifi(t) != t.SSID {
+				joinAdHoc(t)
 			}
 			time.Sleep(time.Second * 1)
 		}
 	}
 }
 
-func (n *Network) checkForFile(t *Transfer) bool {
+func checkForFile(t *Transfer) bool {
 	_, err := os.Stat(t.Filepath)
 	if err != nil {
 		return false
@@ -251,7 +251,7 @@ func (n *Network) checkForFile(t *Transfer) bool {
 	return true
 }
 
-func (n *Network) runCommand(cmd string) (output string) {
+func runCommand(cmd string) (output string) {
 	cmdBytes, err := exec.Command("sh", "-c", cmd).CombinedOutput()
 	if err != nil {
 		return err.Error()
@@ -259,4 +259,4 @@ func (n *Network) runCommand(cmd string) (output string) {
 	return strings.TrimSpace(string(cmdBytes))
 }
 
-func (n *Network) getCurrentUUID(t *Transfer) (uuid string) { return "" }
+func getCurrentUUID(t *Transfer) (uuid string) { return "" }

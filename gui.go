@@ -153,6 +153,7 @@ func newGui() *MainFrame {
 		}
 
 		if mode == "send" {
+			t.Mode = "sending"
 			pd := wx.NewTextEntryDialog(mf.Panel, "Enter password from receiving end:", "", "", wx.OK|wx.CANCEL, wx.DefaultPosition)
 			ret := pd.ShowModal()
 			if ret == wx.ID_OK {
@@ -162,7 +163,7 @@ func newGui() *MainFrame {
 					t.output("Entered password: " + pd.GetValue())
 					t.Passphrase = pd.GetValue()
 					// pd.Destroy()
-					go t.mainRoutine(mode)
+					go mainRoutine(&t)
 				} else {
 					t.output("Could not find output file.")
 				}
@@ -170,6 +171,7 @@ func newGui() *MainFrame {
 				t.output("Password entry was cancelled.")
 			}
 		} else if mode == "receive" {
+			t.Mode = "receiving"
 			fpStat, err := os.Stat(t.Filepath)
 			if err != nil {
 				t.output("Please select valid folder.")
@@ -178,7 +180,7 @@ func newGui() *MainFrame {
 			}
 
 			startButton.Enable(false)
-			go t.mainRoutine(mode)
+			go mainRoutine(&t)
 		}
 	}, startButton.GetId())
 
@@ -266,7 +268,7 @@ func (t *Transfer) output(msg string) {
 	// file.WriteString("\r\n")
 }
 
-func (t *Transfer) enableStartButton() {
+func enableStartButton(t *Transfer) {
 	startButtonEvt := wx.NewThreadEvent(wx.EVT_THREAD, START_BUTTON_ENABLE)
 	t.Frame.QueueEvent(startButtonEvt)
 }

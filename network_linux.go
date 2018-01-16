@@ -10,48 +10,48 @@ import (
 	"time"
 )
 
-func (n *Network) connectToPeer(t *Transfer) bool {
-	if n.Mode == "sending" {
-		if !n.checkForFile(t) {
+func connectToPeer(t *Transfer) bool {
+	if Mode == "sending" {
+		if !checkForFile(t) {
 			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
 			return false
 		}
 		if t.Peer == "mac" {
-			if !n.startAdHoc(t) {
+			if !startAdHoc(t) {
 				return false
 			}
 			var ok bool
-			t.RecipientIP, ok = n.findMac(t)
+			t.RecipientIP, ok = findMac(t)
 			if !ok {
 				return false
 			}
 		} else if t.Peer == "windows" {
-			if !n.joinAdHoc(t) {
+			if !joinAdHoc(t) {
 				return false
 			}
-			t.RecipientIP = n.findWindows(t)
+			t.RecipientIP = findWindows(t)
 		} else if t.Peer == "linux" {
-			if !n.joinAdHoc(t) {
+			if !joinAdHoc(t) {
 				return false
 			}
 			var ok bool
-			t.RecipientIP, ok = n.findLinux(t)
+			t.RecipientIP, ok = findLinux(t)
 			if !ok {
 				return false
 			}
 		}
-	} else if n.Mode == "receiving" {
+	} else if Mode == "receiving" {
 		if t.Peer == "windows" {
-			if !n.joinAdHoc(t) {
+			if !joinAdHoc(t) {
 				return false
 			}
-			// go n.stayOnAdHoc(t)
+			// go stayOnAdHoc(t)
 		} else if t.Peer == "mac" {
-			if !n.startAdHoc(t) {
+			if !startAdHoc(t) {
 				return false
 			}
 		} else if t.Peer == "linux" {
-			if !n.startAdHoc(t) {
+			if !startAdHoc(t) {
 				return false
 			}
 		}
@@ -59,17 +59,17 @@ func (n *Network) connectToPeer(t *Transfer) bool {
 	return true
 }
 
-func (n *Network) startAdHoc(t *Transfer) bool {
+func startAdHoc(t *Transfer) bool {
 	// or just:
 	// nmcli dev wifi hotspot ssid t.SSID band bg channel 11 password t.Passphrase + t.Passphrase
 	// ??
-	commands := []string{"nmcli con add type wifi ifname " + n.getWifiInterface() + " con-name " + t.SSID + " autoconnect yes ssid " + t.SSID,
+	commands := []string{"nmcli con add type wifi ifname " + getWifiInterface() + " con-name " + t.SSID + " autoconnect yes ssid " + t.SSID,
 		"nmcli con modify " + t.SSID + " 802-11-wireless.mode ap 802-11-wireless.band bg ipv4.method shared",
 		"nmcli con modify " + t.SSID + " wifi-sec.key-mgmt wpa-psk",
 		"nmcli con modify " + t.SSID + " wifi-sec.psk \"" + t.Passphrase + t.Passphrase + "\"",
 		"nmcli con up " + t.SSID}
 	for _, cmd := range commands {
-		out := n.runCommand(cmd)
+		out := runCommand(cmd)
 		if out != "" {
 			t.output(out)
 		}
@@ -77,17 +77,17 @@ func (n *Network) startAdHoc(t *Transfer) bool {
 	return true
 }
 
-func (n *Network) stopAdHoc(t *Transfer) {
+func stopAdHoc(t *Transfer) {
 	command := "nmcli con down " + t.SSID
-	t.output(n.runCommand(command))
+	t.output(runCommand(command))
 }
 
-func (n *Network) joinAdHoc(t *Transfer) bool {
+func joinAdHoc(t *Transfer) bool {
 	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
 	var outBytes []byte
 	err := errors.New("")
-	commands := []string{"nmcli con add type wifi ifname " + n.getWifiInterface() + " con-name \"" + t.SSID + "\" autoconnect yes ssid \"" + t.SSID + "\"",
+	commands := []string{"nmcli con add type wifi ifname " + getWifiInterface() + " con-name \"" + t.SSID + "\" autoconnect yes ssid \"" + t.SSID + "\"",
 		"nmcli con modify \"" + t.SSID + "\" wifi-sec.key-mgmt wpa-psk",
 		"nmcli con modify \"" + t.SSID + "\" wifi-sec.psk \"" + t.Passphrase + t.Passphrase + "\"",
 		"nmcli con up \"" + t.SSID + "\""}
@@ -115,50 +115,50 @@ func (n *Network) joinAdHoc(t *Transfer) bool {
 	return true
 }
 
-func (n *Network) resetWifi(t *Transfer) {
+func resetWifi(t *Transfer) {
 	command := "nmcli con down \"" + t.SSID + "\""
-	n.runCommand(command)
+	runCommand(command)
 
-	if n.Mode == "sending" || t.Peer == "windows" {
+	if Mode == "sending" || t.Peer == "windows" {
 		// To delete all FC SSIDs:
 		// nmcli -t -f name con | grep flyingCarpet* | xargs -d '\n' nmcli con delete
 		command := "nmcli con delete " + t.SSID
-		t.output(n.runCommand(command))
+		t.output(runCommand(command))
 	}
 
-	command = "nmcli con up " + n.PreviousSSID
-	n.runCommand(command)
+	command = "nmcli con up " + PreviousSSID
+	runCommand(command)
 
 	return
 }
 
-func (n *Network) getCurrentWifi(t *Transfer) (ssid string) {
+func getCurrentWifi(t *Transfer) (ssid string) {
 	command := "nmcli -f active,ssid dev wifi | awk '/^yes/{print $2}"
-	ssid = n.runCommand(command)
+	ssid = runCommand(command)
 	return
 }
 
-func (n *Network) getCurrentUUID(t *Transfer) (uuid string) {
+func getCurrentUUID(t *Transfer) (uuid string) {
 	command := "nmcli -f active,uuid con | awk '/^yes/{print $2}'"
-	uuid = n.runCommand(command)
+	uuid = runCommand(command)
 	return
 }
 
-func (n *Network) getWifiInterface() (iface string) {
+func getWifiInterface() (iface string) {
 	command := "ifconfig | awk '/^wl/{print $1}'"
-	iface = n.runCommand(command)
+	iface = runCommand(command)
 	return
 }
 
-func (n *Network) getIPAddress(t *Transfer) (ip string) {
+func getIPAddress(t *Transfer) (ip string) {
 	command := "ifconfig wlp2s0 | awk '{print $2}' | grep -oP 'addr:\\K.*'"
-	ip = n.runCommand(command)
+	ip = runCommand(command)
 	return
 }
 
-func (n *Network) findMac(t *Transfer) (peerIP string, success bool) {
+func findMac(t *Transfer) (peerIP string, success bool) {
 	timeout := FIND_MAC_TIMEOUT
-	currentIP := n.getIPAddress(t)
+	currentIP := getIPAddress(t)
 	pingString := "ping -b -c 5 $(ifconfig | awk '/Bcast/ {print substr($3,7)}') 2>&1 | " + // ping broadcast address, include stderr
 		"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
 		"grep --line-buffered -vE $(ifconfig | awk '/Bcast/ {print substr($3,7)}') | " + // exclude broadcast address
@@ -185,8 +185,8 @@ func (n *Network) findMac(t *Transfer) (peerIP string, success bool) {
 	return
 }
 
-func (n *Network) findWindows(t *Transfer) (peerIP string) {
-	currentIP := n.getIPAddress(t)
+func findWindows(t *Transfer) (peerIP string) {
+	currentIP := getIPAddress(t)
 	if strings.Contains(currentIP, "192.168.137") {
 		return "192.168.137.1"
 	} else {
@@ -194,11 +194,11 @@ func (n *Network) findWindows(t *Transfer) (peerIP string) {
 	}
 }
 
-func (n *Network) findLinux(t *Transfer) (peerIP string, success bool) {
+func findLinux(t *Transfer) (peerIP string, success bool) {
 	return "10.42.0.1", true
 }
 
-func (n *Network) runCommand(cmd string) (output string) {
+func runCommand(cmd string) (output string) {
 	cmdBytes, err := exec.Command("sh", "-c", cmd).CombinedOutput()
 	if err != nil {
 		return err.Error()
@@ -206,7 +206,7 @@ func (n *Network) runCommand(cmd string) (output string) {
 	return strings.TrimSpace(string(cmdBytes))
 }
 
-func (n *Network) checkForFile(t *Transfer) bool {
+func checkForFile(t *Transfer) bool {
 	_, err := os.Stat(t.Filepath)
 	if err != nil {
 		return false
