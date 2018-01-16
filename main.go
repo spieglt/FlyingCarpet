@@ -51,7 +51,7 @@ func mainRoutine(t *Transfer) {
 		resetWifi(t)
 	}()
 
-	if t.Mode == "send" {
+	if t.Mode == "sending" {
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
@@ -78,7 +78,7 @@ func mainRoutine(t *Transfer) {
 		}
 		t.output("Send complete, resetting WiFi and exiting.")
 
-	} else if t.Mode == "receive" {
+	} else if t.Mode == "receiving" {
 		t.Passphrase = generatePassword()
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
@@ -91,7 +91,7 @@ func mainRoutine(t *Transfer) {
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
 			"=============================\n", t.Passphrase))
 
-		if connectToPeer(t) {
+		if !connectToPeer(t) {
 			t.output("Aborting transfer.")
 			return
 		}

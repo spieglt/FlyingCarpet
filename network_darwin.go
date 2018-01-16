@@ -40,7 +40,7 @@ import (
 
 func connectToPeer(t *Transfer) bool {
 
-	if Mode == "sending" {
+	if t.Mode == "sending" {
 		if !checkForFile(t) {
 			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
 			return false
@@ -64,7 +64,7 @@ func connectToPeer(t *Transfer) bool {
 				return false
 			}
 		}
-	} else if Mode == "receiving" {
+	} else if t.Mode == "receiving" {
 		if t.Peer == "windows" || t.Peer == "linux" {
 			if !joinAdHoc(t) {
 				return false
@@ -220,7 +220,7 @@ func resetWifi(t *Transfer) {
 	wifiInterface := getWifiInterface()
 	cmdString := "networksetup -setairportpower " + wifiInterface + " off && networksetup -setairportpower " + wifiInterface + " on"
 	t.output(runCommand(cmdString))
-	if t.Peer == "windows" || t.Peer == "linux" || Mode == "sending" {
+	if t.Peer == "windows" || t.Peer == "linux" || t.Mode == "sending" {
 		cmdString = "networksetup -removepreferredwirelessnetwork " + wifiInterface + " " + t.SSID
 		t.output(runCommand(cmdString))
 	}

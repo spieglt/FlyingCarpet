@@ -132,9 +132,9 @@ func newGui() *MainFrame {
 	wx.Bind(mf, wx.EVT_BUTTON, func(e wx.Event) {
 		mode, peer := "", ""
 		if radiobox2.GetSelection() == 0 {
-			mode = "send"
+			mode = "sending"
 		} else if radiobox2.GetSelection() == 1 {
-			mode = "receive"
+			mode = "receiving"
 		}
 		if radiobox1.GetSelection() == 0 {
 			peer = "mac"
@@ -146,14 +146,14 @@ func newGui() *MainFrame {
 
 		t := Transfer{
 			Filepath:  fileBox.GetValue(),
+			Mode:      mode,
 			Port:      3290,
 			Peer:      peer,
 			AdHocChan: make(chan bool),
 			Frame:     mf,
 		}
 
-		if mode == "send" {
-			t.Mode = "sending"
+		if t.Mode == "sending" {
 			pd := wx.NewTextEntryDialog(mf.Panel, "Enter password from receiving end:", "", "", wx.OK|wx.CANCEL, wx.DefaultPosition)
 			ret := pd.ShowModal()
 			if ret == wx.ID_OK {
@@ -170,8 +170,7 @@ func newGui() *MainFrame {
 			} else {
 				t.output("Password entry was cancelled.")
 			}
-		} else if mode == "receive" {
-			t.Mode = "receiving"
+		} else if t.Mode == "receiving" {
 			fpStat, err := os.Stat(t.Filepath)
 			if err != nil {
 				t.output("Please select valid folder.")
