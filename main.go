@@ -61,7 +61,7 @@ func mainRoutine(t *Transfer) {
 		} else if runtime.GOOS == "linux" {
 			t.PreviousSSID = getCurrentUUID(t)
 		}
-		if !connectToPeer(t) {
+		if err = connectToPeer(t); err != nil {
 			t.output("Aborting transfer.")
 			return
 		}
@@ -93,7 +93,7 @@ func mainRoutine(t *Transfer) {
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
 			"=============================\n", t.Passphrase))
 
-		if !connectToPeer(t) {
+		if err = connectToPeer(t); err != nil {
 			t.output("Aborting transfer.")
 			return
 		}

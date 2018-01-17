@@ -38,48 +38,42 @@ import (
 	"unsafe"
 )
 
-func connectToPeer(t *Transfer) bool {
+func connectToPeer(t *Transfer) (err error) {
 
 	if t.Mode == "sending" {
-		if !checkForFile(t) {
-			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
-			return false
+		if err = checkForFile(t); err != nil {
+			return errors.New("Could not find file to send: " + t.Filepath)
 		}
-		if !joinAdHoc(t) {
-			return false
+		if err = joinAdHoc(t); err != nil {
+			return
 		}
 		go stayOnAdHoc(t)
 		if t.Peer == "mac" {
-			var ok bool
-			t.RecipientIP, ok = findMac(t)
-			if !ok {
+			t.RecipientIP, err = findMac(t)
+			if err != nil {
 				return false
 			}
 		} else if t.Peer == "windows" {
 			t.RecipientIP = findWindows(t)
 		} else if t.Peer == "linux" {
-			ip, ok := findLinux(t)
-			t.RecipientIP = ip
-			if !ok {
-				return false
-			}
+			t.RecipientIP = findLinux(t)
 		}
 	} else if t.Mode == "receiving" {
 		if t.Peer == "windows" || t.Peer == "linux" {
-			if !joinAdHoc(t) {
-				return false
+			if err = joinAdHoc(t); err != nil {
+				return
 			}
 			go stayOnAdHoc(t)
 		} else if t.Peer == "mac" {
-			if !startAdHoc(t) {
-				return false
+			if err = startAdHoc(t); err != nil {
+				return
 			}
 		}
 	}
 	return true
 }
 
-func startAdHoc(t *Transfer) bool {
+func startAdHoc(t *Transfer) (err error) {
 
 	ssid := C.CString(t.SSID)
 	password := C.CString(t.Passphrase + t.Passphrase)
@@ -91,14 +85,13 @@ func startAdHoc(t *Transfer) bool {
 
 	if res == 1 {
 		t.output("SSID " + t.SSID + " started.")
-		return true
+		return
 	} else {
-		t.output("Failed to start ad hoc network.")
-		return false
+		return errors.New("Failed to start ad hoc network.")
 	}
 }
 
-func joinAdHoc(t *Transfer) bool {
+func joinAdHoc(t *Transfer) (err error) {
 	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
 	ssid := C.CString(t.SSID)
@@ -108,15 +101,14 @@ func joinAdHoc(t *Transfer) bool {
 
 	for res == 0 {
 		if timeout <= 0 {
-			t.output("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
-			return false
+			return errors.New("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
 		}
 		// t.output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(3))
 		res = int(C.joinAdHoc(ssid, password))
 	}
-	return true
+	return
 }
 
 func getCurrentWifi(t *Transfer) (SSID string) {
@@ -137,8 +129,7 @@ func getIPAddress(t *Transfer) string {
 		currentIPString := "ipconfig getifaddr " + getWifiInterface()
 		currentIPBytes, err := exec.Command("sh", "-c", currentIPString).CombinedOutput()
 		if err != nil {
-
-			time.Sleep(time.Second * time.Duration(4))
+			time.Sleep(time.Second * time.Duration(3))
 			continue
 		}
 		currentIP = strings.TrimSpace(string(currentIPBytes))
@@ -147,7 +138,7 @@ func getIPAddress(t *Transfer) string {
 	return currentIP
 }
 
-func findMac(t *Transfer) (peerIP string, success bool) {
+func findMac(t *Transfer) (peerIP string, err error) {
 	timeout := FIND_MAC_TIMEOUT
 	currentIP := getIPAddress(t)
 	pingString := "ping -c 5 169.254.255.255 | " + // ping broadcast address
@@ -158,8 +149,7 @@ func findMac(t *Transfer) (peerIP string, success bool) {
 	t.output("Looking for peer IP for " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
 	for peerIP == "" {
 		if timeout <= 0 {
-			t.output("Could not find the peer computer within " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
-			return "", false
+			return "", errors.New("Could not find the peer computer within " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
 		}
 		pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 		if pingErr != nil {
@@ -172,7 +162,6 @@ func findMac(t *Transfer) (peerIP string, success bool) {
 		peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
 	}
 	t.output(fmt.Sprintf("Peer IP found: %s", peerIP))
-	success = true
 	return
 }
 
@@ -185,7 +174,7 @@ func findWindows(t *Transfer) (peerIP string) {
 	}
 }
 
-func findLinux(t *Transfer) (peerIP string, success bool) {
+func findLinux(t *Transfer) (peerIP string) {
 	// timeout := FIND_MAC_TIMEOUT
 	// currentIP := getIPAddress(t)
 	// pingString := "ping -b -c 5 $(ifconfig | awk '/" + getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') 2>&1 | " + // ping broadcast address
@@ -213,7 +202,7 @@ func findLinux(t *Transfer) (peerIP string, success bool) {
 	// t.output(fmt.Sprintf("Peer IP found: %s", peerIP))
 	// success = true
 	// return
-	return "10.42.0.1", true
+	return "10.42.0.1"
 }
 
 func resetWifi(t *Transfer) {
@@ -243,12 +232,9 @@ func stayOnAdHoc(t *Transfer) {
 	}
 }
 
-func checkForFile(t *Transfer) bool {
-	_, err := os.Stat(t.Filepath)
-	if err != nil {
-		return false
-	}
-	return true
+func checkForFile(t *Transfer) (err error) {
+	_, err = os.Stat(t.Filepath)
+	return
 }
 
 func runCommand(cmd string) (output string) {

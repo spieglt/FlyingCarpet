@@ -10,56 +10,51 @@ import (
 	"time"
 )
 
-func connectToPeer(t *Transfer) bool {
+func connectToPeer(t *Transfer) (err error) {
 	if t.Mode == "sending" {
-		if !checkForFile(t) {
-			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
-			return false
+		if err = checkForFile(t); err != nil {
+			return errors.New(fmt.Sprintf("Could not find file to send: %s\n%s", t.Filepath, err.Error()))
 		}
 		if t.Peer == "mac" {
-			if !startAdHoc(t) {
-				return false
+			if err = startAdHoc(t); err != nil {
+				return
 			}
-			var ok bool
-			t.RecipientIP, ok = findMac(t)
-			if !ok {
-				return false
+			t.RecipientIP, err = findMac(t)
+			if err != nil {
+				return
 			}
 		} else if t.Peer == "windows" {
-			if !joinAdHoc(t) {
-				return false
+			if err = joinAdHoc(t); err != nil {
+				return
 			}
 			t.RecipientIP = findWindows(t)
 		} else if t.Peer == "linux" {
-			if !joinAdHoc(t) {
-				return false
+			if err = joinAdHoc(t); err != nil {
+				return
 			}
-			var ok bool
-			t.RecipientIP, ok = findLinux(t)
-			if !ok {
-				return false
-			}
+			t.RecipientIP = findLinux(t)
 		}
 	} else if t.Mode == "receiving" {
 		if t.Peer == "windows" {
-			if !joinAdHoc(t) {
-				return false
+			if err = joinAdHoc(t); err != nil {
+				return
 			}
 			// go stayOnAdHoc(t)
 		} else if t.Peer == "mac" {
-			if !startAdHoc(t) {
-				return false
+			if err = startAdHoc(t); err != nil {
+				return
 			}
 		} else if t.Peer == "linux" {
-			if !startAdHoc(t) {
-				return false
+			if err = startAdHoc(t); err != nil {
+				return
 			}
 		}
 	}
-	return true
+	return
 }
 
-func startAdHoc(t *Transfer) bool {
+// TODO: fix this function, add error handling. 
+func startAdHoc(t *Transfer) (err error) {
 	// or just:
 	// nmcli dev wifi hotspot ssid t.SSID band bg channel 11 password t.Passphrase + t.Passphrase
 	// ??
@@ -74,7 +69,7 @@ func startAdHoc(t *Transfer) bool {
 			t.output(out)
 		}
 	}
-	return true
+	return
 }
 
 func stopAdHoc(t *Transfer) {
@@ -82,11 +77,11 @@ func stopAdHoc(t *Transfer) {
 	t.output(runCommand(command))
 }
 
-func joinAdHoc(t *Transfer) bool {
+// TODO: fix this function, add error handling. 
+func joinAdHoc(t *Transfer) (err error) {
 	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
 	var outBytes []byte
-	err := errors.New("")
 	commands := []string{"nmcli con add type wifi ifname " + getWifiInterface() + " con-name \"" + t.SSID + "\" autoconnect yes ssid \"" + t.SSID + "\"",
 		"nmcli con modify \"" + t.SSID + "\" wifi-sec.key-mgmt wpa-psk",
 		"nmcli con modify \"" + t.SSID + "\" wifi-sec.psk \"" + t.Passphrase + t.Passphrase + "\"",
@@ -112,7 +107,7 @@ func joinAdHoc(t *Transfer) bool {
 		}
 	}
 	t.output(string(outBytes))
-	return true
+	return
 }
 
 func resetWifi(t *Transfer) {
@@ -156,7 +151,7 @@ func getIPAddress(t *Transfer) (ip string) {
 	return
 }
 
-func findMac(t *Transfer) (peerIP string, success bool) {
+func findMac(t *Transfer) (peerIP string, err error) {
 	timeout := FIND_MAC_TIMEOUT
 	currentIP := getIPAddress(t)
 	pingString := "ping -b -c 5 $(ifconfig | awk '/Bcast/ {print substr($3,7)}') 2>&1 | " + // ping broadcast address, include stderr
@@ -167,8 +162,7 @@ func findMac(t *Transfer) (peerIP string, success bool) {
 	t.output("Looking for peer IP for " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
 	for peerIP == "" {
 		if timeout <= 0 {
-			t.output("Could not find the peer computer within " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
-			return "", false
+			return "", errors.New("Could not find the peer computer within " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
 		}
 		pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 		if pingErr != nil {
@@ -185,7 +179,7 @@ func findMac(t *Transfer) (peerIP string, success bool) {
 	return
 }
 
-func findWindows(t *Transfer) (peerIP string) {
+func findWindows(t *Transfer) string {
 	currentIP := getIPAddress(t)
 	if strings.Contains(currentIP, "192.168.137") {
 		return "192.168.137.1"
@@ -194,8 +188,8 @@ func findWindows(t *Transfer) (peerIP string) {
 	}
 }
 
-func findLinux(t *Transfer) (peerIP string, success bool) {
-	return "10.42.0.1", true
+func findLinux(t *Transfer) string {
+	return "10.42.0.1"
 }
 
 func runCommand(cmd string) (output string) {
@@ -206,10 +200,7 @@ func runCommand(cmd string) (output string) {
 	return strings.TrimSpace(string(cmdBytes))
 }
 
-func checkForFile(t *Transfer) bool {
+func checkForFile(t *Transfer) (err error) {
 	_, err := os.Stat(t.Filepath)
-	if err != nil {
-		return false
-	}
-	return true
+	return
 }

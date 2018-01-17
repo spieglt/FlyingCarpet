@@ -12,39 +12,38 @@ import (
 	"time"
 )
 
-func connectToPeer(t *Transfer) bool {
-
+func connectToPeer(t *Transfer) (err error) {
 	if t.Mode == "receiving" {
-		if !addFirewallRule(t) {
-			return false
+		if err = addFirewallRule(t); err != nil {
+			return
 		}
-		if !startAdHoc(t) {
-			return false
+		if err = startAdHoc(t); err != nil {
+			return
 		}
 	} else if t.Mode == "sending" {
-		if !checkForFile(t) {
+		if err = checkForFile(t); err != nil {
 			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
-			return false
+			return
 		}
 		if t.Peer == "windows" {
-			if !joinAdHoc(t) {
-				return false
+			if err = joinAdHoc(t); err != nil {
+				return
 			}
 			t.RecipientIP = findPeer(t)
 		} else if t.Peer == "mac" || t.Peer == "linux" {
-			if !addFirewallRule(t) {
-				return false
+			if err = addFirewallRule(t); err != nil {
+				return
 			}
-			if !startAdHoc(t) {
-				return false
+			if err = startAdHoc(t); err != nil {
+				return
 			}
 			t.RecipientIP = findPeer(t)
 		}
 	}
-	return true
+	return
 }
 
-func startAdHoc(t *Transfer) bool {
+func startAdHoc(t *Transfer) (err error) {
 
 	runCommand("netsh winsock reset")
 	runCommand("netsh wlan stop hostednetwork")
@@ -52,7 +51,7 @@ func startAdHoc(t *Transfer) bool {
 	runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Passphrase + t.Passphrase)
 	cmd := exec.Command("netsh", "wlan", "start", "hostednetwork")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	_, err := cmd.CombinedOutput()
+	_, err = cmd.CombinedOutput()
 	// TODO: replace with "echo %errorlevel%" == "1"
 	if err.Error() == "exit status 1" {
 		t.output("Could not start hosted network, trying Wi-Fi Direct.")
@@ -61,16 +60,14 @@ func startAdHoc(t *Transfer) bool {
 		startChan := make(chan bool)
 		go startLegacyAP(t, startChan)
 		if ok := <-startChan; !ok {
-			return false
+			return errors.New("Could not start Wi-Fi Direct.")
 		}
-		return true
+		return nil
 	} else if err == nil {
 		t.AdHocCapable = true
-		return true
+		return
 	} else {
-		t.output(fmt.Sprintf("Could not start hosted network."))
-		resetWifi(t)
-		return false
+		return errors.New("Could not start hosted network: " + err.Error())
 	}
 }
 
@@ -87,13 +84,12 @@ func stopAdHoc(t *Transfer) {
 	}
 }
 
-func joinAdHoc(t *Transfer) bool {
+func joinAdHoc(t *Transfer) (err error) {
 	cmd := exec.Command("cmd", "/C", "echo %USERPROFILE%")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmdBytes, err := cmd.CombinedOutput()
 	if err != nil {
-		t.output("Error getting temp location.")
-		return false
+		return errors.New("Error getting temp location." + err.Error())
 	}
 	tmpLoc := strings.TrimSpace(string(cmdBytes)) + "\\AppData\\Local\\Temp\\adhoc.xml"
 
@@ -132,15 +128,11 @@ func joinAdHoc(t *Transfer) bool {
 	// write file
 	outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 	if err != nil {
-		resetWifi(t)
-		t.output("Write error")
-		return false
+		return errors.New("Write error: " + err.Error())
 	}
 	data := []byte(xmlDoc)
 	if _, err = outFile.Write(data); err != nil {
-		resetWifi(t)
-		t.output("Write error")
-		return false
+		return errors.New("Write error: " + err.Error())
 	}
 	defer os.Remove(tmpLoc)
 
@@ -152,8 +144,7 @@ func joinAdHoc(t *Transfer) bool {
 	timeout := JOIN_ADHOC_TIMEOUT
 	for t.SSID != getCurrentWifi(t) {
 		if timeout <= 0 {
-			t.output("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
-			return false
+			return errors.New("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
 		}
 		cmdStr := "netsh wlan connect name=" + t.SSID
 		cmdSlice := strings.Split(cmdStr, " ")
@@ -166,9 +157,10 @@ func joinAdHoc(t *Transfer) bool {
 		timeout -= 3
 		time.Sleep(time.Second * time.Duration(3))
 	}
-	return true
+	return
 }
 
+// TODO: timeout, error here
 func findPeer(t *Transfer) (peerIP string) {
 
 	ipPattern, _ := regexp.Compile("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}")
@@ -241,24 +233,20 @@ func resetWifi(t *Transfer) {
 	}
 }
 
-func addFirewallRule(t *Transfer) bool {
-
+func addFirewallRule(t *Transfer) (err error) {
 	execPath, err := os.Executable()
 	if err != nil {
-		t.output("Failed to get executable path.")
-		return false
+		return errors.New("Failed to get executable path: " + err.Error())
 	}
 	cmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name=flyingcarpet", "dir=in",
 		"action=allow", "program='"+execPath+"'", "enable=yes", "profile=any", "localport=3290", "protocol=tcp")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err = cmd.CombinedOutput()
 	if err != nil {
-		t.output("Could not create firewall rule. You must run as administrator to receive. (Press Win+X and then A to start an administrator command prompt.)")
-		t.output(err.Error())
-		return false
+		return errors.New("Could not create firewall rule. You must run as administrator to receive. (Press Win+X and then A to start an administrator command prompt.) " + err.Error())
 	}
 	// t.output("Firewall rule created.")
-	return true
+	return
 }
 
 func deleteFirewallRule(t *Transfer) {
@@ -266,12 +254,9 @@ func deleteFirewallRule(t *Transfer) {
 	t.output(runCommand(fwStr))
 }
 
-func checkForFile(t *Transfer) bool {
-	_, err := os.Stat(t.Filepath)
-	if err != nil {
-		return false
-	}
-	return true
+func checkForFile(t *Transfer) (err error) {
+	_, err = os.Stat(t.Filepath)
+	return
 }
 
 func runCommand(cmdStr string) (output string) {
