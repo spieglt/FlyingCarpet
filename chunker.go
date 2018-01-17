@@ -85,12 +85,28 @@ func chunkAndSend(t *Transfer) error {
 			return errors.New("Send error. Please quit and restart Flying Carpet.")
 		}
 	}
-
 	// send chunkSize of 0 and then wait until receiving end tells us they have everything.
 	binary.Write(t.Conn, binary.BigEndian, int64(0))
-	var comp int64
-	binary.Read(t.Conn, binary.BigEndian, &comp)
-	// t.output(fmt.Sprintf("receiving end says: %d", comp))
+
+	// timeout for binary.Read
+	replyChan := make(chan int64)
+	timeoutChan := make(chan int)
+	go func() {
+		var comp int64
+		binary.Read(t.Conn, binary.BigEndian, &comp)
+		replyChan <- comp
+	}()
+	go func() {
+		time.Sleep(time.Second * 1)
+		timeoutChan <- 0
+	}()
+	select {
+	case /*comp :=*/ <-replyChan:
+		// t.output(fmt.Sprintf("Receiving end says: %d", comp))
+	case <-timeoutChan:
+		t.output("Receiving end did not acknowledge but should have received signal to close connection.")
+	}
+
 	//////////
 
 	if runtime.GOOS == "darwin" {

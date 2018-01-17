@@ -95,8 +95,7 @@ func joinAdHoc(t *Transfer) (err error) {
 	}
 	for string(outBytes)[:5] == "Error" {
 		if timeout <= 0 {
-			t.output("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
-			return false
+			return errors.New("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
 		}
 		timeout -= 5
 		time.Sleep(time.Second * time.Duration(5))
@@ -175,7 +174,6 @@ func findMac(t *Transfer) (peerIP string, err error) {
 		peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
 	}
 	t.output(fmt.Sprintf("Peer IP found: %s", peerIP))
-	success = true
 	return
 }
 
@@ -201,6 +199,6 @@ func runCommand(cmd string) (output string) {
 }
 
 func checkForFile(t *Transfer) (err error) {
-	_, err := os.Stat(t.Filepath)
+	_, err = os.Stat(t.Filepath)
 	return
 }
