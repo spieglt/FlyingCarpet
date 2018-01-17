@@ -4,10 +4,10 @@ import (
 	// "bufio"
 	"crypto/md5"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"github.com/dontpanic92/wxGo/wx"
 	"io"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -126,36 +126,26 @@ func chunkAndSend(sendChan chan bool, t *Transfer) {
 	return
 }
 
-func receiveAndAssemble(receiveChan chan bool, t *Transfer, ln *net.Listener) {
+func receiveAndAssemble(t *Transfer) error {
 	start := time.Now()
 	defer t.Conn.Close()
-	defer (*ln).Close()
 
 	// receive filename and size
 	var filenameLen int64
 	err := binary.Read(t.Conn, binary.BigEndian, &filenameLen)
 	if err != nil {
-		resetWifi(t)
-		t.output(fmt.Sprintf("Error receiving filename length: %s\nPlease quit and restart Flying Carpet.", err))
-		receiveChan <- false
-		return
+		return errors.New(fmt.Sprintf("Error receiving filename length: %s\nPlease quit and restart Flying Carpet.", err))
 	}
 	filenameBytes := make([]byte, filenameLen)
 	_, err = io.ReadFull(t.Conn, filenameBytes)
 	if err != nil {
-		resetWifi(t)
-		t.output(fmt.Sprintf("Error receiving filename: %s\nPlease quit and restart Flying Carpet.", err))
-		receiveChan <- false
-		return
+		return errors.New(fmt.Sprintf("Error receiving filename: %s\nPlease quit and restart Flying Carpet.", err))
 	}
 	filename := string(filenameBytes)
 	var fileSize int64
 	err = binary.Read(t.Conn, binary.BigEndian, &fileSize)
 	if err != nil {
-		resetWifi(t)
-		t.output(fmt.Sprintf("Error receiving file size: %s\nPlease quit and restart Flying Carpet.", err))
-		receiveChan <- false
-		return
+		return errors.New(fmt.Sprintf("Error receiving file size: %s\nPlease quit and restart Flying Carpet.", err))
 	}
 	if _, err := os.Open(t.Filepath + filename); err != nil {
 		t.Filepath += filename
@@ -176,13 +166,9 @@ func receiveAndAssemble(receiveChan chan bool, t *Transfer, ln *net.Listener) {
 	}()
 	/////////////////////////////
 
-	// os.Remove(t.Filepath)
 	outFile, err := os.OpenFile(t.Filepath, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
-		resetWifi(t)
-		t.output("Error creating out file. Please quit and restart Flying Carpet.")
-		receiveChan <- false
-		return
+		return errors.New("Error creating out file. Please quit and restart Flying Carpet.")
 	}
 	defer outFile.Close()
 
@@ -205,10 +191,6 @@ func receiveAndAssemble(receiveChan chan bool, t *Transfer, ln *net.Listener) {
 			t.output("Error reading from stream. Retrying.")
 			t.output(err.Error())
 			continue
-			// resetWifi(t)
-			// t.output("Error reading from stream. Please quit and restart Flying Carpet. " + err.Error())
-			// receiveChan <- false
-			// return
 		}
 		// t.output(fmt.Sprintf("read %d bytes", bytesReceived))
 		if int64(bytesReceived) != chunkSize {
@@ -219,10 +201,7 @@ func receiveAndAssemble(receiveChan chan bool, t *Transfer, ln *net.Listener) {
 		decryptedChunk := decrypt(chunk, t.Passphrase)
 		_, err = outFile.Write(decryptedChunk)
 		if err != nil {
-			resetWifi(t)
-			t.output("Error writing to out file. Please quit and restart Flying Carpet.")
-			receiveChan <- false
-			return
+			return errors.New("Error writing to out file. Please quit and restart Flying Carpet.")
 		}
 		bytesLeft -= int64(len(decryptedChunk))
 	}
@@ -244,8 +223,7 @@ func receiveAndAssemble(receiveChan chan bool, t *Transfer, ln *net.Listener) {
 
 	speed := (float64(getSize(outFile)*8) / 1000000) / (float64(time.Since(start)) / 1000000000)
 	t.output(fmt.Sprintf("Speed: %.2fmbps", speed))
-	// signal main that it's okay to return
-	receiveChan <- true
+	return err
 }
 
 func getSize(file *os.File) (size int64) {

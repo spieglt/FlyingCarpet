@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"github.com/dontpanic92/wxGo/wx"
 	"math/rand"
@@ -41,7 +42,6 @@ func main() {
 }
 
 func mainRoutine(t *Transfer) {
-	receiveChan := make(chan bool)
 	sendChan := make(chan bool)
 	wfdc := make(chan string)
 	t.WifiDirectChan = wfdc
@@ -66,7 +66,7 @@ func mainRoutine(t *Transfer) {
 			return
 		}
 
-		if connected := sendFile(sendChan, t); !connected {
+		if connected := dialPeer(sendChan, t); !connected {
 			t.output("Could not establish TCP connection with peer. Aborting transfer.")
 			return
 		}
@@ -96,48 +96,45 @@ func mainRoutine(t *Transfer) {
 			return
 		}
 
-		go receiveFile(receiveChan, t)
-		// wait for listener to be up
-		listenerIsUp := <-receiveChan
-		if !listenerIsUp {
+		listener, err := listenForPeer(t)
+		// wait till end to close listener for multi-file transfers
+		if listener != nil {
+			defer (*listener).Close()
+		}
+		if err != nil {
+			t.output(err.Error())
 			t.output("Aborting transfer.")
+			resetWifi(t)
 			return
 		}
-		// wait for reception to finish
-		receiveSuccess := <-receiveChan
-		if !receiveSuccess {
+
+		if err = receiveAndAssemble(t); err != nil {
+			t.output(err.Error())
 			t.output("Aborting transfer.")
+			resetWifi(t)
 			return
 		}
+
 		t.output("Reception complete, resetting WiFi and exiting.")
 	}
 }
 
-func receiveFile(receiveChan chan bool, t *Transfer) {
-
+func listenForPeer(t *Transfer) (*net.Listener, error) {
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(t.Port))
 	if err != nil {
-		resetWifi(t)
-		t.output(fmt.Sprintf("Could not listen on :%d. Err: %s", t.Port, err))
-		receiveChan <- false
-		return
+		return nil, errors.New(fmt.Sprintf("Could not listen on :%d. Err: %s", t.Port, err))
 	}
 	t.output("Listening on :" + strconv.Itoa(t.Port))
-	receiveChan <- true
-
 	conn, err := ln.Accept()
 	if err != nil {
-		resetWifi(t)
-		t.output(fmt.Sprintf("Error accepting connection on :%d", t.Port))
-		receiveChan <- false
-		return
+		return nil, errors.New(fmt.Sprintf("Error accepting connection on :%d", t.Port))
 	}
 	t.Conn = conn
 	t.output("Connection accepted")
-	go receiveAndAssemble(receiveChan, t, &ln)
+	return &ln, nil
 }
 
-func sendFile(sendChan chan bool, t *Transfer) bool {
+func dialPeer(sendChan chan bool, t *Transfer) bool {
 
 	var conn net.Conn
 	var err error
