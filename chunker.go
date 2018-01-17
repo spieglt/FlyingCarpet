@@ -97,7 +97,7 @@ func chunkAndSend(t *Transfer) error {
 		replyChan <- comp
 	}()
 	go func() {
-		time.Sleep(time.Second * 1)
+		time.Sleep(time.Second * 2)
 		timeoutChan <- 0
 	}()
 	select {
@@ -115,7 +115,7 @@ func chunkAndSend(t *Transfer) error {
 	}
 	ticker.Stop()
 	updateProgressBar(100, t)
-	t.output(fmt.Sprintf("Sending took %s\n", time.Since(start)))
+	t.output(fmt.Sprintf("Sending took %s", time.Since(start)))
 	return nil
 }
 
