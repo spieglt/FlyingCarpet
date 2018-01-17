@@ -16,17 +16,14 @@ import (
 
 const CHUNKSIZE = 1000000 // 1MB
 
-func chunkAndSend(sendChan chan bool, t *Transfer) {
+func chunkAndSend(t *Transfer) error {
 
 	start := time.Now()
 	defer t.Conn.Close()
 
 	file, err := os.Open(t.Filepath)
 	if err != nil {
-		resetWifi(t)
-		t.output("Error opening out file. Please quit and restart Flying Carpet.")
-		sendChan <- false
-		return
+		return errors.New("Error opening out file. Please quit and restart Flying Carpet.")
 	}
 	defer file.Close()
 
@@ -51,24 +48,15 @@ func chunkAndSend(sendChan chan bool, t *Transfer) {
 	filenameLen := int64(len(filename))
 	err = binary.Write(t.Conn, binary.BigEndian, filenameLen)
 	if err != nil {
-		resetWifi(t)
-		t.output(fmt.Sprintf("Error writing filename length: %s\n Please quit and restart Flying Carpet.", err))
-		sendChan <- false
-		return
+		return errors.New(fmt.Sprintf("Error writing filename length: %s\n Please quit and restart Flying Carpet.", err))
 	}
 	_, err = t.Conn.Write([]byte(filename))
 	if err != nil {
-		resetWifi(t)
-		t.output(fmt.Sprintf("Error writing filename: %s\n Please quit and restart Flying Carpet.", err))
-		sendChan <- false
-		return
+		return errors.New(fmt.Sprintf("Error writing filename: %s\n Please quit and restart Flying Carpet.", err))
 	}
 	err = binary.Write(t.Conn, binary.BigEndian, fileSize)
 	if err != nil {
-		resetWifi(t)
-		t.output(fmt.Sprintf("Error transmitting file size: %s\n Please quit and restart Flying Carpet.", err))
-		sendChan <- false
-		return
+		return errors.New(fmt.Sprintf("Error transmitting file size: %s\n Please quit and restart Flying Carpet.", err))
 	}
 	/////////////////////////////
 
@@ -77,11 +65,7 @@ func chunkAndSend(sendChan chan bool, t *Transfer) {
 		buffer := make([]byte, bufferSize)
 		bytesRead, err := file.Read(buffer)
 		if int64(bytesRead) != bufferSize {
-			resetWifi(t)
-			t.output(fmt.Sprintf("bytesRead: %d\nbufferSize: %d\n", bytesRead, bufferSize))
-			t.output("Error reading out file. Please quit and restart Flying Carpet.")
-			sendChan <- false
-			return
+			return errors.New(fmt.Sprintf("bytesRead: %d\nbufferSize: %d\nError reading out file. Please quit and restart Flying Carpet.", bytesRead, bufferSize))
 		}
 		bytesLeft -= bufferSize
 
@@ -92,19 +76,13 @@ func chunkAndSend(sendChan chan bool, t *Transfer) {
 		chunkSize := int64(len(encryptedBuffer))
 		err = binary.Write(t.Conn, binary.BigEndian, chunkSize)
 		if err != nil {
-			resetWifi(t)
-			t.output("Error writing chunk length. Please quit and restart Flying Carpet.")
-			sendChan <- false
-			return
+			return errors.New("Error writing chunk length. Please quit and restart Flying Carpet.")
 		}
 
 		// send buffer
 		bytes, err := t.Conn.Write(encryptedBuffer)
 		if bytes != len(encryptedBuffer) {
-			resetWifi(t)
-			t.output("Send error. Please quit and restart Flying Carpet.")
-			sendChan <- false
-			return
+			return errors.New("Send error. Please quit and restart Flying Carpet.")
 		}
 	}
 
@@ -122,8 +100,7 @@ func chunkAndSend(sendChan chan bool, t *Transfer) {
 	ticker.Stop()
 	updateProgressBar(100, t)
 	t.output(fmt.Sprintf("Sending took %s\n", time.Since(start)))
-	sendChan <- true
-	return
+	return nil
 }
 
 func receiveAndAssemble(t *Transfer) error {

@@ -42,9 +42,9 @@ func main() {
 }
 
 func mainRoutine(t *Transfer) {
-	sendChan := make(chan bool)
 	wfdc := make(chan string)
 	t.WifiDirectChan = wfdc
+	var err error
 
 	defer func() {
 		enableStartButton(t)
@@ -66,13 +66,15 @@ func mainRoutine(t *Transfer) {
 			return
 		}
 
-		if connected := dialPeer(sendChan, t); !connected {
+		if err = dialPeer(t); err != nil {
+			t.output(err.Error())
 			t.output("Could not establish TCP connection with peer. Aborting transfer.")
 			return
 		}
 		t.output("Connected")
-		sendSuccess := <-sendChan
-		if !sendSuccess {
+
+		if err = chunkAndSend(t); err != nil {
+			t.output(err.Error())
 			t.output("Aborting transfer.")
 			return
 		}
@@ -95,7 +97,6 @@ func mainRoutine(t *Transfer) {
 			t.output("Aborting transfer.")
 			return
 		}
-
 		listener, err := listenForPeer(t)
 		// wait till end to close listener for multi-file transfers
 		if listener != nil {
@@ -104,14 +105,12 @@ func mainRoutine(t *Transfer) {
 		if err != nil {
 			t.output(err.Error())
 			t.output("Aborting transfer.")
-			resetWifi(t)
 			return
 		}
 
 		if err = receiveAndAssemble(t); err != nil {
 			t.output(err.Error())
 			t.output("Aborting transfer.")
-			resetWifi(t)
 			return
 		}
 
@@ -134,8 +133,7 @@ func listenForPeer(t *Transfer) (*net.Listener, error) {
 	return &ln, nil
 }
 
-func dialPeer(sendChan chan bool, t *Transfer) bool {
-
+func dialPeer(t *Transfer) error {
 	var conn net.Conn
 	var err error
 	t.output("Trying to connect to " + t.RecipientIP + " for " + strconv.Itoa(DIAL_TIMEOUT) + " seconds.")
@@ -149,11 +147,9 @@ func dialPeer(sendChan chan bool, t *Transfer) bool {
 		}
 		t.output("Successfully dialed peer.")
 		t.Conn = conn
-		go chunkAndSend(sendChan, t)
-		return true
+		return nil
 	}
-	t.output(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT))
-	return false
+	return errors.New(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT)) 
 }
 
 func generatePassword() string {
