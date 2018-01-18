@@ -94,15 +94,20 @@ func joinAdHoc(t *Transfer) (err error) {
 		}
 	}
 	for string(outBytes)[:5] == "Error" {
-		if timeout <= 0 {
-			return errors.New("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
-		}
-		timeout -= 5
-		time.Sleep(time.Second * time.Duration(5))
-		outBytes, err = exec.Command("sh", "-c", "nmcli con up \""+t.SSID+"\"").CombinedOutput()
-		t.output(string(outBytes))
-		if err != nil {
-			t.output(fmt.Sprintf("Error joining ad hoc network: %s", err))
+		select {
+		case <-t.Ctx.Done():
+			return errors.New("Exiting joinAdHoc, transfer was canceled.")
+		default:
+			if timeout <= 0 {
+				return errors.New("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
+			}
+			timeout -= 5
+			time.Sleep(time.Second * time.Duration(5))
+			outBytes, err = exec.Command("sh", "-c", "nmcli con up \""+t.SSID+"\"").CombinedOutput()
+			t.output(string(outBytes))
+			if err != nil {
+				t.output(fmt.Sprintf("Error joining ad hoc network: %s", err))
+			}
 		}
 	}
 	t.output(string(outBytes))

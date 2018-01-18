@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"github.com/dontpanic92/wxGo/wx"
 	"os"
 	"os/user"
@@ -67,6 +68,8 @@ func newGui() *MainFrame {
 
 	// start button
 	startButton := wx.NewButton(mf.Panel, wx.ID_ANY, "Start", wx.DefaultPosition, wx.DefaultSize, 0)
+	cancelButton := wx.NewButton(mf.Panel, wx.ID_ANY, "Cancel", wx.DefaultPosition, wx.DefaultSize, 0)
+	cancelButton.Hide()
 	bSizerBottom.Add(startButton, 0, wx.ALL|wx.EXPAND, 5)
 
 	// output box
@@ -144,13 +147,15 @@ func newGui() *MainFrame {
 			peer = "linux"
 		}
 
+		ctx, cancelCtx := context.WithCancel(context.Background())
 		t := Transfer{
 			Filepath:  fileBox.GetValue(),
 			Mode:      mode,
 			Port:      3290,
 			Peer:      peer,
-			AdHocChan: make(chan bool),
 			Frame:     mf,
+			Ctx:       ctx,
+			CancelCtx: cancelCtx,
 		}
 
 		if t.Mode == "sending" {
@@ -159,7 +164,8 @@ func newGui() *MainFrame {
 			if ret == wx.ID_OK {
 				_, err := os.Stat(t.Filepath)
 				if err == nil {
-					startButton.Enable(false)
+					startButton.Hide()
+					cancelButton.Show()
 					t.output("Entered password: " + pd.GetValue())
 					t.Passphrase = pd.GetValue()
 					// pd.Destroy()
@@ -177,11 +183,16 @@ func newGui() *MainFrame {
 			} else if !fpStat.IsDir() {
 				t.Filepath = filepath.Dir(t.Filepath) + string(os.PathSeparator)
 			}
-
-			startButton.Enable(false)
+			startButton.Hide()
+			cancelButton.Show()
 			go mainRoutine(&t)
 		}
 	}, startButton.GetId())
+
+	// cancel button action
+	wx.Bind(mf, wx.EVT_BUTTON, func(e wx.Event) {
+		t.CancelCtx()
+	}, cancelButton.GetId())
 
 	// output box update event
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
@@ -203,7 +214,8 @@ func newGui() *MainFrame {
 
 	// start button enable event
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
-		startButton.Enable(true)
+		startButton.Show()
+		cancelButton.Hide()
 		mf.Panel.Layout()
 	}, START_BUTTON_ENABLE)
 
@@ -225,7 +237,6 @@ func newGui() *MainFrame {
 	mf.Centre(wx.BOTH)
 
 	// menu
-
 	mf.MenuBar = wx.NewMenuBar()
 	if runtime.GOOS == "windows" || runtime.GOOS == "linux" {
 		fileMenu := wx.NewMenu()

@@ -57,10 +57,9 @@ func startAdHoc(t *Transfer) (err error) {
 		t.output("Could not start hosted network, trying Wi-Fi Direct.")
 		t.AdHocCapable = false
 
-		startChan := make(chan bool)
-		go startLegacyAP(t, startChan)
-		if ok := <-startChan; !ok {
-			return errors.New("Could not start Wi-Fi Direct.")
+		go startLegacyAP(t)
+		if msg := <-t.WifiDirectChan; msg != "started" {
+			return errors.New("Could not start Wi-Fi Direct: " + msg)
 		}
 		return nil
 	} else if err == nil {
@@ -143,19 +142,24 @@ func joinAdHoc(t *Transfer) (err error) {
 	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
 	for t.SSID != getCurrentWifi(t) {
-		if timeout <= 0 {
-			return errors.New("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
+		select {
+		case <-t.Ctx.Done():
+			return errors.New("Exiting joinAdHoc, transfer was canceled.")
+		default:
+			if timeout <= 0 {
+				return errors.New("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
+			}
+			cmdStr := "netsh wlan connect name=" + t.SSID
+			cmdSlice := strings.Split(cmdStr, " ")
+			joinCmd := exec.Command(cmdSlice[0], cmdSlice[1:]...)
+			joinCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			/*_, cmdErr :=*/ joinCmd.CombinedOutput()
+			// if cmdErr != nil {
+			// 	t.output(fmt.Sprintf("Failed to find the ad hoc network. Trying for %2d more seconds. %s", timeout, cmdErr))
+			// }
+			timeout -= 3
+			time.Sleep(time.Second * time.Duration(3))
 		}
-		cmdStr := "netsh wlan connect name=" + t.SSID
-		cmdSlice := strings.Split(cmdStr, " ")
-		joinCmd := exec.Command(cmdSlice[0], cmdSlice[1:]...)
-		joinCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		/*_, cmdErr :=*/ joinCmd.CombinedOutput()
-		// if cmdErr != nil {
-		// 	t.output(fmt.Sprintf("Failed to find the ad hoc network. Trying for %2d more seconds. %s", timeout, cmdErr))
-		// }
-		timeout -= 3
-		time.Sleep(time.Second * time.Duration(3))
 	}
 	return
 }

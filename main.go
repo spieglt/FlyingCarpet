@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/md5"
 	"errors"
 	"fmt"
@@ -26,7 +27,8 @@ type Transfer struct {
 	PreviousSSID   string
 	Port           int
 	AdHocCapable   bool
-	AdHocChan      chan bool
+	Ctx            context.Context
+	CancelCtx      context.CancelFunc
 	WifiDirectChan chan string
 	Conn           net.Conn
 	Frame          *MainFrame
@@ -52,6 +54,13 @@ func mainRoutine(t *Transfer) {
 	}()
 
 	if t.Mode == "sending" {
+
+		defer func() {
+			if runtime.GOOS == "darwin" {
+				t.CancelCtx()
+			}
+		}()
+
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
@@ -81,6 +90,13 @@ func mainRoutine(t *Transfer) {
 		t.output("Send complete, resetting WiFi and exiting.")
 
 	} else if t.Mode == "receiving" {
+		defer func() {
+			// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
+			// and thus don't need to shut down the goroutine trying to stay on it. does this need to happen when peer is linux? yes.
+			if runtime.GOOS == "darwin" && (t.Peer == "windows" || t.Peer == "linux") {
+				t.CancelCtx()
+			}
+		}()
 		t.Passphrase = generatePassword()
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
@@ -138,16 +154,21 @@ func dialPeer(t *Transfer) error {
 	var err error
 	t.output("Trying to connect to " + t.RecipientIP + " for " + strconv.Itoa(DIAL_TIMEOUT) + " seconds.")
 	for i := 0; i < DIAL_TIMEOUT; i++ {
-		err = nil
-		conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond*10)
-		if err != nil {
-			// t.output(fmt.Sprintf("Failed connection %2d to %s, retrying.", i, t.RecipientIP))
-			time.Sleep(time.Second * 1)
-			continue
+		select {
+		case <-t.Ctx.Done():
+			return errors.New("Exiting dialPeer, transfer was canceled.")
+		default:
+			err = nil
+			conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond*10)
+			if err != nil {
+				// t.output(fmt.Sprintf("Failed connection %2d to %s, retrying.", i, t.RecipientIP))
+				time.Sleep(time.Second * 1)
+				continue
+			}
+			t.output("Successfully dialed peer.")
+			t.Conn = conn
+			return nil
 		}
-		t.output("Successfully dialed peer.")
-		t.Conn = conn
-		return nil
 	}
 	return errors.New(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT)) 
 }

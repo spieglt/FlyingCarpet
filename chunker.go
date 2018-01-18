@@ -1,7 +1,6 @@
 package main
 
 import (
-	// "bufio"
 	"crypto/md5"
 	"encoding/binary"
 	"errors"
@@ -10,7 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 )
 
@@ -61,28 +59,33 @@ func chunkAndSend(t *Transfer) error {
 	/////////////////////////////
 
 	for i = 0; i < numChunks; i++ {
-		bufferSize := min(CHUNKSIZE, bytesLeft)
-		buffer := make([]byte, bufferSize)
-		bytesRead, err := file.Read(buffer)
-		if int64(bytesRead) != bufferSize {
-			return errors.New(fmt.Sprintf("bytesRead: %d\nbufferSize: %d\nError reading out file. Please quit and restart Flying Carpet.", bytesRead, bufferSize))
-		}
-		bytesLeft -= bufferSize
+		select {
+		case <-t.Ctx.Done():
+			return errors.New("Exiting chunkAndSend, transfer was canceled.")
+		default:
+			bufferSize := min(CHUNKSIZE, bytesLeft)
+			buffer := make([]byte, bufferSize)
+			bytesRead, err := file.Read(buffer)
+			if int64(bytesRead) != bufferSize {
+				return errors.New(fmt.Sprintf("bytesRead: %d\nbufferSize: %d\nError reading out file. Please quit and restart Flying Carpet.", bytesRead, bufferSize))
+			}
+			bytesLeft -= bufferSize
 
-		// encrypt buffer
-		encryptedBuffer := encrypt(buffer, t.Passphrase)
+			// encrypt buffer
+			encryptedBuffer := encrypt(buffer, t.Passphrase)
 
-		// send size of buffer
-		chunkSize := int64(len(encryptedBuffer))
-		err = binary.Write(t.Conn, binary.BigEndian, chunkSize)
-		if err != nil {
-			return errors.New("Error writing chunk length. Please quit and restart Flying Carpet.")
-		}
+			// send size of buffer
+			chunkSize := int64(len(encryptedBuffer))
+			err = binary.Write(t.Conn, binary.BigEndian, chunkSize)
+			if err != nil {
+				return errors.New("Error writing chunk length. Please quit and restart Flying Carpet.")
+			}
 
-		// send buffer
-		bytes, err := t.Conn.Write(encryptedBuffer)
-		if bytes != len(encryptedBuffer) {
-			return errors.New("Send error. Please quit and restart Flying Carpet.")
+			// send buffer
+			bytes, err := t.Conn.Write(encryptedBuffer)
+			if bytes != len(encryptedBuffer) {
+				return errors.New("Send error. Please quit and restart Flying Carpet.")
+			}
 		}
 	}
 	// send chunkSize of 0 and then wait until receiving end tells us they have everything.
@@ -109,10 +112,6 @@ func chunkAndSend(t *Transfer) error {
 
 	//////////
 
-	if runtime.GOOS == "darwin" {
-		t.AdHocChan <- false
-		<-t.AdHocChan
-	}
 	ticker.Stop()
 	updateProgressBar(100, t)
 	t.output(fmt.Sprintf("Sending took %s", time.Since(start)))
@@ -166,48 +165,47 @@ func receiveAndAssemble(t *Transfer) error {
 	defer outFile.Close()
 
 	for {
-		// get chunk size
-		var chunkSize int64
-		err := binary.Read(t.Conn, binary.BigEndian, &chunkSize)
-		if err != nil {
-			t.output(fmt.Sprintf("err: %s", err.Error()))
-		}
-		if chunkSize == 0 {
-			// done receiving
-			break
-		}
+		select {
+		case <-t.Ctx.Done():
+			return errors.New("Exiting dialPeer, transfer was canceled.")
+		default:
+			// get chunk size
+			var chunkSize int64
+			err := binary.Read(t.Conn, binary.BigEndian, &chunkSize)
+			if err != nil {
+				t.output(fmt.Sprintf("err: %s", err.Error()))
+			}
+			if chunkSize == 0 {
+				// done receiving
+				break
+			}
 
-		// get chunk
-		chunk := make([]byte, chunkSize)
-		bytesReceived, err := io.ReadFull(t.Conn, chunk)
-		if err != nil {
-			t.output("Error reading from stream. Retrying.")
-			t.output(err.Error())
-			continue
-		}
-		// t.output(fmt.Sprintf("read %d bytes", bytesReceived))
-		if int64(bytesReceived) != chunkSize {
-			t.output(fmt.Sprintf("bytesReceived: %d\nchunkSize: %d", bytesReceived, chunkSize))
-		}
+			// get chunk
+			chunk := make([]byte, chunkSize)
+			bytesReceived, err := io.ReadFull(t.Conn, chunk)
+			if err != nil {
+				t.output("Error reading from stream. Retrying.")
+				t.output(err.Error())
+				continue
+			}
+			// t.output(fmt.Sprintf("read %d bytes", bytesReceived))
+			if int64(bytesReceived) != chunkSize {
+				t.output(fmt.Sprintf("bytesReceived: %d\nchunkSize: %d", bytesReceived, chunkSize))
+			}
 
-		// decrypt and add to outfile
-		decryptedChunk := decrypt(chunk, t.Passphrase)
-		_, err = outFile.Write(decryptedChunk)
-		if err != nil {
-			return errors.New("Error writing to out file. Please quit and restart Flying Carpet.")
+			// decrypt and add to outfile
+			decryptedChunk := decrypt(chunk, t.Passphrase)
+			_, err = outFile.Write(decryptedChunk)
+			if err != nil {
+				return errors.New("Error writing to out file. Please quit and restart Flying Carpet.")
+			}
+			bytesLeft -= int64(len(decryptedChunk))
 		}
-		bytesLeft -= int64(len(decryptedChunk))
 	}
 
 	// wait till we've received everything before signalling to other end that it's okay to stop sending.
 	binary.Write(t.Conn, binary.BigEndian, int64(1))
 
-	// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
-	// and thus don't need to shut down the goroutine trying to stay on it. does this need to happen when peer is linux? yes.
-	if runtime.GOOS == "darwin" && (t.Peer == "windows" || t.Peer == "linux") {
-		t.AdHocChan <- false
-		<-t.AdHocChan
-	}
 	ticker.Stop()
 	updateProgressBar(100, t)
 	t.output(fmt.Sprintf("Received file size: %d", getSize(outFile)))

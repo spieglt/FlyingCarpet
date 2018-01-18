@@ -30,6 +30,7 @@ int joinAdHoc(char * cSSID, char * cPassword) {
 import "C"
 import (
 	"fmt"
+	"errors"
 	"os"
 	"os/exec"
 	"strconv"
@@ -51,7 +52,7 @@ func connectToPeer(t *Transfer) (err error) {
 		if t.Peer == "mac" {
 			t.RecipientIP, err = findMac(t)
 			if err != nil {
-				return false
+				return
 			}
 		} else if t.Peer == "windows" {
 			t.RecipientIP = findWindows(t)
@@ -70,7 +71,7 @@ func connectToPeer(t *Transfer) (err error) {
 			}
 		}
 	}
-	return true
+	return
 }
 
 func startAdHoc(t *Transfer) (err error) {
@@ -100,13 +101,18 @@ func joinAdHoc(t *Transfer) (err error) {
 	res := int(cRes)
 
 	for res == 0 {
-		if timeout <= 0 {
-			return errors.New("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
+		select {
+		case <-t.Ctx.Done():
+			return errors.New("Exiting joinAdHoc, transfer was canceled.")
+		default:
+			if timeout <= 0 {
+				return errors.New("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
+			}
+			// t.output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
+			timeout -= 5
+			time.Sleep(time.Second * time.Duration(3))
+			res = int(C.joinAdHoc(ssid, password))
 		}
-		// t.output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
-		timeout -= 5
-		time.Sleep(time.Second * time.Duration(3))
-		res = int(C.joinAdHoc(ssid, password))
 	}
 	return
 }
@@ -148,18 +154,23 @@ func findMac(t *Transfer) (peerIP string, err error) {
 
 	t.output("Looking for peer IP for " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
 	for peerIP == "" {
-		if timeout <= 0 {
-			return "", errors.New("Could not find the peer computer within " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
+		select {
+		case <-t.Ctx.Done():
+			return errors.New("Exiting dialPeer, transfer was canceled.")
+		default:
+			if timeout <= 0 {
+				return "", errors.New("Could not find the peer computer within " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
+			}
+			pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
+			if pingErr != nil {
+				// t.output(fmt.Sprintf("Could not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
+				timeout -= 2
+				time.Sleep(time.Second * time.Duration(2))
+				continue
+			}
+			peerIPs := string(pingBytes)
+			peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
 		}
-		pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
-		if pingErr != nil {
-			// t.output(fmt.Sprintf("Could not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
-			timeout -= 2
-			time.Sleep(time.Second * time.Duration(2))
-			continue
-		}
-		peerIPs := string(pingBytes)
-		peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
 	}
 	t.output(fmt.Sprintf("Peer IP found: %s", peerIP))
 	return
@@ -219,15 +230,14 @@ func stayOnAdHoc(t *Transfer) {
 
 	for {
 		select {
-		case <-t.AdHocChan:
+		case <-t.Ctx.Done():
 			t.output("Stopping ad hoc connection.")
-			t.AdHocChan <- true
 			return
 		default:
 			if getCurrentWifi(t) != t.SSID {
 				joinAdHoc(t)
 			}
-			time.Sleep(time.Second * 1)
+			time.Sleep(time.Second * 3)
 		}
 	}
 }
