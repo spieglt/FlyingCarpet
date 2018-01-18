@@ -163,32 +163,35 @@ func newGui() *MainFrame {
 		if t.Mode == "sending" {
 			pd := wx.NewTextEntryDialog(mf.Panel, "Enter password from receiving end:", "", "", wx.OK|wx.CANCEL, wx.DefaultPosition)
 			ret := pd.ShowModal()
-			if ret == wx.ID_OK {
-				_, err := os.Stat(t.Filepath)
-				if err == nil {
-					startButton.Hide()
-					cancelButton.Show()
-					t.output("Entered password: " + pd.GetValue())
-					t.Passphrase = pd.GetValue()
-					// pd.Destroy()
-					go mainRoutine(&t)
-				} else {
-					t.output("Could not find output file.")
-				}
-			} else {
+			if ret != wx.ID_OK {
 				t.output("Password entry was cancelled.")
+				return
+			}
+			_, err := os.Stat(t.Filepath)
+			if err == nil {
+				startButton.Hide()
+				cancelButton.Show()
+				t.output("Entered password: " + pd.GetValue())
+				t.Passphrase = pd.GetValue()
+				// pd.Destroy()
+				go mainRoutine(&t)
+			} else {
+				t.output("Could not find output file.")
 			}
 		} else if t.Mode == "receiving" {
 			fpStat, err := os.Stat(t.Filepath)
 			if err != nil {
 				t.output("Please select valid folder.")
-			} else if !fpStat.IsDir() {
+				return
+			}
+			if !fpStat.IsDir() {
 				t.Filepath = filepath.Dir(t.Filepath) + string(os.PathSeparator)
 			}
 			startButton.Hide()
 			cancelButton.Show()
 			go mainRoutine(&t)
 		}
+		mf.Panel.Layout()
 	}, startButton.GetId())
 
 	// cancel button action

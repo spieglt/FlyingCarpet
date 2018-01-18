@@ -134,19 +134,29 @@ func mainRoutine(t *Transfer) {
 	}
 }
 
-func listenForPeer(t *Transfer) (*net.Listener, error) {
-	ln, err := net.Listen("tcp", ":"+strconv.Itoa(t.Port))
+func listenForPeer(t *Transfer) (*net.TCPListener, error) {
+	ln, err := net.ListenTCP("tcp", &net.TCPAddr{Port: t.Port})
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("Could not listen on :%d. Err: %s", t.Port, err))
 	}
 	t.output("Listening on :" + strconv.Itoa(t.Port))
-	conn, err := ln.Accept()
-	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Error accepting connection on :%d", t.Port))
+
+	for {
+		select {
+		case <- t.Ctx.Done():
+			return nil, errors.New("Exiting listenForPeer, transfer was canceled.")
+		default:
+			ln.SetDeadline(time.Now().Add(time.Second))
+			conn, err := ln.Accept()
+			if err != nil {
+				// t.output("Error accepting connection: " + err.Error())
+				continue
+			}
+			t.Conn = conn
+			t.output("Connection accepted")
+			return ln, nil
+		}
 	}
-	t.Conn = conn
-	t.output("Connection accepted")
-	return &ln, nil
 }
 
 func dialPeer(t *Transfer) error {

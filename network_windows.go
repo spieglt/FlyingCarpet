@@ -29,7 +29,10 @@ func connectToPeer(t *Transfer) (err error) {
 			if err = joinAdHoc(t); err != nil {
 				return
 			}
-			t.RecipientIP = findPeer(t)
+			t.RecipientIP, err = findPeer(t)
+			if err != nil {
+				return
+			}
 		} else if t.Peer == "mac" || t.Peer == "linux" {
 			if err = addFirewallRule(t); err != nil {
 				return
@@ -37,7 +40,10 @@ func connectToPeer(t *Transfer) (err error) {
 			if err = startAdHoc(t); err != nil {
 				return
 			}
-			t.RecipientIP = findPeer(t)
+			t.RecipientIP, err = findPeer(t)
+			if err != nil {
+				return
+			}
 		}
 	}
 	return
@@ -165,8 +171,7 @@ func joinAdHoc(t *Transfer) (err error) {
 }
 
 // TODO: timeout, error here
-func findPeer(t *Transfer) (peerIP string) {
-
+func findPeer(t *Transfer) (string, error) {
 	ipPattern, _ := regexp.Compile("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}")
 
 	// clear arp cache
@@ -195,19 +200,26 @@ func findPeer(t *Transfer) (peerIP string) {
 	}
 
 	// run arp for that ip
+	var peerIP string
+	t.output("Looking for peer IP...")
 	for !ipPattern.Match([]byte(peerIP)) {
-		peerString := "$(arp -a -N " + ifAddr + " | Select-String -Pattern '(?<ip>192\\.168\\." + thirdOctet + "\\.\\d{1,3})' | Select-String -NotMatch '(?<nm>(" + ifAddr + "|192.168." + thirdOctet + ".255)\\s)').Matches.Value"
-		peerCmd := exec.Command("powershell", "-c", peerString)
-		peerCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		peerBytes, err := peerCmd.CombinedOutput()
-		if err != nil {
-			t.output("Error getting peer IP, retrying.")
+		select {
+		case <- t.Ctx.Done():
+			return "",errors.New("Exiting joinAdHoc, transfer was canceled.")
+		default:
+			peerString := "$(arp -a -N " + ifAddr + " | Select-String -Pattern '(?<ip>192\\.168\\." + thirdOctet + "\\.\\d{1,3})' | Select-String -NotMatch '(?<nm>(" + ifAddr + "|192.168." + thirdOctet + ".255)\\s)').Matches.Value"
+			peerCmd := exec.Command("powershell", "-c", peerString)
+			peerCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			peerBytes, err := peerCmd.CombinedOutput()
+			if err != nil {
+				t.output("Error getting peer IP, retrying.")
+			}
+			peerIP = strings.TrimSpace(string(peerBytes))
+			time.Sleep(time.Second * time.Duration(2))
 		}
-		peerIP = strings.TrimSpace(string(peerBytes))
-		time.Sleep(time.Second * time.Duration(2))
 	}
 	t.output(fmt.Sprintf("Peer IP found: %s", peerIP))
-	return
+	return peerIP, nil
 }
 
 func getCurrentWifi(t *Transfer) (SSID string) {
