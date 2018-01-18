@@ -21,10 +21,6 @@ func connectToPeer(t *Transfer) (err error) {
 			return
 		}
 	} else if t.Mode == "sending" {
-		if err = checkForFile(t); err != nil {
-			t.output(fmt.Sprintf("Could not find file to send: %s", t.Filepath))
-			return
-		}
 		if t.Peer == "windows" {
 			if err = joinAdHoc(t); err != nil {
 				return
@@ -267,11 +263,6 @@ func addFirewallRule(t *Transfer) (err error) {
 func deleteFirewallRule(t *Transfer) {
 	fwStr := "netsh advfirewall firewall delete rule name=flyingcarpet"
 	t.output(runCommand(fwStr))
-}
-
-func checkForFile(t *Transfer) (err error) {
-	_, err = os.Stat(t.Filepath)
-	return
 }
 
 func runCommand(cmdStr string) (output string) {

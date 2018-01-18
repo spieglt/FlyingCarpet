@@ -19,6 +19,7 @@ const FIND_MAC_TIMEOUT = 60
 
 type Transfer struct {
 	Filepath       string
+	FileList       []string
 	Passphrase     string
 	SSID           string
 	RecipientIP    string
@@ -47,13 +48,14 @@ func mainRoutine(t *Transfer) {
 	t.WifiDirectChan = wfdc
 	var err error
 
+	// cleanup
 	defer func() {
 		enableStartButton(t)
 		resetWifi(t)
 	}()
 
 	if t.Mode == "sending" {
-
+		// to stop searching for ad hoc network (if Mac jumps off)
 		defer func() {
 			if runtime.GOOS == "darwin" {
 				t.CancelCtx()
@@ -69,11 +71,14 @@ func mainRoutine(t *Transfer) {
 		} else if runtime.GOOS == "linux" {
 			t.PreviousSSID = getCurrentUUID(t)
 		}
+
+		// make ip connection
 		if err = connectToPeer(t); err != nil {
 			t.output("Aborting transfer.")
 			return
 		}
 
+		// make tcp connection
 		conn, err := dialPeer(t)
 		if conn != nil {
 			defer (*conn).Close()
@@ -85,14 +90,29 @@ func mainRoutine(t *Transfer) {
 		}
 		t.output("Connected")
 
-		if err = chunkAndSend(conn, t); err != nil {
-			t.output(err.Error())
-			t.output("Aborting transfer.")
+		// tell receiving end how many files we're sending
+		if err = sendCount(conn, t); err != nil {
+			t.output("Could not send number of files: " + err.Error())
 			return
 		}
+
+		// send files
+		for i, v := range t.FileList {
+			if len(t.FileList) > 1 {
+				t.output(fmt.Sprintf("Beginning transfer %d of %d. Filename: %s", i, len(t.FileList), v))
+			}
+			t.Filepath = v
+			if err = chunkAndSend(conn, t); err != nil {
+				t.output(err.Error())
+				t.output("Aborting transfer.")
+				return
+			}
+		}
+	
 		t.output("Send complete, resetting WiFi and exiting.")
 
 	} else if t.Mode == "receiving" {
+		// cleanup
 		defer func() {
 			// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
 			// and thus don't need to shut down the goroutine trying to stay on it. does this need to happen when peer is linux? yes.
@@ -100,6 +120,7 @@ func mainRoutine(t *Transfer) {
 				t.CancelCtx()
 			}
 		}()
+
 		t.Passphrase = generatePassword()
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
@@ -112,10 +133,13 @@ func mainRoutine(t *Transfer) {
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
 			"=============================\n", t.Passphrase))
 
+		// make ip connection
 		if err = connectToPeer(t); err != nil {
 			t.output("Aborting transfer.")
 			return
 		}
+
+		// make tcp connection
 		listener, conn, err := listenForPeer(t)
 		// wait till end to close listener and tcp connection for multi-file transfers
 		if listener != nil {
@@ -128,10 +152,23 @@ func mainRoutine(t *Transfer) {
 			return
 		}
 
-		if err = receiveAndAssemble(conn, t); err != nil {
-			t.output(err.Error())
-			t.output("Aborting transfer.")
+		// find out how many files we're receiving
+		numFiles, err := receiveCount(conn, t)
+		if err != nil {
+			t.output("Could not receive number of files: " + err.Error())
 			return
+		}
+
+		// receive files
+		for i := 0; i < numFiles; i++ {
+			if numFiles > 1 {
+				t.output(fmt.Sprintf("Receiving file %d of %d.", i, numFiles))
+			}
+			if err = receiveAndAssemble(conn, t); err != nil {
+				t.output(err.Error())
+				t.output("Aborting transfer.")
+				return
+			}
 		}
 
 		t.output("Reception complete, resetting WiFi and exiting.")

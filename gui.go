@@ -9,6 +9,8 @@ import (
 	"runtime"
 )
 
+const MULTIPLE_FILE_STRING = "(Multiple files selected)"
+
 const OUTPUT_BOX_UPDATE = wx.ID_HIGHEST + 1
 const PROGRESS_BAR_UPDATE = wx.ID_HIGHEST + 2
 const PROGRESS_BAR_SHOW = wx.ID_HIGHEST + 3
@@ -33,6 +35,7 @@ func newGui() *MainFrame {
 	}
 
 	var t Transfer
+	var fileList []string
 
 	// window
 	mf.SetSize(400, 600)
@@ -58,7 +61,7 @@ func newGui() *MainFrame {
 
 	// file selection box
 	fileSizer := wx.NewBoxSizer(wx.HORIZONTAL)
-	sendButton := wx.NewButton(mf.Panel, wx.ID_ANY, "Select File", wx.DefaultPosition, wx.DefaultSize, 0)
+	sendButton := wx.NewButton(mf.Panel, wx.ID_ANY, "Select File(s)", wx.DefaultPosition, wx.DefaultSize, 0)
 	receiveButton := wx.NewButton(mf.Panel, wx.ID_ANY, "Select Folder", wx.DefaultPosition, wx.DefaultSize, 0)
 	receiveButton.Hide()
 	fileBox := wx.NewTextCtrl(mf.Panel, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, 0)
@@ -110,10 +113,16 @@ func newGui() *MainFrame {
 
 	// send button action
 	wx.Bind(mf, wx.EVT_BUTTON, func(e wx.Event) {
-		fd := wx.NewFileDialogT(wx.NullWindow, "Select Files", "", "", "*", wx.FD_OPEN, wx.DefaultPosition, wx.DefaultSize, "Open")
+		fd := wx.NewFileDialogT(wx.NullWindow, "Select Files", "", "", "*", wx.FD_MULTIPLE, wx.DefaultPosition, wx.DefaultSize, "Open")
 		if fd.ShowModal() != wx.ID_CANCEL {
-			filename := fd.GetPath()
-			fileBox.SetValue(filename)
+			fd.GetPaths(&fileList)
+			if len(fileList) == 1 {
+				fileBox.SetValue(fileList[0])
+			} else {
+				// TODO: disable input box so user has to click button if they want to switch to only one file?
+				// If so, have to reenable button in if clause immemdiately above.
+				fileBox.SetValue(MULTIPLE_FILE_STRING)
+			}
 		}
 	}, sendButton.GetId())
 
@@ -152,6 +161,7 @@ func newGui() *MainFrame {
 		ctx, cancelCtx := context.WithCancel(context.Background())
 		t = Transfer{
 			Filepath:  fileBox.GetValue(),
+			FileList:  fileList,
 			Mode:      mode,
 			Port:      3290,
 			Peer:      peer,
@@ -159,25 +169,38 @@ func newGui() *MainFrame {
 			Ctx:       ctx,
 			CancelCtx: cancelCtx,
 		}
+		// if only one file in fileList, let t.Filepath remain equal to contents of fileBox
+		// because user might have made manual change to text before hitting start.
+		// AND set t.FileList[0] to t.Filepath, makes looping easier.
+		// maybe not best way to do this but avoiding modifying chunker any more right now.
+		if len(fileList) == 1 {
+			t.FileList[0] = t.Filepath
+		}
 
 		if t.Mode == "sending" {
+			// make sure all files exist
+			for _, file := range t.FileList {
+				_, err := os.Stat(file)
+				if err != nil {
+					t.output("Could not find output file " + file)
+					t.output(err.Error())
+					return
+				}
+			}
 			pd := wx.NewTextEntryDialog(mf.Panel, "Enter password from receiving end:", "", "", wx.OK|wx.CANCEL, wx.DefaultPosition)
 			ret := pd.ShowModal()
 			if ret != wx.ID_OK {
 				t.output("Password entry was cancelled.")
 				return
 			}
-			_, err := os.Stat(t.Filepath)
-			if err == nil {
-				startButton.Hide()
-				cancelButton.Show()
-				t.output("Entered password: " + pd.GetValue())
-				t.Passphrase = pd.GetValue()
-				// pd.Destroy()
-				go mainRoutine(&t)
-			} else {
-				t.output("Could not find output file.")
-			}
+
+			startButton.Hide()
+			cancelButton.Show()
+			t.output("Entered password: " + pd.GetValue())
+			t.Passphrase = pd.GetValue()
+			// pd.Destroy()
+			go mainRoutine(&t)
+
 		} else if t.Mode == "receiving" {
 			fpStat, err := os.Stat(t.Filepath)
 			if err != nil {

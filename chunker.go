@@ -227,6 +227,26 @@ outer:
 	return err
 }
 
+func sendCount(pConn *net.Conn, t *Transfer) error {
+	var conn net.Conn = *pConn
+	numFiles := len(t.FileList)
+	err := binary.Write(conn, binary.BigEndian, numFiles)
+	if err != nil {
+		return errors.New(fmt.Sprintf("Error transmitting number of files: %s\n Please quit and restart Flying Carpet.", err))
+	}
+	return err
+}
+
+func receiveCount(pConn *net.Conn, t *Transfer) (int, error) {
+	var conn net.Conn = *pConn
+	var numFiles int
+	err := binary.Read(conn, binary.BigEndian, &numFiles)
+	if err != nil {
+		return 0, errors.New(fmt.Sprintf("Error receiving number of files: %s\nPlease quit and restart Flying Carpet.", err))
+	}
+	return numFiles, nil
+}
+
 func getSize(file *os.File) (size int64) {
 	fileInfo, _ := file.Stat()
 	size = fileInfo.Size()

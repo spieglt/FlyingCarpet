@@ -12,9 +12,6 @@ import (
 
 func connectToPeer(t *Transfer) (err error) {
 	if t.Mode == "sending" {
-		if err = checkForFile(t); err != nil {
-			return errors.New(fmt.Sprintf("Could not find file to send: %s\n%s", t.Filepath, err.Error()))
-		}
 		if t.Peer == "mac" {
 			if err = startAdHoc(t); err != nil {
 				return
@@ -200,9 +197,4 @@ func runCommand(cmd string) (output string) {
 		return err.Error()
 	}
 	return strings.TrimSpace(string(cmdBytes))
-}
-
-func checkForFile(t *Transfer) (err error) {
-	_, err = os.Stat(t.Filepath)
-	return
 }
