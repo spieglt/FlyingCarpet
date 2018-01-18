@@ -30,7 +30,6 @@ type Transfer struct {
 	Ctx            context.Context
 	CancelCtx      context.CancelFunc
 	WifiDirectChan chan string
-	Conn           net.Conn
 	Frame          *MainFrame
 	// cli?
 }
@@ -75,14 +74,18 @@ func mainRoutine(t *Transfer) {
 			return
 		}
 
-		if err = dialPeer(t); err != nil {
+		conn, err := dialPeer(t)
+		if conn != nil {
+			defer (*conn).Close()
+		}
+		if err != nil {
 			t.output(err.Error())
 			t.output("Could not establish TCP connection with peer. Aborting transfer.")
 			return
 		}
 		t.output("Connected")
 
-		if err = chunkAndSend(t); err != nil {
+		if err = chunkAndSend(conn, t); err != nil {
 			t.output(err.Error())
 			t.output("Aborting transfer.")
 			return
@@ -113,10 +116,11 @@ func mainRoutine(t *Transfer) {
 			t.output("Aborting transfer.")
 			return
 		}
-		listener, err := listenForPeer(t)
-		// wait till end to close listener for multi-file transfers
+		listener, conn, err := listenForPeer(t)
+		// wait till end to close listener and tcp connection for multi-file transfers
 		if listener != nil {
 			defer (*listener).Close()
+			defer (*conn).Close()
 		}
 		if err != nil {
 			t.output(err.Error())
@@ -124,7 +128,7 @@ func mainRoutine(t *Transfer) {
 			return
 		}
 
-		if err = receiveAndAssemble(t); err != nil {
+		if err = receiveAndAssemble(conn, t); err != nil {
 			t.output(err.Error())
 			t.output("Aborting transfer.")
 			return
@@ -134,17 +138,17 @@ func mainRoutine(t *Transfer) {
 	}
 }
 
-func listenForPeer(t *Transfer) (*net.TCPListener, error) {
+func listenForPeer(t *Transfer) (*net.TCPListener, *net.Conn, error) {
 	ln, err := net.ListenTCP("tcp", &net.TCPAddr{Port: t.Port})
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Could not listen on :%d. Err: %s", t.Port, err))
+		return nil, nil, errors.New(fmt.Sprintf("Could not listen on :%d. Err: %s", t.Port, err))
 	}
 	t.output("Listening on :" + strconv.Itoa(t.Port))
 
 	for {
 		select {
 		case <- t.Ctx.Done():
-			return nil, errors.New("Exiting listenForPeer, transfer was canceled.")
+			return nil, nil, errors.New("Exiting listenForPeer, transfer was canceled.")
 		default:
 			ln.SetDeadline(time.Now().Add(time.Second))
 			conn, err := ln.Accept()
@@ -152,21 +156,20 @@ func listenForPeer(t *Transfer) (*net.TCPListener, error) {
 				// t.output("Error accepting connection: " + err.Error())
 				continue
 			}
-			t.Conn = conn
 			t.output("Connection accepted")
-			return ln, nil
+			return ln, &conn, nil
 		}
 	}
 }
 
-func dialPeer(t *Transfer) error {
+func dialPeer(t *Transfer) (*net.Conn, error) {
 	var conn net.Conn
 	var err error
 	t.output("Trying to connect to " + t.RecipientIP + " for " + strconv.Itoa(DIAL_TIMEOUT) + " seconds.")
 	for i := 0; i < DIAL_TIMEOUT; i++ {
 		select {
 		case <-t.Ctx.Done():
-			return errors.New("Exiting dialPeer, transfer was canceled.")
+			return nil, errors.New("Exiting dialPeer, transfer was canceled.")
 		default:
 			err = nil
 			conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond*10)
@@ -176,11 +179,10 @@ func dialPeer(t *Transfer) error {
 				continue
 			}
 			t.output("Successfully dialed peer.")
-			t.Conn = conn
-			return nil
+			return &conn, nil
 		}
 	}
-	return errors.New(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT))
+	return nil, errors.New(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT))
 }
 
 func generatePassword() string {

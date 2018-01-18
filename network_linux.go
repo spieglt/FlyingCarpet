@@ -39,7 +39,6 @@ func connectToPeer(t *Transfer) (err error) {
 			if err = joinAdHoc(t); err != nil {
 				return
 			}
-			// go stayOnAdHoc(t)
 		} else if t.Peer == "mac" {
 			if err = startAdHoc(t); err != nil {
 				return

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/dontpanic92/wxGo/wx"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
@@ -14,10 +15,9 @@ import (
 
 const CHUNKSIZE = 1000000 // 1MB
 
-func chunkAndSend(t *Transfer) error {
-
+func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 	start := time.Now()
-	defer t.Conn.Close()
+	var conn net.Conn = *pConn
 
 	file, err := os.Open(t.Filepath)
 	if err != nil {
@@ -36,23 +36,28 @@ func chunkAndSend(t *Transfer) error {
 	ticker := time.NewTicker(time.Millisecond * 1000)
 	go func() {
 		for _ = range ticker.C {
-			percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
-			updateProgressBar(int(percentDone), t)
+			select {
+			case <-t.Ctx.Done():
+				return
+			default:
+				percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
+				updateProgressBar(int(percentDone), t)
+			}
 		}
 	}()
 
 	// transmit filename and size
 	filename := filepath.Base(t.Filepath)
 	filenameLen := int64(len(filename))
-	err = binary.Write(t.Conn, binary.BigEndian, filenameLen)
+	err = binary.Write(conn, binary.BigEndian, filenameLen)
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error writing filename length: %s\n Please quit and restart Flying Carpet.", err))
 	}
-	_, err = t.Conn.Write([]byte(filename))
+	_, err = conn.Write([]byte(filename))
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error writing filename: %s\n Please quit and restart Flying Carpet.", err))
 	}
-	err = binary.Write(t.Conn, binary.BigEndian, fileSize)
+	err = binary.Write(conn, binary.BigEndian, fileSize)
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error transmitting file size: %s\n Please quit and restart Flying Carpet.", err))
 	}
@@ -76,27 +81,27 @@ func chunkAndSend(t *Transfer) error {
 
 			// send size of buffer
 			chunkSize := int64(len(encryptedBuffer))
-			err = binary.Write(t.Conn, binary.BigEndian, chunkSize)
+			err = binary.Write(conn, binary.BigEndian, chunkSize)
 			if err != nil {
 				return errors.New("Error writing chunk length. Please quit and restart Flying Carpet.")
 			}
 
 			// send buffer
-			bytes, err := t.Conn.Write(encryptedBuffer)
+			bytes, err := conn.Write(encryptedBuffer)
 			if bytes != len(encryptedBuffer) {
 				return errors.New("Send error. Please quit and restart Flying Carpet.")
 			}
 		}
 	}
 	// send chunkSize of 0 and then wait until receiving end tells us they have everything.
-	binary.Write(t.Conn, binary.BigEndian, int64(0))
+	binary.Write(conn, binary.BigEndian, int64(0))
 
 	// timeout for binary.Read
 	replyChan := make(chan int64)
 	timeoutChan := make(chan int)
 	go func() {
 		var comp int64
-		binary.Read(t.Conn, binary.BigEndian, &comp)
+		binary.Read(conn, binary.BigEndian, &comp)
 		replyChan <- comp
 	}()
 	go func() {
@@ -118,24 +123,24 @@ func chunkAndSend(t *Transfer) error {
 	return nil
 }
 
-func receiveAndAssemble(t *Transfer) error {
+func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
 	start := time.Now()
-	defer t.Conn.Close()
+	var conn net.Conn = *pConn
 
 	// receive filename and size
 	var filenameLen int64
-	err := binary.Read(t.Conn, binary.BigEndian, &filenameLen)
+	err := binary.Read(conn, binary.BigEndian, &filenameLen)
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error receiving filename length: %s\nPlease quit and restart Flying Carpet.", err))
 	}
 	filenameBytes := make([]byte, filenameLen)
-	_, err = io.ReadFull(t.Conn, filenameBytes)
+	_, err = io.ReadFull(conn, filenameBytes)
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error receiving filename: %s\nPlease quit and restart Flying Carpet.", err))
 	}
 	filename := string(filenameBytes)
 	var fileSize int64
-	err = binary.Read(t.Conn, binary.BigEndian, &fileSize)
+	err = binary.Read(conn, binary.BigEndian, &fileSize)
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error receiving file size: %s\nPlease quit and restart Flying Carpet.", err))
 	}
@@ -152,8 +157,13 @@ func receiveAndAssemble(t *Transfer) error {
 	ticker := time.NewTicker(time.Millisecond * 1000)
 	go func() {
 		for _ = range ticker.C {
-			percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
-			updateProgressBar(int(percentDone), t)
+			select {
+			case <-t.Ctx.Done():
+				return
+			default:
+				percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
+				updateProgressBar(int(percentDone), t)
+			}
 		}
 	}()
 	/////////////////////////////
@@ -163,7 +173,7 @@ func receiveAndAssemble(t *Transfer) error {
 		return errors.New("Error creating out file. Please quit and restart Flying Carpet.")
 	}
 	defer outFile.Close()
-
+outer:
 	for {
 		select {
 		case <-t.Ctx.Done():
@@ -171,18 +181,18 @@ func receiveAndAssemble(t *Transfer) error {
 		default:
 			// get chunk size
 			var chunkSize int64
-			err := binary.Read(t.Conn, binary.BigEndian, &chunkSize)
+			err := binary.Read(conn, binary.BigEndian, &chunkSize)
 			if err != nil {
 				t.output(fmt.Sprintf("err: %s", err.Error()))
 			}
 			if chunkSize == 0 {
 				// done receiving
-				break
+				break outer
 			}
 
 			// get chunk
 			chunk := make([]byte, chunkSize)
-			bytesReceived, err := io.ReadFull(t.Conn, chunk)
+			bytesReceived, err := io.ReadFull(conn, chunk)
 			if err != nil {
 				t.output("Error reading from stream. Retrying.")
 				t.output(err.Error())
@@ -204,7 +214,7 @@ func receiveAndAssemble(t *Transfer) error {
 	}
 
 	// wait till we've received everything before signalling to other end that it's okay to stop sending.
-	binary.Write(t.Conn, binary.BigEndian, int64(1))
+	binary.Write(conn, binary.BigEndian, int64(1))
 
 	ticker.Stop()
 	updateProgressBar(100, t)

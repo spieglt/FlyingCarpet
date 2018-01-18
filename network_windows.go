@@ -170,7 +170,6 @@ func joinAdHoc(t *Transfer) (err error) {
 	return
 }
 
-// TODO: timeout, error here
 func findPeer(t *Transfer) (string, error) {
 	ipPattern, _ := regexp.Compile("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}")
 
