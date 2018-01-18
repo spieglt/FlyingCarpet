@@ -144,11 +144,25 @@ func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error receiving file size: %s\nPlease quit and restart Flying Carpet.", err))
 	}
-	if _, err := os.Open(t.Filepath + filename); err != nil {
+
+	// if t.Filepath is not a directory, we're in a multifile transfer (as start button action in gui.go
+	// would've made it a directory for the first transfer), so we need to reset it to be a directory.
+	fpStat, err := os.Stat(t.Filepath)
+	if err != nil {
+		return errors.New("Error accessing destination folder: " + err.Error())
+	}
+	if !fpStat.IsDir() {
+		t.Filepath = filepath.Dir(t.Filepath) + string(os.PathSeparator)
+	}
+
+	// now check if file being received already exists. if so, append t.SSID to front end.
+	if _, err := os.Stat(t.Filepath + filename); err != nil {
 		t.Filepath += filename
 	} else {
 		t.Filepath = t.Filepath + t.SSID + "_" + filename
 	}
+
+
 	t.output(fmt.Sprintf("Filename: %s\nFile size: %d", filename, fileSize))
 	updateFilename(t)
 	// progress bar

@@ -101,7 +101,6 @@ func mainRoutine(t *Transfer) {
 			if len(t.FileList) > 1 {
 				t.output("=============================")
 				t.output(fmt.Sprintf("Beginning transfer %d of %d. Filename: %s", i+1, len(t.FileList), v))
-				t.output("=============================")
 			}
 			t.Filepath = v
 			if err = chunkAndSend(conn, t); err != nil {
@@ -166,7 +165,6 @@ func mainRoutine(t *Transfer) {
 			if numFiles > 1 {
 				t.output("=============================")
 				t.output(fmt.Sprintf("Receiving file %d of %d.", i+1, numFiles))
-				t.output("=============================")
 			}
 			if err = receiveAndAssemble(conn, t); err != nil {
 				t.output(err.Error())
