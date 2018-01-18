@@ -170,7 +170,7 @@ func dialPeer(t *Transfer) error {
 			return nil
 		}
 	}
-	return errors.New(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT)) 
+	return errors.New(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT))
 }
 
 func generatePassword() string {

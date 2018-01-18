@@ -29,8 +29,8 @@ int joinAdHoc(char * cSSID, char * cPassword) {
 */
 import "C"
 import (
-	"fmt"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strconv"

@@ -32,8 +32,9 @@ func newGui() *MainFrame {
 		mf.Frame.SetIcon(icon)
 	}
 
-	// window
+	var t Transfer
 
+	// window
 	mf.SetSize(400, 600)
 	mf.Panel = wx.NewPanel(mf)
 	mf.Panel.SetSize(400, 400)
@@ -71,6 +72,7 @@ func newGui() *MainFrame {
 	cancelButton := wx.NewButton(mf.Panel, wx.ID_ANY, "Cancel", wx.DefaultPosition, wx.DefaultSize, 0)
 	cancelButton.Hide()
 	bSizerBottom.Add(startButton, 0, wx.ALL|wx.EXPAND, 5)
+	bSizerBottom.Add(cancelButton, 0, wx.ALL|wx.EXPAND, 5)
 
 	// output box
 	outputBox := wx.NewTextCtrl(mf.Panel, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE|wx.TE_READONLY)
@@ -148,7 +150,7 @@ func newGui() *MainFrame {
 		}
 
 		ctx, cancelCtx := context.WithCancel(context.Background())
-		t := Transfer{
+		t = Transfer{
 			Filepath:  fileBox.GetValue(),
 			Mode:      mode,
 			Port:      3290,

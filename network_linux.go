@@ -53,7 +53,7 @@ func connectToPeer(t *Transfer) (err error) {
 	return
 }
 
-// TODO: fix this function, add error handling. 
+// TODO: fix this function, add error handling.
 func startAdHoc(t *Transfer) (err error) {
 	// or just:
 	// nmcli dev wifi hotspot ssid t.SSID band bg channel 11 password t.Passphrase + t.Passphrase
@@ -77,7 +77,7 @@ func stopAdHoc(t *Transfer) {
 	t.output(runCommand(command))
 }
 
-// TODO: fix this function, add error handling. 
+// TODO: fix this function, add error handling.
 func joinAdHoc(t *Transfer) (err error) {
 	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
