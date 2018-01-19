@@ -31,7 +31,6 @@ import "C"
 import (
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -153,7 +152,7 @@ func findMac(t *Transfer) (peerIP string, err error) {
 	for peerIP == "" {
 		select {
 		case <-t.Ctx.Done():
-			return errors.New("Exiting dialPeer, transfer was canceled.")
+			return "", errors.New("Exiting dialPeer, transfer was canceled.")
 		default:
 			if timeout <= 0 {
 				return "", errors.New("Could not find the peer computer within " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
