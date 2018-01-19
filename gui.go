@@ -115,6 +115,7 @@ func newGui() *MainFrame {
 	wx.Bind(mf, wx.EVT_BUTTON, func(e wx.Event) {
 		fd := wx.NewFileDialogT(wx.NullWindow, "Select Files", "", "", "*", wx.FD_MULTIPLE, wx.DefaultPosition, wx.DefaultSize, "Open")
 		if fd.ShowModal() != wx.ID_CANCEL {
+			fileList = []string{}
 			fd.GetPaths(&fileList)
 			if len(fileList) == 1 {
 				fileBox.SetValue(fileList[0])
