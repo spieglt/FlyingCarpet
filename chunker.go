@@ -315,7 +315,7 @@ func makeSizeReadable(size int64) string {
 	v := float64(size)
 	switch {
 	case v < 1000:
-		return fmt.Sprintf("%.2fB",v)
+		return fmt.Sprintf("%.0f bytes",v)
 	case v < 1000000:
 		return fmt.Sprintf("%.2fKB",v/1000)
 	case v < 1000000000:

@@ -74,6 +74,7 @@ func mainRoutine(t *Transfer) {
 
 		// make ip connection
 		if err = connectToPeer(t); err != nil {
+			t.output(err.Error())
 			t.output("Aborting transfer.")
 			return
 		}
@@ -136,6 +137,7 @@ func mainRoutine(t *Transfer) {
 
 		// make ip connection
 		if err = connectToPeer(t); err != nil {
+			t.output(err.Error())
 			t.output("Aborting transfer.")
 			return
 		}
