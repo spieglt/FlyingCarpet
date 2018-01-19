@@ -27,7 +27,7 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 
 	showProgressBar(t)
 	fileSize := getSize(file)
-	t.output(fmt.Sprintf("File size: %d\nMD5 hash: %x", fileSize, getHash(t.Filepath)))
+	t.output(fmt.Sprintf("File size: %s\nMD5 hash: %x", makeSizeReadable(fileSize), getHash(t.Filepath)))
 	numChunks := ceil(fileSize, CHUNKSIZE)
 
 	bytesLeft := fileSize
@@ -163,7 +163,7 @@ func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
 	}
 
 
-	t.output(fmt.Sprintf("Filename: %s\nFile size: %d", filename, fileSize))
+	t.output(fmt.Sprintf("Filename: %s\nFile size: %s", filename, makeSizeReadable(fileSize)))
 	updateFilename(t)
 	// progress bar
 	showProgressBar(t)
@@ -309,4 +309,18 @@ func min(x, y int64) int64 {
 		return x
 	}
 	return y
+}
+
+func makeSizeReadable(size int64) string {
+	v := float64(size)
+	switch {
+	case v < 1000:
+		return fmt.Sprintf("%.2fB",v)
+	case v < 1000000:
+		return fmt.Sprintf("%.2fKB",v/1000)
+	case v < 1000000000:
+		return fmt.Sprintf("%.2fMB",v/1000000)
+	default:
+		return fmt.Sprintf("%.2fGB",v/1000000000)
+	}
 }
