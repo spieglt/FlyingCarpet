@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/dontpanic92/wxGo/wx"
 	"math/rand"
 	"net"
 	"runtime"
@@ -36,14 +35,9 @@ type Transfer struct {
 }
 
 func main() {
-	wx1 := wx.NewApp("Flying Carpet")
-	mf := newGui()
-	mf.Show()
-	wx1.MainLoop()
-	return
-}
 
-func mainRoutine(t *Transfer) {
+	// get flags
+
 	wfdc := make(chan string)
 	t.WifiDirectChan = wfdc
 	var err error
