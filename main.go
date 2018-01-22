@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bufio"
+	"strings"
 	"context"
 	"crypto/md5"
 	"errors"
+	"flag"
 	"fmt"
-	"github.com/dontpanic92/wxGo/wx"
+	"os"
+	"log"
 	"math/rand"
 	"net"
 	"runtime"
@@ -31,26 +35,69 @@ type Transfer struct {
 	Ctx            context.Context
 	CancelCtx      context.CancelFunc
 	WifiDirectChan chan string
-	Frame          *MainFrame
-	// cli?
 }
 
 func main() {
-	wx1 := wx.NewApp("Flying Carpet")
-	mf := newGui()
-	mf.Show()
-	wx1.MainLoop()
-	return
-}
 
-func mainRoutine(t *Transfer) {
+	// get flags
+	if len(os.Args) == 1 {
+		printUsage()
+		return
+	}
+
+	var p_outFile = flag.String("send", "", "File to be sent. (Use [ -multi ] flag for multiple files, and feed list of files into stdin separated by newlines.")
+	var p_inFolder = flag.String("receive", "", "Destination directory for files to be received.")
+	var p_port = flag.Int("port", 3290, "TCP port to use (must match on both ends).")
+	var p_peer = flag.String("peer", "", "Use \"-peer linux\", \"-peer mac\", or \"-peer windows\" to match the other computer.")
+	flag.Parse()
+	outFile := *p_outFile
+	inFolder := *p_inFolder
+	port := *p_port
+	peer := *p_peer
+	list := []string{}
+
+	// validate
+	if peer == "" || ( peer != "mac" && peer != "windows" && peer != "linux") {
+		log.Fatal("Must choose [ -peer linux|mac|windows ].")
+	}
+
 	wfdc := make(chan string)
-	t.WifiDirectChan = wfdc
+
+	T := Transfer{
+		WifiDirectChan: wfdc,
+		Port: port,
+		Peer: peer,
+
+	}
+	t := &T
+
+	// if multi flag specified, take newline separated list from stdin. if not, check for presence of outFile, inFolder.
+	multi := false
+	for _,v := range os.Args {
+		if v == "-multi" || v == "-m" {
+			multi = true
+			fmt.Println("Multi flag specified, reading file list from stdin.")
+			reader := bufio.NewReader(os.Stdin)
+			file, err := reader.ReadString('\n')
+			for err == nil {
+				list = append(list, strings.TrimSpace(file))
+				file, err = reader.ReadString('\n')
+			}
+		}
+	}
+	if !multi && outFile == "" && inFolder != "" { // receiving
+		t.Filepath = inFolder
+	} else if !multi && outFile != "" && inFolder == "" { // sending single file
+		t.Filepath = outFile
+	} else {
+		printUsage()
+		return
+	}
+
 	var err error
 
 	// cleanup
 	defer func() {
-		enableStartButton(t)
 		resetWifi(t)
 	}()
 
@@ -128,9 +175,6 @@ func mainRoutine(t *Transfer) {
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
-		showPassphraseEvt := wx.NewThreadEvent(wx.EVT_THREAD, POP_UP_PASSWORD)
-		showPassphraseEvt.SetString(t.Passphrase)
-		t.Frame.QueueEvent(showPassphraseEvt)
 		t.output(fmt.Sprintf("=============================\n"+
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
 			"=============================\n", t.Passphrase))
@@ -235,4 +279,32 @@ func generatePassword() string {
 		pwBytes[i] = chars[rand.Intn(len(chars))]
 	}
 	return string(pwBytes)
+}
+
+func getPassword() (pw string) {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter password from receiving end: ")
+	pw,err := reader.ReadString('\n')
+	if err != nil {
+		panic("Error getting password.")
+	}
+	pw = strings.TrimSpace(pw)
+	return
+}
+
+func printUsage() {
+	fmt.Println("\nSingle file usage:")
+	fmt.Println("(Windows) $ flyingcarpet.exe -send ./movie.mp4 -peer mac")
+	fmt.Println("[Enter password from receiving end.]")
+	fmt.Println("  (Mac)   $ ./flyingcarpet -receive ./destinationFolder -peer windows")
+	fmt.Println("[Enter password into sending end.]\n")
+
+	fmt.Println("Multiple file usage:")
+	fmt.Println(" (Linux)  $ ls *.jpg | ./flyingcarpet -multi -peer windows")
+	fmt.Println("(Windows) $ flyingcarpet.exe -receive .\\picturesFolder -peer linux\n")
+	return
+}
+
+func (t *Transfer) output(msg string) {
+	fmt.Println(msg)
 }

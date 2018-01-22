@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/dontpanic92/wxGo/wx"
 	"io"
 	"net"
 	"os"
@@ -25,26 +24,12 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 	}
 	defer file.Close()
 
-	showProgressBar(t)
 	fileSize := getSize(file)
 	t.output(fmt.Sprintf("File size: %s\nMD5 hash: %x", makeSizeReadable(fileSize), getHash(t.Filepath)))
 	numChunks := ceil(fileSize, CHUNKSIZE)
 
 	bytesLeft := fileSize
 	var i int64
-
-	ticker := time.NewTicker(time.Millisecond * 1000)
-	go func() {
-		for _ = range ticker.C {
-			select {
-			case <-t.Ctx.Done():
-				return
-			default:
-				percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
-				updateProgressBar(int(percentDone), t)
-			}
-		}
-	}()
 
 	// transmit filename and size
 	filename := filepath.Base(t.Filepath)
@@ -91,6 +76,7 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 			if bytes != len(encryptedBuffer) {
 				return errors.New("Send error. Please quit and restart Flying Carpet.")
 			}
+			fmt.Printf("\rProgress: %3.0f%%", (float64(fileSize)-float64(bytesLeft))/float64(fileSize)*100)
 		}
 	}
 	// send chunkSize of 0 and then wait until receiving end tells us they have everything.
@@ -117,8 +103,6 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 
 	//////////
 
-	ticker.Stop()
-	updateProgressBar(100, t)
 	t.output(fmt.Sprintf("Sending took %s", time.Since(start)))
 	return nil
 }
@@ -164,23 +148,7 @@ func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
 
 
 	t.output(fmt.Sprintf("Filename: %s\nFile size: %s", filename, makeSizeReadable(fileSize)))
-	updateFilename(t)
-	// progress bar
-	showProgressBar(t)
 	bytesLeft := fileSize
-	ticker := time.NewTicker(time.Millisecond * 1000)
-	go func() {
-		for _ = range ticker.C {
-			select {
-			case <-t.Ctx.Done():
-				return
-			default:
-				percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
-				updateProgressBar(int(percentDone), t)
-			}
-		}
-	}()
-	/////////////////////////////
 
 	outFile, err := os.OpenFile(t.Filepath, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
@@ -224,14 +192,13 @@ outer:
 				return errors.New("Error writing to out file. Please quit and restart Flying Carpet.")
 			}
 			bytesLeft -= int64(len(decryptedChunk))
+			fmt.Printf("\rProgress: %3.0f%%", (float64(fileSize)-float64(bytesLeft))/float64(fileSize)*100)
 		}
 	}
 
 	// wait till we've received everything before signalling to other end that it's okay to stop sending.
 	binary.Write(conn, binary.BigEndian, int64(1))
 
-	ticker.Stop()
-	updateProgressBar(100, t)
 	t.output(fmt.Sprintf("Received file size: %d", getSize(outFile)))
 	t.output(fmt.Sprintf("Received file hash: %x", getHash(t.Filepath)))
 	t.output(fmt.Sprintf("Receiving took %s", time.Since(start)))
@@ -278,23 +245,6 @@ func getHash(filepath string) (md5hash []byte) {
 	}
 	md5hash = hash.Sum(nil)
 	return
-}
-
-func updateProgressBar(percentage int, t *Transfer) {
-	progressEvt := wx.NewThreadEvent(wx.EVT_THREAD, PROGRESS_BAR_UPDATE)
-	progressEvt.SetInt(percentage)
-	t.Frame.QueueEvent(progressEvt)
-}
-
-func showProgressBar(t *Transfer) {
-	progressEvt := wx.NewThreadEvent(wx.EVT_THREAD, PROGRESS_BAR_SHOW)
-	t.Frame.QueueEvent(progressEvt)
-}
-
-func updateFilename(t *Transfer) {
-	filenameEvt := wx.NewThreadEvent(wx.EVT_THREAD, RECEIVE_FILE_UPDATE)
-	filenameEvt.SetString(t.Filepath)
-	t.Frame.QueueEvent(filenameEvt)
 }
 
 func ceil(x, y int64) int64 {
