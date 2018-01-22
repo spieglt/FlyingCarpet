@@ -40,7 +40,6 @@ type Transfer struct {
 func main() {
 
 	// get flags
-<<<<<<< HEAD
 	if len(os.Args) == 1 {
 		printUsage()
 		return
@@ -61,8 +60,6 @@ func main() {
 	if peer == "" || ( peer != "mac" && peer != "windows" && peer != "linux") {
 		log.Fatal("Must choose [ -peer linux|mac|windows ].")
 	}
-=======
->>>>>>> 84f84693d42069c7157c1977f139e6e9752b7956
 
 	wfdc := make(chan string)
 
