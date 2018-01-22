@@ -23,7 +23,7 @@ int joinAdHoc(char * cSSID, char * cPassword) {
 	NSError * ibssErr = nil;
 	NSSet<CWNetwork *> * network = [iface scanForNetworksWithName:SSID error:&ibssErr];
 	BOOL result = [iface associateToNetwork:network.anyObject password:password error:&ibssErr];
-	NSLog(@"%d", result);
+	// NSLog(@"%d", result);
 	return result;
 }
 */

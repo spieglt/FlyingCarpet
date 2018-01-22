@@ -45,7 +45,10 @@ func main() {
 		return
 	}
 
-	var p_outFile = flag.String("send", "", "File to be sent. (Use [ -multi ] flag for multiple files, and feed list of files into stdin separated by newlines.")
+	var p_outFile = flag.String("send", "", "File to be sent. (Use [ -send multi ] for multiple files, and feed list of files into stdin separated by newlines.\n" + 
+		"Example (Windows Powershell): ls -name . | .\\flyingcarpet.exe -send multi -peer mac\n" + 
+		"Example (Windows Command Prompt): dir /B . | ./flyingcarpet -send multi -peer linux\n" + 
+		"Example (Bash macOS/Linux): ls . | ./flyingcarpet -send multi -peer windows\n")
 	var p_inFolder = flag.String("receive", "", "Destination directory for files to be received.")
 	var p_port = flag.Int("port", 3290, "TCP port to use (must match on both ends).")
 	var p_peer = flag.String("peer", "", "Use \"-peer linux\", \"-peer mac\", or \"-peer windows\" to match the other computer.")
@@ -62,32 +65,35 @@ func main() {
 	}
 
 	wfdc := make(chan string)
+	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	T := Transfer{
 		WifiDirectChan: wfdc,
 		Port: port,
 		Peer: peer,
+		Ctx:       ctx,
+		CancelCtx: cancelCtx,
 
 	}
 	t := &T
 
 	// if multi flag specified, take newline separated list from stdin. if not, check for presence of outFile, inFolder.
-	multi := false
-	for _,v := range os.Args {
-		if v == "-multi" || v == "-m" {
-			multi = true
-			fmt.Println("Multi flag specified, reading file list from stdin.")
-			reader := bufio.NewReader(os.Stdin)
-			file, err := reader.ReadString('\n')
-			for err == nil {
-				list = append(list, strings.TrimSpace(file))
-				file, err = reader.ReadString('\n')
-			}
+
+	if outFile == "multi" { // -send multi
+		t.Mode = "sending"
+		fmt.Println("Multi flag specified, reading file list from stdin.")
+		reader := bufio.NewReader(os.Stdin)
+		file, err := reader.ReadString('\n')
+		for err == nil {
+			list = append(list, strings.TrimSpace(file))
+			file, err = reader.ReadString('\n')
 		}
-	}
-	if !multi && outFile == "" && inFolder != "" { // receiving
+		t.FileList = list
+	} else if outFile == "" && inFolder != "" { // receiving
+		t.Mode = "receiving"
 		t.Filepath = inFolder
-	} else if !multi && outFile != "" && inFolder == "" { // sending single file
+	} else if outFile != "" && inFolder == "" { // sending single file
+		t.Mode = "sending"
 		t.Filepath = outFile
 	} else {
 		printUsage()
