@@ -14,3 +14,4 @@ adhoc.xml
 wdlap.exe
 go-bindata*
 err.txt
+.vscode

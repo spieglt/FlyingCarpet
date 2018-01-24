@@ -2,18 +2,18 @@ package main
 
 import (
 	"bufio"
-	"strings"
 	"context"
 	"crypto/md5"
 	"errors"
 	"flag"
 	"fmt"
-	"os"
 	"log"
 	"math/rand"
 	"net"
+	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -45,9 +45,9 @@ func main() {
 		return
 	}
 
-	var p_outFile = flag.String("send", "", "File to be sent. (Use [ -send multi ] for multiple files, and feed list of files into stdin separated by newlines.\n" + 
-		"Example (Windows Powershell): ls -name . | .\\flyingcarpet.exe -send multi -peer mac\n" + 
-		"Example (Windows Command Prompt): dir /B . | ./flyingcarpet -send multi -peer linux\n" + 
+	var p_outFile = flag.String("send", "", "File to be sent. (Use [ -send multi ] for multiple files, and feed list of files into stdin separated by newlines.\n"+
+		"Example (Windows Powershell): ls -name . | .\\flyingcarpet.exe -send multi -peer mac\n"+
+		"Example (Windows Command Prompt): dir /B . | ./flyingcarpet -send multi -peer linux\n"+
 		"Example (Bash macOS/Linux): ls . | ./flyingcarpet -send multi -peer windows\n")
 	var p_inFolder = flag.String("receive", "", "Destination directory for files to be received.")
 	var p_port = flag.Int("port", 3290, "TCP port to use (must match on both ends).")
@@ -60,7 +60,7 @@ func main() {
 	list := []string{}
 
 	// validate
-	if peer == "" || ( peer != "mac" && peer != "windows" && peer != "linux") {
+	if peer == "" || (peer != "mac" && peer != "windows" && peer != "linux") {
 		log.Fatal("Must choose [ -peer linux|mac|windows ].")
 	}
 
@@ -69,11 +69,10 @@ func main() {
 
 	T := Transfer{
 		WifiDirectChan: wfdc,
-		Port: port,
-		Peer: peer,
-		Ctx:       ctx,
-		CancelCtx: cancelCtx,
-
+		Port:           port,
+		Peer:           peer,
+		Ctx:            ctx,
+		CancelCtx:      cancelCtx,
 	}
 	t := &T
 
@@ -124,14 +123,12 @@ func main() {
 		} else if runtime.GOOS == "linux" {
 			t.PreviousSSID = getCurrentUUID(t)
 		}
-
 		// make ip connection
 		if err = connectToPeer(t); err != nil {
 			t.output(err.Error())
 			t.output("Aborting transfer.")
 			return
 		}
-
 		// make tcp connection
 		conn, err := dialPeer(t)
 		if conn != nil {
@@ -163,7 +160,7 @@ func main() {
 				return
 			}
 		}
-	
+
 		t.output("Send complete, resetting WiFi and exiting.")
 
 	} else if t.Mode == "receiving" {
@@ -238,7 +235,7 @@ func listenForPeer(t *Transfer) (*net.TCPListener, *net.Conn, error) {
 
 	for {
 		select {
-		case <- t.Ctx.Done():
+		case <-t.Ctx.Done():
 			return nil, nil, errors.New("Exiting listenForPeer, transfer was canceled.")
 		default:
 			ln.SetDeadline(time.Now().Add(time.Second))
@@ -290,7 +287,7 @@ func generatePassword() string {
 func getPassword() (pw string) {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Enter password from receiving end: ")
-	pw,err := reader.ReadString('\n')
+	pw, err := reader.ReadString('\n')
 	if err != nil {
 		panic("Error getting password.")
 	}

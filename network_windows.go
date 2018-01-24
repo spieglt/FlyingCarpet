@@ -55,7 +55,10 @@ func startAdHoc(t *Transfer) (err error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err = cmd.CombinedOutput()
 	// TODO: replace with "echo %errorlevel%" == "1"
-	if err.Error() == "exit status 1" {
+	if err == nil {
+		t.AdHocCapable = true
+		return
+	} else if err.Error() == "exit status 1" {
 		t.output("Could not start hosted network, trying Wi-Fi Direct.")
 		t.AdHocCapable = false
 
@@ -64,12 +67,10 @@ func startAdHoc(t *Transfer) (err error) {
 			return errors.New("Could not start Wi-Fi Direct: " + msg)
 		}
 		return nil
-	} else if err == nil {
-		t.AdHocCapable = true
-		return
 	} else {
 		return errors.New("Could not start hosted network: " + err.Error())
 	}
+	return
 }
 
 func stopAdHoc(t *Transfer) {
@@ -199,8 +200,8 @@ func findPeer(t *Transfer) (string, error) {
 	t.output("Looking for peer IP...")
 	for !ipPattern.Match([]byte(peerIP)) {
 		select {
-		case <- t.Ctx.Done():
-			return "",errors.New("Exiting joinAdHoc, transfer was canceled.")
+		case <-t.Ctx.Done():
+			return "", errors.New("Exiting joinAdHoc, transfer was canceled.")
 		default:
 			peerString := "$(arp -a -N " + ifAddr + " | Select-String -Pattern '(?<ip>192\\.168\\." + thirdOctet + "\\.\\d{1,3})' | Select-String -NotMatch '(?<nm>(" + ifAddr + "|192.168." + thirdOctet + ".255)\\s)').Matches.Value"
 			peerCmd := exec.Command("powershell", "-c", peerString)
@@ -223,7 +224,7 @@ func getCurrentWifi(t *Transfer) (SSID string) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmdBytes, err := cmd.CombinedOutput()
 	if err != nil {
-		t.output("Error getting current SSID.")
+		t.output("Error getting current SSID: " + err.Error())
 	}
 	SSID = strings.TrimSpace(string(cmdBytes))
 	return
