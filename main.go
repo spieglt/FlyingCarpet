@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -45,10 +46,9 @@ func main() {
 		return
 	}
 
-	var p_outFile = flag.String("send", "", "File to be sent. (Use [ -send multi ] for multiple files, and feed list of files into stdin separated by newlines.\n"+
-		"Example (Windows Powershell): ls -name . | .\\flyingcarpet.exe -send multi -peer mac\n"+
-		"Example (Windows Command Prompt): dir /B . | ./flyingcarpet -send multi -peer linux\n"+
-		"Example (Bash macOS/Linux): ls . | ./flyingcarpet -send multi -peer windows\n")
+	var p_outFile = flag.String("send", "", "File to be sent. (Use [ -send multi ] for multiple files, and list files/globs after other flags.)\n\n"+
+		"Example (Windows): .\\flyingcarpet.exe -send multi -peer mac pic1.jpg pic35.jpg \"filename with spaces.docx\" *.txt\n"+
+		"Example (macOS/Linux): ./flyingcarpet -send multi -peer windows movie.mp4 ../*.mp3\n")
 	var p_inFolder = flag.String("receive", "", "Destination directory for files to be received.")
 	var p_port = flag.Int("port", 3290, "TCP port to use (must match on both ends).")
 	var p_peer = flag.String("peer", "", "Use \"-peer linux\", \"-peer mac\", or \"-peer windows\" to match the other computer.")
@@ -57,7 +57,6 @@ func main() {
 	inFolder := *p_inFolder
 	port := *p_port
 	peer := *p_peer
-	list := []string{}
 
 	// validate
 	if peer == "" || (peer != "mac" && peer != "windows" && peer != "linux") {
@@ -67,27 +66,31 @@ func main() {
 	wfdc := make(chan string)
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
-	T := Transfer{
+	t := &Transfer{
 		WifiDirectChan: wfdc,
 		Port:           port,
 		Peer:           peer,
 		Ctx:            ctx,
 		CancelCtx:      cancelCtx,
 	}
-	t := &T
 
 	// if multi flag specified, take newline separated list from stdin. if not, check for presence of outFile, inFolder.
 
 	if outFile == "multi" { // -send multi
 		t.Mode = "sending"
-		fmt.Println("Multi flag specified, reading file list from stdin.")
-		reader := bufio.NewReader(os.Stdin)
-		file, err := reader.ReadString('\n')
-		for err == nil {
-			list = append(list, strings.TrimSpace(file))
-			file, err = reader.ReadString('\n')
+		baseList := flag.Args()
+		var finalList []string
+		for _, filename := range baseList {
+			expandedList, err := filepath.Glob(filename)
+			if err != nil {
+				t.output(fmt.Sprintf("Error expanding glob %s: %s", filename, err))
+			}
+			for _, v := range expandedList {
+				finalList = append(finalList, v)
+			}
 		}
-		t.FileList = list
+		t.FileList = finalList
+		fmt.Println(t.FileList)
 	} else if outFile == "" && inFolder != "" { // receiving
 		t.Mode = "receiving"
 		t.Filepath = inFolder
@@ -303,7 +306,7 @@ func printUsage() {
 	fmt.Println("[Enter password into sending end.]\n")
 
 	fmt.Println("Multiple file usage:")
-	fmt.Println(" (Linux)  $ ls *.jpg | ./flyingcarpet -multi -peer windows")
+	fmt.Println(" (Linux)  $ ./flyingcarpet -multi -peer windows ../Pictures/*.jpg \"Filename with spaces.txt\" movie.mp4")
 	fmt.Println("(Windows) $ flyingcarpet.exe -receive .\\picturesFolder -peer linux\n")
 	return
 }
