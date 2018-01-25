@@ -41,9 +41,9 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Compilation instructions:
 
-+ Windows only: Compile WFD_DLL project with Visual Studio (Release, x64) and then run `makeIconSyso.bat` while in `icons/Windows` folder. Also install TDM-GCC (64-bit) (used for embedding icon in binary).
-
 + `go get -x github.com/spieglt/flyingcarpet`
+
++ Windows only: Compile WFD_DLL project with Visual Studio (Release, x64 mode) and then run `makeIconSyso.bat` while in `icons/Windows` folder. Also install TDM-GCC (64-bit) (used for embedding icon in binary).
 
 + Compile ![`go-bindata`](https://github.com/jteeuwen/go-bindata) and copy executable to `flyingcarpet` folder.
 
