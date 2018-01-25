@@ -117,6 +117,8 @@ func main() {
 			}
 		}()
 
+		t.Passphrase = getPassword()
+
 		pwBytes := md5.Sum([]byte(t.Passphrase))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
