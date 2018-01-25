@@ -15,6 +15,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -74,8 +76,7 @@ func main() {
 		CancelCtx:      cancelCtx,
 	}
 
-	// if multi flag specified, take newline separated list from stdin. if not, check for presence of outFile, inFolder.
-
+	// parse flags
 	if outFile == "multi" { // -send multi
 		t.Mode = "sending"
 		baseList := flag.Args()
@@ -117,6 +118,18 @@ func main() {
 		resetWifi(t)
 	}()
 
+	// trap SIGINT to teardown wifi before exiting in case user hits Ctrl-C
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT)
+	go func(t *Transfer) {
+		<-sigChan
+		t.output("Received interrupt signal, resetting WiFi and exiting.")
+		// t.CancelCtx()
+		resetWifi(t)
+		os.Exit(45)
+	}(t)
+
+	// main event
 	if t.Mode == "sending" {
 		// to stop searching for ad hoc network (if Mac jumps off)
 		defer func() {
