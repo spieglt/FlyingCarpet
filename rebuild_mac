@@ -1,6 +1,6 @@
 rm './bin/Flying Carpet (Mac).zip'
 
-go build
+go build -o ./flyingcarpet
 
 mkdir -p './Flying Carpet.app/Contents/MacOS'
 mkdir -p './Flying Carpet.app/Contents/Resources'

@@ -1,6 +1,6 @@
 rm './bin/Flying Carpet (Linux).zip'
 
-go build
+go build -o ./flyingcarpet
 
 mv './flyingcarpet' './Flying Carpet'
 

@@ -232,7 +232,7 @@ outer:
 
 	ticker.Stop()
 	updateProgressBar(100, t)
-	t.output(fmt.Sprintf("Received file size: %d", getSize(outFile)))
+	t.output(fmt.Sprintf("Received file size: %d", makeSizeReadable(getSize(outFile))))
 	t.output(fmt.Sprintf("Received file hash: %x", getHash(t.Filepath)))
 	t.output(fmt.Sprintf("Receiving took %s", time.Since(start)))
 

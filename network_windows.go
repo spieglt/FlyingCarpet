@@ -55,7 +55,10 @@ func startAdHoc(t *Transfer) (err error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err = cmd.CombinedOutput()
 	// TODO: replace with "echo %errorlevel%" == "1"
-	if err.Error() == "exit status 1" {
+	if err == nil {
+		t.AdHocCapable = true
+		return
+	} else if err.Error() == "exit status 1" {
 		t.output("Could not start hosted network, trying Wi-Fi Direct.")
 		t.AdHocCapable = false
 
@@ -64,9 +67,6 @@ func startAdHoc(t *Transfer) (err error) {
 			return errors.New("Could not start Wi-Fi Direct: " + msg)
 		}
 		return nil
-	} else if err == nil {
-		t.AdHocCapable = true
-		return
 	} else {
 		return errors.New("Could not start hosted network: " + err.Error())
 	}
@@ -223,7 +223,7 @@ func getCurrentWifi(t *Transfer) (SSID string) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmdBytes, err := cmd.CombinedOutput()
 	if err != nil {
-		t.output("Error getting current SSID.")
+		t.output("Error getting current SSID: " + err.Error())
 	}
 	SSID = strings.TrimSpace(string(cmdBytes))
 	return
