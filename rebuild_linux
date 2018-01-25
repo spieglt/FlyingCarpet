@@ -1,5 +1,5 @@
 rm './bin/flyingcarpet (Linux).zip'
 
-go build
+go build -o ./flyingcarpet
 
 zip './bin/flyingcarpet (Linux).zip' './flyingcarpet'

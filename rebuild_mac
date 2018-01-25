@@ -1,5 +1,5 @@
 rm './bin/flyingcarpet (Mac).zip'
 
-go build
+go build -o ./flyingcarpet
 
 zip -r './bin/flyingcarpet (Mac).zip' './flyingcarpet'

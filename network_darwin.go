@@ -218,7 +218,7 @@ func resetWifi(t *Transfer) {
 	t.output(runCommand(cmdString))
 	if t.Peer == "windows" || t.Peer == "linux" || t.Mode == "sending" {
 		cmdString = "networksetup -removepreferredwirelessnetwork " + wifiInterface + " " + t.SSID
-		t.output(runCommand(cmdString))
+		t.output(runCommand(cmdString) + " (If you did not enter password at prompt, SSID will not be removed from your System keychain or preferred networks list.)")
 	}
 }
 
