@@ -1,4 +1,5 @@
 # Flying Carpet
+
 Ready-to-use x64 `Flying Carpet (Linux).zip`, `Flying Carpet (Mac).zip`, and `Flying Carpet (Windows).zip` in ![`/bin`](bin)!
 
 Wireless, encrypted file transfer over automatically configured ad hoc networking. No network infrastructure required (access point, router, switch). Just two laptops (Mac, Linux, and Windows supported) with wireless chips in close range.
@@ -10,6 +11,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 ![](pictures/linuxDemo.png)  ![](pictures/winDemo.png)  ![](pictures/macDemo.png)
 
 # Features:
+
 + Cross-platform: Mac, Windows, and now Linux!
 
 + Speeds over 120mbps (with laptops close together).
@@ -30,9 +32,12 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + `go get -x github.com/spieglt/flyingcarpet`
 
++ Compile ![`go-bindata`](https://github.com/jteeuwen/go-bindata) and copy executable to `flyingcarpet` folder.
+
 + Run `.\rebuild.ps1` from Powershell (for Windows), `./rebuild_mac` from Terminal (for Mac), or `./rebuild_linux` (for Linux).
 
 # Restrictions:
+
 + 64-bit only. Supported Operating Systems: macOS 10.12+, Windows 10, and Linux Mint 18. Other versions may work, though I believe Windows 7 does not. I only have access to so many laptops, so if you've tried on other platforms please let me know whether it worked. 
 
 + Disables your wireless internet connection while in use (does not apply to Windows when receiving).
@@ -47,15 +52,11 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Planned features:
 
-+ Cancel button.
-
-+ Multifile (and possibly folder) support.
-
 + Maybe warn about running as administrator upon start on Windows.
 
 + Mac Only: Get rid of password prompt for removing Flying Carpet from preferred wireless networks list after transfer.
 
-+ Replace `nmcli` and `netsh wlan` with proper C/C++ WiFi APIs on Linux and Windows. 
++ Replace `netsh wlan` with Native WiFi API on Windows.
 
 Disclaimer: I am not a cryptography expert. Do not use for private files if you think a skilled attacker is less than 100 feet from you and trying to intercept them.
 

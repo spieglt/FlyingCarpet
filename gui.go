@@ -79,7 +79,7 @@ func newGui() *MainFrame {
 
 	// output box
 	outputBox := wx.NewTextCtrl(mf.Panel, wx.ID_ANY, "", wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE|wx.TE_READONLY)
-	outputBox.AppendText("Welcome to Flying Carpet!\n")
+	outputBox.AppendText("Welcome to Flying Carpet!\n\nPlease select whether you're sending or receiving, the OS of the other computer, your file(s) or folder, and press Start.\n")
 	bSizerBottom.Add(outputBox, 1, wx.ALL|wx.EXPAND, 0)
 	outputBox.SetSize(200, 200)
 
@@ -257,7 +257,7 @@ func newGui() *MainFrame {
 	// password pop-up event
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
 		threadEvent := wx.ToThreadEvent(e)
-		dialog := wx.NewMessageDialog(mf.Panel, "Enter this password into sending\nend after pressing Start:\n\n"+threadEvent.GetString(), "Transfer Password", wx.OK, wx.DefaultPosition)
+		dialog := wx.NewMessageDialog(mf.Panel, "On sending end, after selecting options,\npress Start and enter this password:\n\n"+threadEvent.GetString(), "Transfer Password", wx.OK, wx.DefaultPosition)
 		dialog.ShowModal()
 	}, POP_UP_PASSWORD)
 
