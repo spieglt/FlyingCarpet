@@ -111,6 +111,7 @@ func main() {
 	} else if outFile != "" && inFolder == "" { // sending single file
 		t.Mode = "sending"
 		t.Filepath = outFile
+		t.FileList = append(t.FileList, t.Filepath)
 	} else {
 		printUsage()
 		return
