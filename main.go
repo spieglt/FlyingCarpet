@@ -90,7 +90,7 @@ func main() {
 			}
 		}
 		t.FileList = finalList
-		fmt.Println(t.FileList)
+		// fmt.Println(t.FileList)
 	} else if outFile == "" && inFolder != "" { // receiving
 		t.Mode = "receiving"
 		t.Filepath = inFolder
