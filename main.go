@@ -316,8 +316,10 @@ func printUsage() {
 	fmt.Println("[Enter password into sending end.]\n")
 
 	fmt.Println("Multiple file usage:")
-	fmt.Println(" (Linux)  $ ./flyingcarpet -multi -peer windows ../Pictures/*.jpg \"Filename with spaces.txt\" movie.mp4")
+	fmt.Println(" (Linux)  $ ./flyingcarpet -send multi -peer windows ../Pictures/*.jpg \"Filename with spaces.txt\" movie.mp4")
+	fmt.Println("[Enter password from receiving end.]")
 	fmt.Println("(Windows) $ flyingcarpet.exe -receive .\\picturesFolder -peer linux\n")
+	fmt.Println("[Enter password into sending end.]\n")
 	return
 }
 
