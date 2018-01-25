@@ -200,7 +200,7 @@ outer:
 	// wait till we've received everything before signalling to other end that it's okay to stop sending.
 	binary.Write(conn, binary.BigEndian, int64(1))
 
-	t.output(fmt.Sprintf("Received file size: %d", getSize(outFile)))
+	t.output(fmt.Sprintf("Received file size: %d", makeSizeReadable(getSize(outFile))))
 	t.output(fmt.Sprintf("Received file hash: %x", getHash(t.Filepath)))
 	t.output(fmt.Sprintf("Receiving took %s", time.Since(start)))
 
