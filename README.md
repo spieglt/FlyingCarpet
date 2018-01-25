@@ -1,3 +1,13 @@
+**MAJOR UPDATES:**
+
++ **multi-file transfers**
+
++ **cancel button**
+
++ **![CLI version](https://github.com/spieglt/FlyingCarpet/tree/cli)**
+
++ **fix for bug that prevented hosted-network-capable Windows machines from working.**
+
 # Flying Carpet
 
 Ready-to-use x64 `Flying Carpet (Linux).zip`, `Flying Carpet (Mac).zip`, and `Flying Carpet (Windows).zip` in ![`/bin`](bin)!
@@ -14,6 +24,8 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + Cross-platform: Mac, Windows, and now Linux!
 
++ Transfer multiple files at once, without losing progress if the transfer is interrupted or canceled.
+
 + Speeds over 120mbps (with laptops close together).
 
 + Does not use Bluetooth or your local network, just wireless chip to wireless chip.
@@ -23,6 +35,8 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + Large files supported (<10MB RAM usage while transferring a 4.5GB file).
 
 + Standalone executable, no installation required and no dependencies needed.
+
++ Interoperable GUI and CLI versions.
 
 # Compilation instructions:
 
@@ -38,7 +52,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Restrictions:
 
-+ 64-bit only. Supported Operating Systems: macOS 10.12+, Windows 10, and Linux Mint 18. Other versions may work, though I believe Windows 7 does not. I only have access to so many laptops, so if you've tried on other platforms please let me know whether it worked. 
++ 64-bit only. Supported Operating Systems: macOS 10.12+, Windows 7+, and Linux Mint 18. I only have access to so many laptops, so if you've tried on other platforms please let me know whether it worked. 
 
 + Disables your wireless internet connection while in use (does not apply to Windows when receiving).
 
@@ -48,13 +62,11 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + I need help testing on Linux and supporting non-Debian-based distributions! Currently only confirmed to work on Mint 18.
 
-+ After a successful transfer, Flying Carpet will attempt to rejoin you to your previous wireless networks. If there is an error midway through the process, this may fail.
++ Flying Carpet should rejoin you to your previous wireless network after a completed or canceled transfer. This will not happen if the program freezes, crashes, or if the windows is closed during operation.
 
 # Planned features:
 
 + Maybe warn about running as administrator upon start on Windows.
-
-+ Mac Only: Get rid of password prompt for removing Flying Carpet from preferred wireless networks list after transfer.
 
 + Replace `netsh wlan` with Native WiFi API on Windows.
 
