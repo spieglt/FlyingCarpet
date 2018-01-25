@@ -1,4 +1,4 @@
-**Note: to send multiple files, use the `-send` flag with value `multi`, and then list however many files/globs after other flags. You standard shell character-escaping rules apply.**
+**Note: to send multiple files, use the `-send` flag with value `multi`, and then list however many files/globs after other flags. Standard shell character-escaping rules apply.**
 
 **Linux/Mac example:**
 
