@@ -79,6 +79,7 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 			fmt.Printf("\rProgress: %3.0f%%", (float64(fileSize)-float64(bytesLeft))/float64(fileSize)*100)
 		}
 	}
+	fmt.Printf("\n")
 	// send chunkSize of 0 and then wait until receiving end tells us they have everything.
 	binary.Write(conn, binary.BigEndian, int64(0))
 
@@ -195,6 +196,7 @@ outer:
 			fmt.Printf("\rProgress: %3.0f%%", (float64(fileSize)-float64(bytesLeft))/float64(fileSize)*100)
 		}
 	}
+	fmt.Printf("\n")
 
 	// wait till we've received everything before signalling to other end that it's okay to stop sending.
 	binary.Write(conn, binary.BigEndian, int64(1))

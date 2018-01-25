@@ -86,11 +86,15 @@ func main() {
 				t.output(fmt.Sprintf("Error expanding glob %s: %s", filename, err))
 			}
 			for _, v := range expandedList {
+				v, err = filepath.Abs(v)
+				if err != nil {
+					t.output(fmt.Sprintf("Error getting abs path for %s: %s", v, err))
+				}
 				finalList = append(finalList, v)
 			}
 		}
 		t.FileList = finalList
-		// fmt.Println(t.FileList)
+		fmt.Println(t.FileList)
 	} else if outFile == "" && inFolder != "" { // receiving
 		t.Mode = "receiving"
 		t.Filepath = inFolder
