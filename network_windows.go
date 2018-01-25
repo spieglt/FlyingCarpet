@@ -70,7 +70,6 @@ func startAdHoc(t *Transfer) (err error) {
 	} else {
 		return errors.New("Could not start hosted network: " + err.Error())
 	}
-	return
 }
 
 func stopAdHoc(t *Transfer) {

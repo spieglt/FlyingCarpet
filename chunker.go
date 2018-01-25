@@ -147,7 +147,6 @@ func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
 		t.Filepath = t.Filepath + t.SSID + "_" + filename
 	}
 
-
 	t.output(fmt.Sprintf("Filename: %s\nFile size: %s", filename, makeSizeReadable(fileSize)))
 	bytesLeft := fileSize
 
@@ -267,12 +266,12 @@ func makeSizeReadable(size int64) string {
 	v := float64(size)
 	switch {
 	case v < 1000:
-		return fmt.Sprintf("%.0f bytes",v)
+		return fmt.Sprintf("%.0f bytes", v)
 	case v < 1000000:
-		return fmt.Sprintf("%.2fKB",v/1000)
+		return fmt.Sprintf("%.2fKB", v/1000)
 	case v < 1000000000:
-		return fmt.Sprintf("%.2fMB",v/1000000)
+		return fmt.Sprintf("%.2fMB", v/1000000)
 	default:
-		return fmt.Sprintf("%.2fGB",v/1000000000)
+		return fmt.Sprintf("%.2fGB", v/1000000000)
 	}
 }

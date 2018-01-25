@@ -97,7 +97,11 @@ func main() {
 		fmt.Println(t.FileList)
 	} else if outFile == "" && inFolder != "" { // receiving
 		t.Mode = "receiving"
-		t.Filepath = inFolder
+		path, err := filepath.Abs(inFolder)
+		if err != nil {
+			t.output(fmt.Sprintf("Error getting abs path for %s: %s", inFolder, err))
+		}
+		t.Filepath = path + string(os.PathSeparator)
 	} else if outFile != "" && inFolder == "" { // sending single file
 		t.Mode = "sending"
 		t.Filepath = outFile
