@@ -94,8 +94,13 @@ func main() {
 				finalList = append(finalList, v)
 			}
 		}
+		if len(finalList) == 0 {
+			t.output("No files found to send! When using [ -send multi ], list files to send after other flags. Wildcards accepted.")
+			printUsage()
+			return
+		}
 		t.FileList = finalList
-		fmt.Println(t.FileList)
+		// fmt.Println(t.FileList)
 	} else if outFile == "" && inFolder != "" { // receiving
 		t.Mode = "receiving"
 		path, err := filepath.Abs(inFolder)
