@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -259,8 +260,8 @@ func addFirewallRule(t *Transfer) (err error) {
 	if err != nil {
 		return errors.New("Failed to get executable path: " + err.Error())
 	}
-	cmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name=flyingcarpet", "dir=in",
-		"action=allow", "program='"+execPath+"'", "enable=yes", "profile=any", "localport=3290", "protocol=tcp")
+	cmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+filepath.Base(execPath), "dir=in",
+		"action=allow", "program="+execPath, "enable=yes", "profile=any", "localport=3290", "protocol=tcp")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err = cmd.CombinedOutput()
 	if err != nil {
@@ -271,8 +272,17 @@ func addFirewallRule(t *Transfer) (err error) {
 }
 
 func deleteFirewallRule(t *Transfer) {
-	fwStr := "netsh advfirewall firewall delete rule name=flyingcarpet"
-	t.output(runCommand(fwStr))
+	execPath, err := os.Executable()
+	if err != nil {
+		t.output("Failed to get executable path: " + err.Error())
+	}
+	cmd := exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name="+filepath.Base(execPath))
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	result, err := cmd.CombinedOutput()
+	if err != nil {
+		t.output("Could not create firewall rule. You must run as administrator to receive. (Press Win+X and then A to start an administrator command prompt.) " + err.Error())
+	}
+	t.output(string(result))
 }
 
 func runCommand(cmdStr string) (output string) {
