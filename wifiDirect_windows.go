@@ -21,7 +21,7 @@ func startLegacyAP(t *Transfer) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmdBytes, err := cmd.CombinedOutput()
 	if err != nil {
-		t.WifiDirectChan <- "Error getting temp location."
+		t.WfdRecvChan <- "Error getting temp location."
 		return
 	}
 	tmpLoc := strings.TrimSpace(string(cmdBytes)) + "\\AppData\\Local\\Temp\\wfd.dll"
@@ -34,16 +34,16 @@ func startLegacyAP(t *Transfer) {
 		}
 		data, err := Asset("static/wfd.dll")
 		if err != nil {
-			t.WifiDirectChan <- err.Error()
+			t.WfdRecvChan <- err.Error()
 			return
 		}
 		outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
 		if err != nil {
-			t.WifiDirectChan <- err.Error()
+			t.WfdRecvChan <- err.Error()
 			return
 		}
 		if _, err = outFile.Write(data); err != nil {
-			t.WifiDirectChan <- err.Error()
+			t.WfdRecvChan <- err.Error()
 			return
 		}
 		outFile.Close()
@@ -52,7 +52,7 @@ func startLegacyAP(t *Transfer) {
 		// Use DLL
 		dll, err = syscall.LoadDLL(tmpLoc)
 		if err != nil {
-			t.WifiDirectChan <- fmt.Sprintf("Loading DLL failed: %s", err)
+			t.WfdRecvChan <- fmt.Sprintf("Loading DLL failed: %s", err)
 			return
 		}
 	}
@@ -73,12 +73,12 @@ func startLegacyAP(t *Transfer) {
 	cInitRes, _, initErr := ConsoleInit.Call()
 	initRes := int(cInitRes)
 	if initRes == 0 {
-		t.WifiDirectChan <- fmt.Sprintf("Initializing Windows Runtime for Wi-Fi Direct failed: %s", initErr)
+		t.WfdRecvChan <- fmt.Sprintf("Initializing Windows Runtime for Wi-Fi Direct failed: %s", initErr)
 		return
 	} else if initRes == 1 {
 		t.output("Initialized Windows Runtime.")
 	} else {
-		t.WifiDirectChan <- fmt.Sprintf("Something went wrong with initializing Windows Runtime: %d.", initRes)
+		t.WfdRecvChan <- fmt.Sprintf("Something went wrong with initializing Windows Runtime: %d.", initRes)
 		return
 	}
 
@@ -99,11 +99,11 @@ func startLegacyAP(t *Transfer) {
 	ExecuteCommand.Call(uintptr(autoaccept))
 	ExecuteCommand.Call(uintptr(start))
 
-	t.WifiDirectChan <- "started"
+	t.WfdRecvChan <- "started"
 	// in loop, listen on chan to commands from rest of program
 	for {
 		select {
-		case msg, ok := <-t.WifiDirectChan:
+		case msg, ok := <-t.WfdSendChan:
 			if !ok || msg == "quit" {
 				cFreeRes, _, _ := ConsoleFree.Call()
 				freeRes := int(cFreeRes)
@@ -111,7 +111,7 @@ func startLegacyAP(t *Transfer) {
 					t.output("Failed to uninitialize Windows Runtime.")
 				}
 			}
-			t.WifiDirectChan <- "Wifi-Direct stopped."
+			t.WfdRecvChan <- "Wifi-Direct stopped."
 			return
 		default:
 			time.Sleep(time.Second * 3)

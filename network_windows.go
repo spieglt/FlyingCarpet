@@ -54,16 +54,16 @@ func startAdHoc(t *Transfer) (err error) {
 	cmd := exec.Command("netsh", "wlan", "start", "hostednetwork")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err = cmd.CombinedOutput()
-	// TODO: replace with "echo %errorlevel%" == "1"
 	if err == nil {
 		t.AdHocCapable = true
 		return
+	// TODO: replace with "echo %errorlevel%" == "1"
 	} else if err.Error() == "exit status 1" {
 		t.output("Could not start hosted network, trying Wi-Fi Direct.")
 		t.AdHocCapable = false
 
 		go startLegacyAP(t)
-		if msg := <-t.WifiDirectChan; msg != "started" {
+		if msg := <-t.WfdRecvChan; msg != "started" {
 			return errors.New("Could not start Wi-Fi Direct: " + msg)
 		}
 		return nil
@@ -77,11 +77,21 @@ func stopAdHoc(t *Transfer) {
 		t.output(runCommand("netsh wlan stop hostednetwork"))
 	} else {
 		t.output("Stopping Wi-Fi Direct.")
-		// TODO: blocking operation, check wifiDirect function is running.
-		t.WifiDirectChan <- "quit"
-		reply := <-t.WifiDirectChan
-		t.output(reply)
-		close(t.WifiDirectChan)
+		// blocking here, running this twice
+		timeChan := make(chan int)
+		go func() {
+			time.Sleep(time.Second * 2)
+			timeChan <- 0
+		}()
+		select {
+		case t.WfdSendChan <- "quit":
+			t.output("Sent quit")
+			reply := <-t.WfdRecvChan
+			t.output("Wi-Fi Direct says: " + reply)
+		case <-timeChan:
+			t.output("Wi-Fi Direct did not respond to quit request, is likely not running.")
+		}
+		close(t.WfdSendChan)
 	}
 }
 

@@ -37,7 +37,8 @@ type Transfer struct {
 	AdHocCapable   bool
 	Ctx            context.Context
 	CancelCtx      context.CancelFunc
-	WifiDirectChan chan string
+	WfdSendChan    chan string
+	WfdRecvChan    chan string
 }
 
 func main() {
@@ -65,11 +66,12 @@ func main() {
 		log.Fatal("Must choose [ -peer linux|mac|windows ].")
 	}
 
-	wfdc := make(chan string)
+	wfds, wfdr := make(chan string), make(chan string)
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	t := &Transfer{
-		WifiDirectChan: wfdc,
+		WfdSendChan: wfds,
+		WfdRecvChan: wfdr,
 		Port:           port,
 		Peer:           peer,
 		Ctx:            ctx,
@@ -321,7 +323,7 @@ func getPassword() (pw string) {
 	fmt.Print("Enter password from receiving end: ")
 	pw, err := reader.ReadString('\n')
 	if err != nil {
-		panic("Error getting password.")
+		fmt.Println("Error getting password:", err)
 	}
 	pw = strings.TrimSpace(pw)
 	return
