@@ -67,11 +67,6 @@ func startAdHoc(t *Transfer) (err error) {
 	return
 }
 
-func stopAdHoc(t *Transfer) {
-	command := "nmcli con down " + t.SSID
-	t.output(runCommand(command))
-}
-
 // TODO: fix this function, add error handling.
 func joinAdHoc(t *Transfer) (err error) {
 	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
@@ -111,18 +106,11 @@ func joinAdHoc(t *Transfer) (err error) {
 
 func resetWifi(t *Transfer) {
 	command := "nmcli con down \"" + t.SSID + "\""
-	runCommand(command)
-
-	if t.Mode == "sending" || t.Peer == "windows" {
-		// To delete all FC SSIDs:
-		// nmcli -t -f name con | grep flyingCarpet* | xargs -d '\n' nmcli con delete
-		command := "nmcli con delete " + t.SSID
-		t.output(runCommand(command))
-	}
-
-	command = "nmcli con up " + t.PreviousSSID
-	runCommand(command)
-
+	t.output(runCommand(command))
+	command = "nmcli con delete \"" + t.SSID + "\""
+	t.output(runCommand(command))
+	command = "nmcli con up \"" + t.PreviousSSID + "\""
+	t.output(runCommand(command))
 	return
 }
 
