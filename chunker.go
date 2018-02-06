@@ -83,13 +83,13 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 			chunkSize := int64(len(encryptedBuffer))
 			err = binary.Write(conn, binary.BigEndian, chunkSize)
 			if err != nil {
-				return errors.New("Error writing chunk length. Please quit and restart Flying Carpet.")
+				return errors.New("Error writing chunk length. Please quit and restart Flying Carpet. " + err.Error())
 			}
 
 			// send buffer
 			bytes, err := conn.Write(encryptedBuffer)
 			if bytes != len(encryptedBuffer) {
-				return errors.New("Send error. Please quit and restart Flying Carpet.")
+				return errors.New("Send error. Please quit and restart Flying Carpet. " + err.Error())
 			}
 		}
 	}
@@ -162,7 +162,6 @@ func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
 		t.Filepath = t.Filepath + t.SSID + "_" + filename
 	}
 
-
 	t.output(fmt.Sprintf("Filename: %s\nFile size: %s", filename, makeSizeReadable(fileSize)))
 	updateFilename(t)
 	// progress bar
@@ -187,6 +186,8 @@ func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
 		return errors.New("Error creating out file. Please quit and restart Flying Carpet.")
 	}
 	defer outFile.Close()
+	
+	var chunkSize int64
 outer:
 	for {
 		select {
@@ -194,10 +195,10 @@ outer:
 			return errors.New("Exiting dialPeer, transfer was canceled.")
 		default:
 			// get chunk size
-			var chunkSize int64
+			chunkSize = -1
 			err := binary.Read(conn, binary.BigEndian, &chunkSize)
-			if err != nil {
-				t.output(fmt.Sprintf("err: %s", err.Error()))
+			if err != nil || chunkSize == -1 {
+				return errors.New("Error reading chunk size: " + err.Error())
 			}
 			if chunkSize == 0 {
 				// done receiving
@@ -208,13 +209,11 @@ outer:
 			chunk := make([]byte, chunkSize)
 			bytesReceived, err := io.ReadFull(conn, chunk)
 			if err != nil {
-				t.output("Error reading from stream. Retrying.")
-				t.output(err.Error())
-				continue
+				return errors.New("Error reading from stream: " + err.Error())
 			}
 			// t.output(fmt.Sprintf("read %d bytes", bytesReceived))
 			if int64(bytesReceived) != chunkSize {
-				t.output(fmt.Sprintf("bytesReceived: %d\nchunkSize: %d", bytesReceived, chunkSize))
+				return errors.New(fmt.Sprintf("bytesReceived: %d\nchunkSize: %d", bytesReceived, chunkSize))
 			}
 
 			// decrypt and add to outfile
@@ -315,12 +314,12 @@ func makeSizeReadable(size int64) string {
 	v := float64(size)
 	switch {
 	case v < 1000:
-		return fmt.Sprintf("%.0f bytes",v)
+		return fmt.Sprintf("%.0f bytes", v)
 	case v < 1000000:
-		return fmt.Sprintf("%.2fKB",v/1000)
+		return fmt.Sprintf("%.2fKB", v/1000)
 	case v < 1000000000:
-		return fmt.Sprintf("%.2fMB",v/1000000)
+		return fmt.Sprintf("%.2fMB", v/1000000)
 	default:
-		return fmt.Sprintf("%.2fGB",v/1000000000)
+		return fmt.Sprintf("%.2fGB", v/1000000000)
 	}
 }

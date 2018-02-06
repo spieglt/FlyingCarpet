@@ -32,7 +32,6 @@ type Transfer struct {
 	CancelCtx      context.CancelFunc
 	WifiDirectChan chan string
 	Frame          *MainFrame
-	// cli?
 }
 
 func main() {
@@ -110,11 +109,10 @@ func mainRoutine(t *Transfer) {
 				return
 			}
 		}
-	
+
 		t.output("Send complete, resetting WiFi and exiting.")
 
 	} else if t.Mode == "receiving" {
-		// cleanup
 		defer func() {
 			// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
 			// and thus don't need to shut down the goroutine trying to stay on it. does this need to happen when peer is linux? yes.
@@ -145,10 +143,21 @@ func mainRoutine(t *Transfer) {
 		// make tcp connection
 		listener, conn, err := listenForPeer(t)
 		// wait till end to close listener and tcp connection for multi-file transfers
-		if listener != nil {
-			defer (*listener).Close()
-			defer (*conn).Close()
-		}
+		// need to defer one func that closes both iff each != nil
+		defer func() {
+			if conn != nil {
+				if err := (*conn).Close(); err != nil {
+					t.output("Error closing TCP connection: " + err.Error())
+				}
+
+			}
+			if listener != nil {
+				if err := (*listener).Close(); err != nil {
+					t.output("Error closing TCP listener: " + err.Error())
+				}
+			}
+		}()
+
 		if err != nil {
 			t.output(err.Error())
 			t.output("Aborting transfer.")
@@ -188,7 +197,7 @@ func listenForPeer(t *Transfer) (*net.TCPListener, *net.Conn, error) {
 
 	for {
 		select {
-		case <- t.Ctx.Done():
+		case <-t.Ctx.Done():
 			return nil, nil, errors.New("Exiting listenForPeer, transfer was canceled.")
 		default:
 			ln.SetDeadline(time.Now().Add(time.Second))

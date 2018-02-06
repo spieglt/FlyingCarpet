@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -199,8 +200,8 @@ func findPeer(t *Transfer) (string, error) {
 	t.output("Looking for peer IP...")
 	for !ipPattern.Match([]byte(peerIP)) {
 		select {
-		case <- t.Ctx.Done():
-			return "",errors.New("Exiting joinAdHoc, transfer was canceled.")
+		case <-t.Ctx.Done():
+			return "", errors.New("Exiting joinAdHoc, transfer was canceled.")
 		default:
 			peerString := "$(arp -a -N " + ifAddr + " | Select-String -Pattern '(?<ip>192\\.168\\." + thirdOctet + "\\.\\d{1,3})' | Select-String -NotMatch '(?<nm>(" + ifAddr + "|192.168." + thirdOctet + ".255)\\s)').Matches.Value"
 			peerCmd := exec.Command("powershell", "-c", peerString)
@@ -249,8 +250,8 @@ func addFirewallRule(t *Transfer) (err error) {
 	if err != nil {
 		return errors.New("Failed to get executable path: " + err.Error())
 	}
-	cmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name=flyingcarpet", "dir=in",
-		"action=allow", "program='"+execPath+"'", "enable=yes", "profile=any", "localport=3290", "protocol=tcp")
+	cmd := exec.Command("netsh", "advfirewall", "firewall", "add", "rule", "name="+filepath.Base(execPath), "dir=in",
+		"action=allow", "program="+execPath, "enable=yes", "profile=any", "localport=3290", "protocol=tcp")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err = cmd.CombinedOutput()
 	if err != nil {
@@ -261,8 +262,17 @@ func addFirewallRule(t *Transfer) (err error) {
 }
 
 func deleteFirewallRule(t *Transfer) {
-	fwStr := "netsh advfirewall firewall delete rule name=flyingcarpet"
-	t.output(runCommand(fwStr))
+	execPath, err := os.Executable()
+	if err != nil {
+		t.output("Failed to get executable path: " + err.Error())
+	}
+	cmd := exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name="+filepath.Base(execPath))
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	result, err := cmd.CombinedOutput()
+	if err != nil {
+		t.output("Could not create firewall rule. You must run as administrator to receive. (Press Win+X and then A to start an administrator command prompt.) " + err.Error())
+	}
+	t.output(string(result))
 }
 
 func runCommand(cmdStr string) (output string) {
