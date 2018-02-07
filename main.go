@@ -43,7 +43,6 @@ func main() {
 	return
 }
 
-<<<<<<< HEAD
 func mainRoutine(t *Transfer) {
 	t.WfdSendChan, t.WfdRecvChan = make(chan string), make(chan string)
 	var err error
@@ -246,36 +245,3 @@ func generatePassword() string {
 	}
 	return string(pwBytes)
 }
-<<<<<<< HEAD
-=======
-
-func getPassword() (pw string) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter password from receiving end: ")
-	pw, err := reader.ReadString('\n')
-	if err != nil {
-		fmt.Println("Error getting password:", err)
-	}
-	pw = strings.TrimSpace(pw)
-	return
-}
-
-func printUsage() {
-	fmt.Println("\nSingle file usage:")
-	fmt.Println("(Windows) $ flyingcarpet.exe -send ./movie.mp4 -peer mac")
-	fmt.Println("[Enter password from receiving end.]")
-	fmt.Println("  (Mac)   $ ./flyingcarpet -receive ./destinationFolder -peer windows")
-	fmt.Println("[Enter password into sending end.]\n")
-
-	fmt.Println("Multiple file usage:")
-	fmt.Println(" (Linux)  $ ./flyingcarpet -send multi -peer windows ../Pictures/*.jpg \"Filename with spaces.txt\" movie.mp4")
-	fmt.Println("[Enter password from receiving end.]")
-	fmt.Println("(Windows) $ flyingcarpet.exe -receive .\\picturesFolder -peer linux")
-	fmt.Println("[Enter password into sending end.]\n")
-	return
-}
-
-func (t *Transfer) output(msg string) {
-	fmt.Println(msg)
-}
->>>>>>> 7697ac0... fixing cli ctrl-c behavior before wifi up
