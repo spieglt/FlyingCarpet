@@ -1,12 +1,12 @@
 **MAJOR UPDATES:**
 
++ **various networking bug fixes**
+
 + **multi-file transfers**
 
 + **cancel button**
 
 + **![CLI version](https://github.com/spieglt/FlyingCarpet/tree/cli)**
-
-+ **fix for bug that prevented hosted-network-capable Windows machines from working.**
 
 # Flying Carpet
 
