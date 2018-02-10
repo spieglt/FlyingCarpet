@@ -4,8 +4,12 @@ package main
 #cgo CFLAGS: -x objective-c
 #cgo LDFLAGS: -framework Foundation
 #cgo LDFLAGS: -framework CoreWLAN
+#cgo LDFLAGS: -framework SecurityFoundation
 #import <Foundation/Foundation.h>
 #import <CoreWLAN/CoreWLAN.h>
+#import <SecurityFoundation/SFAuthorization.h>
+
+SFAuthorization *auth = nil;
 
 int startAdHoc(char * cSSID, char * cPassword) {
 	NSString * SSID = [[NSString alloc] initWithUTF8String:cSSID];
@@ -13,7 +17,9 @@ int startAdHoc(char * cSSID, char * cPassword) {
 	CWInterface * iface = CWWiFiClient.sharedWiFiClient.interface;
 	NSError *ibssErr = nil;
 	BOOL result = [iface startIBSSModeWithSSID:[SSID dataUsingEncoding:NSUTF8StringEncoding] security:kCWIBSSModeSecurityNone channel:11 password:password error:&ibssErr];
-	// NSLog(@"%d", result);
+	if (!result) {
+		NSLog(@"startAdHoc error: %@",ibssErr);
+	}
 	return result;
 }
 int joinAdHoc(char * cSSID, char * cPassword) {
@@ -23,8 +29,75 @@ int joinAdHoc(char * cSSID, char * cPassword) {
 	NSError * ibssErr = nil;
 	NSSet<CWNetwork *> * network = [iface scanForNetworksWithName:SSID error:&ibssErr];
 	BOOL result = [iface associateToNetwork:network.anyObject password:password error:&ibssErr];
-	// NSLog(@"%d", result);
+//	if (!result) {
+//		NSLog(@"joinAdHoc error: %@",ibssErr);
+//	}
 	return result;
+}
+int moveNetworkToTop(char * cSSID) {
+	NSString * SSID = [[NSString alloc] initWithUTF8String:cSSID];
+	CWInterface *iface = CWWiFiClient.sharedWiFiClient.interface;
+	BOOL found = false;
+	CWMutableConfiguration *config;
+	for (int i = 0; found == false && i < 10; i++) {
+		config = [CWMutableConfiguration configurationWithConfiguration:iface.configuration];
+		NSMutableArray *networks = [NSMutableArray arrayWithArray: [config.networkProfiles array]];
+		for (CWNetworkProfile *profile in [networks copy]) {
+			if ([[profile ssid] isEqualToString:SSID]) {
+				CWNetworkProfile *tmp = profile;
+				[networks removeObject:tmp];
+				[networks insertObject:tmp atIndex:0];
+				found = true;
+			}
+		}
+		config.networkProfiles = [NSOrderedSet orderedSetWithArray:networks];
+		// printf("Waiting...\n");
+		sleep(1);
+	}
+	if (!found) {
+		printf("SSID not found in preferred networks list after 10 seconds.");
+		return 0;
+	}
+	NSError *error = nil;
+	BOOL result = [iface commitConfiguration:config authorization:auth error:&error];
+	if (!result) {
+		NSLog(@"Commit configuration error: %@",error);
+	}
+	return result;
+}
+int deleteNetwork(char * cSSID) {
+	NSString * SSID = [[NSString alloc] initWithUTF8String:cSSID];
+	CWInterface *iface = CWWiFiClient.sharedWiFiClient.interface;
+	CWMutableConfiguration *config;
+	config = [CWMutableConfiguration configurationWithConfiguration:iface.configuration];
+	NSMutableArray *networks = [NSMutableArray arrayWithArray: [config.networkProfiles array]];
+	for (CWNetworkProfile *profile in [networks copy]) {
+		if ([[profile ssid] isEqualToString:SSID]) {
+			CWNetworkProfile *tmp = profile;
+			[networks removeObject:tmp];
+		}
+		config.networkProfiles = [NSOrderedSet orderedSetWithArray:networks];
+	}
+	NSError *error = nil;
+	BOOL result = [iface commitConfiguration:config authorization:auth error:&error];
+	if (!result) {
+		NSLog(@"Delete network error: %@",error);
+	}
+	return result;
+}
+int getAuth() {
+	auth = [SFAuthorization authorization];
+	NSError *error = nil;
+	BOOL authResult = [auth obtainWithRight:"system.preferences"
+			flags: (kAuthorizationFlagExtendRights |
+				kAuthorizationFlagInteractionAllowed |
+				kAuthorizationFlagPreAuthorize)
+			error:&error
+		];
+	if (!authResult) {
+		NSLog(@"authError: %@", error);
+	}
+	return authResult;
 }
 */
 import "C"
@@ -89,10 +162,14 @@ func startAdHoc(t *Transfer) (err error) {
 }
 
 func joinAdHoc(t *Transfer) (err error) {
+	if authRes := int(C.getAuth()); authRes == 0 {
+		t.output("Error getting authorization")
+	}
 	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
 	timeout := JOIN_ADHOC_TIMEOUT
 	ssid := C.CString(t.SSID)
 	password := C.CString(t.Passphrase + t.Passphrase)
+
 	var cRes C.int = C.joinAdHoc(ssid, password)
 	res := int(cRes)
 
@@ -110,6 +187,10 @@ func joinAdHoc(t *Transfer) (err error) {
 			res = int(C.joinAdHoc(ssid, password))
 		}
 	}
+	// prefer flyingCarpet network so mac doesn't jump to another
+	cRes = C.moveNetworkToTop(ssid)
+	res = int(cRes)
+	t.output(fmt.Sprintf("%s is preferred network: %t", t.SSID, (res != 0)))
 	return
 }
 
@@ -217,8 +298,12 @@ func resetWifi(t *Transfer) {
 	cmdString := "networksetup -setairportpower " + wifiInterface + " off && networksetup -setairportpower " + wifiInterface + " on"
 	t.output(runCommand(cmdString))
 	if t.Peer == "windows" || t.Peer == "linux" || t.Mode == "sending" {
-		cmdString = "networksetup -removepreferredwirelessnetwork " + wifiInterface + " " + t.SSID
-		t.output(runCommand(cmdString) + " (If you did not enter password at prompt, SSID will not be removed from your System keychain or preferred networks list.)")
+		// cmdString = "networksetup -removepreferredwirelessnetwork " + wifiInterface + " " + t.SSID
+		// t.output(runCommand(cmdString) + " (If you did not enter password at prompt, SSID will not be removed from your System keychain or preferred networks list.)")
+		res := int(C.deleteNetwork(C.CString(t.SSID)))
+		if res == 0 {
+			t.output("Error removing " + t.SSID + " from preferred wireless networks list.")
+		}
 	}
 }
 
