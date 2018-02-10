@@ -13,10 +13,12 @@ import (
 	"time"
 )
 
-const DIAL_TIMEOUT = 60
-const JOIN_ADHOC_TIMEOUT = 60
-const FIND_MAC_TIMEOUT = 60
+const dialTimeout = 60
+const joinAdHocTimeout = 60
+const findMacTimeout = 60
 
+// The Transfer struct holds transfer-specific data used throughout program.
+// Should reorganize/clean this up but not sure how best to do so.
 type Transfer struct {
 	Filepath       string
 	FileList       []string
@@ -32,7 +34,7 @@ type Transfer struct {
 	CancelCtx      context.CancelFunc
 	WfdSendChan    chan string
 	WfdRecvChan    chan string
-	Frame          *MainFrame
+	Frame          *mainFrame
 }
 
 func main() {
@@ -126,7 +128,7 @@ func mainRoutine(t *Transfer) {
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
-		showPassphraseEvt := wx.NewThreadEvent(wx.EVT_THREAD, POP_UP_PASSWORD)
+		showPassphraseEvt := wx.NewThreadEvent(wx.EVT_THREAD, popUpPassword)
 		showPassphraseEvt.SetString(t.Passphrase)
 		t.Frame.QueueEvent(showPassphraseEvt)
 		t.output(fmt.Sprintf("=============================\n"+
@@ -191,7 +193,7 @@ func mainRoutine(t *Transfer) {
 func listenForPeer(t *Transfer) (*net.TCPListener, *net.Conn, error) {
 	ln, err := net.ListenTCP("tcp", &net.TCPAddr{Port: t.Port})
 	if err != nil {
-		return nil, nil, errors.New(fmt.Sprintf("Could not listen on :%d. Err: %s", t.Port, err))
+		return nil, nil, fmt.Errorf("Could not listen on :%d. Err: %s", t.Port, err)
 	}
 	t.output("Listening on :" + strconv.Itoa(t.Port))
 
@@ -215,8 +217,8 @@ func listenForPeer(t *Transfer) (*net.TCPListener, *net.Conn, error) {
 func dialPeer(t *Transfer) (*net.Conn, error) {
 	var conn net.Conn
 	var err error
-	t.output("Trying to connect to " + t.RecipientIP + " for " + strconv.Itoa(DIAL_TIMEOUT) + " seconds.")
-	for i := 0; i < DIAL_TIMEOUT; i++ {
+	t.output("Trying to connect to " + t.RecipientIP + " for " + strconv.Itoa(dialTimeout) + " seconds.")
+	for i := 0; i < dialTimeout; i++ {
 		select {
 		case <-t.Ctx.Done():
 			return nil, errors.New("Exiting dialPeer, transfer was canceled.")
@@ -232,7 +234,7 @@ func dialPeer(t *Transfer) (*net.Conn, error) {
 			return &conn, nil
 		}
 	}
-	return nil, errors.New(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT))
+	return nil, fmt.Errorf("Waited %d seconds, no connection.", dialTimeout)
 }
 
 func generatePassword() string {

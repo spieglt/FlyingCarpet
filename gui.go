@@ -9,24 +9,24 @@ import (
 	"runtime"
 )
 
-const MULTIPLE_FILE_STRING = "(Multiple files selected)"
+const multipleFileString = "(Multiple files selected)"
 
-const OUTPUT_BOX_UPDATE = wx.ID_HIGHEST + 1
-const PROGRESS_BAR_UPDATE = wx.ID_HIGHEST + 2
-const PROGRESS_BAR_SHOW = wx.ID_HIGHEST + 3
-const START_BUTTON_ENABLE = wx.ID_HIGHEST + 4
-const HIDE_OPTION_ID = wx.ID_HIGHEST + 5
-const RECEIVE_FILE_UPDATE = wx.ID_HIGHEST + 6
-const POP_UP_PASSWORD = wx.ID_HIGHEST + 7
+const outputBoxUpdate = wx.ID_HIGHEST + 1
+const progressBarUpdate = wx.ID_HIGHEST + 2
+const progressBarShow = wx.ID_HIGHEST + 3
+const startButtonEnable = wx.ID_HIGHEST + 4
+const hideOptionID = wx.ID_HIGHEST + 5
+const receiveFileUpdate = wx.ID_HIGHEST + 6
+const popUpPassword = wx.ID_HIGHEST + 7
 
-type MainFrame struct {
+type mainFrame struct {
 	wx.Frame
 	MenuBar wx.MenuBar
 	Panel   wx.Panel
 }
 
-func newGui() *MainFrame {
-	mf := &MainFrame{}
+func newGui() *mainFrame {
+	mf := &mainFrame{}
 	mf.Frame = wx.NewFrame(wx.NullWindow, wx.ID_ANY, "Flying Carpet")
 
 	if runtime.GOOS == "windows" {
@@ -122,7 +122,7 @@ func newGui() *MainFrame {
 			} else {
 				// TODO: disable input box so user has to click button if they want to switch to only one file?
 				// If so, have to reenable button in if clause immemdiately above.
-				fileBox.SetValue(MULTIPLE_FILE_STRING)
+				fileBox.SetValue(multipleFileString)
 			}
 		}
 	}, sendButton.GetId())
@@ -227,39 +227,39 @@ func newGui() *MainFrame {
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
 		threadEvent := wx.ToThreadEvent(e)
 		outputBox.AppendText("\n" + threadEvent.GetString())
-	}, OUTPUT_BOX_UPDATE)
+	}, outputBoxUpdate)
 
 	// progress bar update event
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
 		threadEvent := wx.ToThreadEvent(e)
 		progressBar.SetValue(threadEvent.GetInt())
-	}, PROGRESS_BAR_UPDATE)
+	}, progressBarUpdate)
 
 	// progress bar display event
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
 		progressBar.Show()
 		mf.Panel.Layout()
-	}, PROGRESS_BAR_SHOW)
+	}, progressBarShow)
 
 	// start button enable event
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
 		startButton.Show()
 		cancelButton.Hide()
 		mf.Panel.Layout()
-	}, START_BUTTON_ENABLE)
+	}, startButtonEnable)
 
 	// receiving filename update event
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
 		threadEvent := wx.ToThreadEvent(e)
 		fileBox.SetValue(threadEvent.GetString())
-	}, RECEIVE_FILE_UPDATE)
+	}, receiveFileUpdate)
 
 	// password pop-up event
 	wx.Bind(mf, wx.EVT_THREAD, func(e wx.Event) {
 		threadEvent := wx.ToThreadEvent(e)
 		dialog := wx.NewMessageDialog(mf.Panel, "On sending end, after selecting options,\npress Start and enter this password:\n\n"+threadEvent.GetString(), "Transfer Password", wx.OK, wx.DefaultPosition)
 		dialog.ShowModal()
-	}, POP_UP_PASSWORD)
+	}, popUpPassword)
 
 	mf.Panel.SetSizer(bSizerTotal)
 	mf.Layout()
@@ -281,10 +281,10 @@ func newGui() *MainFrame {
 	wx.Bind(mf, wx.EVT_MENU, func(e wx.Event) {
 		info := wx.NewAboutDialogInfo()
 		info.SetName("Flying Carpet")
-		info.SetDescription(DESCRIPTION)
-		info.SetCopyright(COPYRIGHT)
-		info.SetWebSite(WEBSITE)
-		info.SetLicence(LICENSE)
+		info.SetDescription(description)
+		info.SetCopyright(copyright)
+		info.SetWebSite(website)
+		info.SetLicence(license)
 		wx.AboutBox(info)
 	}, wx.ID_ABOUT)
 	mf.SetMenuBar(mf.MenuBar)
@@ -293,7 +293,7 @@ func newGui() *MainFrame {
 }
 
 func (t *Transfer) output(msg string) {
-	threadEvt := wx.NewThreadEvent(wx.EVT_THREAD, OUTPUT_BOX_UPDATE)
+	threadEvt := wx.NewThreadEvent(wx.EVT_THREAD, outputBoxUpdate)
 	threadEvt.SetString(msg)
 	t.Frame.QueueEvent(threadEvt)
 
@@ -308,13 +308,13 @@ func (t *Transfer) output(msg string) {
 }
 
 func enableStartButton(t *Transfer) {
-	startButtonEvt := wx.NewThreadEvent(wx.EVT_THREAD, START_BUTTON_ENABLE)
+	startButtonEvt := wx.NewThreadEvent(wx.EVT_THREAD, startButtonEnable)
 	t.Frame.QueueEvent(startButtonEvt)
 }
 
-const WEBSITE = "https://github.com/spieglt/flyingcarpet"
-const COPYRIGHT = "Copyright (c) 2017, Theron Spiegl. All rights reserved."
-const LICENSE = `Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+const website = "https://github.com/spieglt/flyingcarpet"
+const copyright = "Copyright (c) 2017, Theron Spiegl. All rights reserved."
+const license = `Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 
 * Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
 * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
@@ -322,7 +322,7 @@ const LICENSE = `Redistribution and use in source and binary forms, with or with
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.`
 
-const DESCRIPTION = `Flying Carpet performs encrypted file transfers between two computers with 
+const description = `Flying Carpet performs encrypted file transfers between two computers with 
 wireless cards via ad hoc WiFi (or Wi-Fi Direct if necessary). No access
 point, router, or other networking gear is required. Just select a file,
 whether each computer is sending or receiving, and the operating system of the

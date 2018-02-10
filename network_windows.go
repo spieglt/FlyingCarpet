@@ -152,15 +152,15 @@ func joinAdHoc(t *Transfer) (err error) {
 	t.output(runCommand("netsh wlan add profile filename=" + tmpLoc + " user=current"))
 
 	// join network
-	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
-	timeout := JOIN_ADHOC_TIMEOUT
+	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(joinAdHocTimeout) + " seconds...")
+	timeout := joinAdHocTimeout
 	for t.SSID != getCurrentWifi(t) {
 		select {
 		case <-t.Ctx.Done():
 			return errors.New("Exiting joinAdHoc, transfer was canceled.")
 		default:
 			if timeout <= 0 {
-				return errors.New("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
+				return errors.New("Could not find the ad hoc network within " + strconv.Itoa(joinAdHocTimeout) + " seconds.")
 			}
 			cmdStr := "netsh wlan connect name=" + t.SSID
 			cmdSlice := strings.Split(cmdStr, " ")
