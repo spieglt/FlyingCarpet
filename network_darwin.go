@@ -165,8 +165,8 @@ func joinAdHoc(t *Transfer) (err error) {
 	if authRes := int(C.getAuth()); authRes == 0 {
 		t.output("Error getting authorization")
 	}
-	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds...")
-	timeout := JOIN_ADHOC_TIMEOUT
+	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(joinAdHocTimeout) + " seconds...")
+	timeout := joinAdHocTimeout
 	ssid := C.CString(t.SSID)
 	password := C.CString(t.Passphrase + t.Passphrase)
 
@@ -179,7 +179,7 @@ func joinAdHoc(t *Transfer) (err error) {
 			return errors.New("Exiting joinAdHoc, transfer was canceled.")
 		default:
 			if timeout <= 0 {
-				return errors.New("Could not find the ad hoc network within " + strconv.Itoa(JOIN_ADHOC_TIMEOUT) + " seconds.")
+				return errors.New("Could not find the ad hoc network within " + strconv.Itoa(joinAdHocTimeout) + " seconds.")
 			}
 			// t.output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
 			timeout -= 5
@@ -222,21 +222,21 @@ func getIPAddress(t *Transfer) string {
 }
 
 func findMac(t *Transfer) (peerIP string, err error) {
-	timeout := FIND_MAC_TIMEOUT
+	timeout := findMacTimeout
 	currentIP := getIPAddress(t)
 	pingString := "ping -c 5 169.254.255.255 | " + // ping broadcast address
 		"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
 		"grep --line-buffered -vE '169.254.255.255' | " + // exclude broadcast address
 		"grep -vE '" + currentIP + "'" // exclude current IP
 
-	t.output("Looking for peer IP for " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
+	t.output("Looking for peer IP for " + strconv.Itoa(findMacTimeout) + " seconds.")
 	for peerIP == "" {
 		select {
 		case <-t.Ctx.Done():
 			return "", errors.New("Exiting dialPeer, transfer was canceled.")
 		default:
 			if timeout <= 0 {
-				return "", errors.New("Could not find the peer computer within " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
+				return "", errors.New("Could not find the peer computer within " + strconv.Itoa(findMacTimeout) + " seconds.")
 			}
 			pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 			if pingErr != nil {
@@ -263,17 +263,17 @@ func findWindows(t *Transfer) (peerIP string) {
 }
 
 func findLinux(t *Transfer) (peerIP string) {
-	// timeout := FIND_MAC_TIMEOUT
+	// timeout := findMacTimeout
 	// currentIP := getIPAddress(t)
 	// pingString := "ping -b -c 5 $(ifconfig | awk '/" + getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') 2>&1 | " + // ping broadcast address
 	// 	"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
 	// 	"grep --line-buffered -vE $(ifconfig | awk '/" + getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') | " + // exclude broadcast address
 	// 	"grep -vE '" + currentIP + "'" // exclude current IP
 
-	// t.output("Looking for peer IP for " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
+	// t.output("Looking for peer IP for " + strconv.Itoa(findMacTimeout) + " seconds.")
 	// for peerIP == "" {
 	// 	if timeout <= 0 {
-	// 		t.output("Could not find the peer computer within " + strconv.Itoa(FIND_MAC_TIMEOUT) + " seconds.")
+	// 		t.output("Could not find the peer computer within " + strconv.Itoa(findMacTimeout) + " seconds.")
 	// 		return "", false
 	// 	}
 	// 	pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()

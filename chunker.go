@@ -16,7 +16,7 @@ const CHUNKSIZE = 1000000 // 1MB
 
 func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 	start := time.Now()
-	var conn net.Conn = *pConn
+	conn := *pConn
 
 	file, err := os.Open(t.Filepath)
 	if err != nil {
@@ -36,15 +36,15 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 	filenameLen := int64(len(filename))
 	err = binary.Write(conn, binary.BigEndian, filenameLen)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error writing filename length: %s\n Please quit and restart Flying Carpet.", err))
+		return fmt.Errorf("Error writing filename length: %s\n Please quit and restart Flying Carpet.", err)
 	}
 	_, err = conn.Write([]byte(filename))
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error writing filename: %s\n Please quit and restart Flying Carpet.", err))
+		return fmt.Errorf("Error writing filename: %s\n Please quit and restart Flying Carpet.", err)
 	}
 	err = binary.Write(conn, binary.BigEndian, fileSize)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error transmitting file size: %s\n Please quit and restart Flying Carpet.", err))
+		return fmt.Errorf("Error transmitting file size: %s\n Please quit and restart Flying Carpet.", err)
 	}
 	/////////////////////////////
 
@@ -57,7 +57,7 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 			buffer := make([]byte, bufferSize)
 			bytesRead, err := file.Read(buffer)
 			if int64(bytesRead) != bufferSize {
-				return errors.New(fmt.Sprintf("bytesRead: %d\nbufferSize: %d\nError reading out file. Please quit and restart Flying Carpet.", bytesRead, bufferSize))
+				return fmt.Errorf("bytesRead: %d\nbufferSize: %d\nError reading out file. Please quit and restart Flying Carpet.", bytesRead, bufferSize)
 			}
 			bytesLeft -= bufferSize
 
@@ -110,24 +110,24 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 
 func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
 	start := time.Now()
-	var conn net.Conn = *pConn
+	conn := *pConn
 
 	// receive filename and size
 	var filenameLen int64
 	err := binary.Read(conn, binary.BigEndian, &filenameLen)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error receiving filename length: %s\nPlease quit and restart Flying Carpet.", err))
+		return fmt.Errorf("Error receiving filename length: %s\nPlease quit and restart Flying Carpet.", err)
 	}
 	filenameBytes := make([]byte, filenameLen)
 	_, err = io.ReadFull(conn, filenameBytes)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error receiving filename: %s\nPlease quit and restart Flying Carpet.", err))
+		return fmt.Errorf("Error receiving filename: %s\nPlease quit and restart Flying Carpet.", err)
 	}
 	filename := string(filenameBytes)
 	var fileSize int64
 	err = binary.Read(conn, binary.BigEndian, &fileSize)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error receiving file size: %s\nPlease quit and restart Flying Carpet.", err))
+		return fmt.Errorf("Error receiving file size: %s\nPlease quit and restart Flying Carpet.", err)
 	}
 
 	// if t.Filepath is not a directory, we're in a multifile transfer (as start button action in gui.go
@@ -182,7 +182,7 @@ outer:
 			}
 			// t.output(fmt.Sprintf("read %d bytes", bytesReceived))
 			if int64(bytesReceived) != chunkSize {
-				return errors.New(fmt.Sprintf("bytesReceived: %d\nchunkSize: %d", bytesReceived, chunkSize))
+				return fmt.Errorf("bytesReceived: %d\nchunkSize: %d", bytesReceived, chunkSize)
 			}
 
 			// decrypt and add to outfile
@@ -210,21 +210,21 @@ outer:
 }
 
 func sendCount(pConn *net.Conn, t *Transfer) error {
-	var conn net.Conn = *pConn
+	conn := *pConn
 	numFiles := int64(len(t.FileList))
 	err := binary.Write(conn, binary.BigEndian, numFiles)
 	if err != nil {
-		return errors.New(fmt.Sprintf("Error transmitting number of files: %s\n Please quit and restart Flying Carpet.", err))
+		return fmt.Errorf("Error transmitting number of files: %s\n Please quit and restart Flying Carpet.", err)
 	}
 	return err
 }
 
 func receiveCount(pConn *net.Conn, t *Transfer) (int, error) {
-	var conn net.Conn = *pConn
+	conn := *pConn
 	var numFiles int64
 	err := binary.Read(conn, binary.BigEndian, &numFiles)
 	if err != nil {
-		return 0, errors.New(fmt.Sprintf("Error receiving number of files: %s\nPlease quit and restart Flying Carpet.", err))
+		return 0, fmt.Errorf("Error receiving number of files: %s\nPlease quit and restart Flying Carpet.", err)
 	}
 	return int(numFiles), nil
 }

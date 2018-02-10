@@ -121,5 +121,4 @@ func startLegacyAP(t *Transfer) {
 	// if err != nil {
 	// 	t.output(fmt.Sprintf("Error releasing DLL: %s", err))
 	// }
-	return
 }

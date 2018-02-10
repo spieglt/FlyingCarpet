@@ -20,10 +20,12 @@ import (
 	"time"
 )
 
-const DIAL_TIMEOUT = 60
-const JOIN_ADHOC_TIMEOUT = 60
-const FIND_MAC_TIMEOUT = 60
+const dialTimeout = 60
+const joinAdHocTimeout = 60
+const findMacTimeout = 60
 
+// The Transfer struct holds transfer-specific data used throughout program.
+// Should reorganize/clean this up but not sure how best to do so.
 type Transfer struct {
 	Filepath       string
 	FileList       []string
@@ -49,17 +51,17 @@ func main() {
 		return
 	}
 
-	var p_outFile = flag.String("send", "", "File to be sent. (Use [ -send multi ] for multiple files, and list files/globs after other flags.)\n\n"+
+	var pOutFile = flag.String("send", "", "File to be sent. (Use [ -send multi ] for multiple files, and list files/globs after other flags.)\n\n"+
 		"Example (Windows): .\\flyingcarpet.exe -send multi -peer mac pic1.jpg pic35.jpg \"filename with spaces.docx\" *.txt\n"+
 		"Example (macOS/Linux): ./flyingcarpet -send multi -peer windows movie.mp4 ../*.mp3\n")
-	var p_inFolder = flag.String("receive", "", "Destination directory for files to be received.")
-	var p_port = flag.Int("port", 3290, "TCP port to use (must match on both ends).")
-	var p_peer = flag.String("peer", "", "Use \"-peer linux\", \"-peer mac\", or \"-peer windows\" to match the other computer.")
+	var pInFolder = flag.String("receive", "", "Destination directory for files to be received.")
+	var pPort = flag.Int("port", 3290, "TCP port to use (must match on both ends).")
+	var pPeer = flag.String("peer", "", "Use \"-peer linux\", \"-peer mac\", or \"-peer windows\" to match the other computer.")
 	flag.Parse()
-	outFile := *p_outFile
-	inFolder := *p_inFolder
-	port := *p_port
-	peer := *p_peer
+	outFile := *pOutFile
+	inFolder := *pInFolder
+	port := *pPort
+	peer := *pPeer
 
 	// validate
 	if peer == "" || (peer != "mac" && peer != "windows" && peer != "linux") {
@@ -273,7 +275,7 @@ func main() {
 func listenForPeer(t *Transfer) (*net.TCPListener, *net.Conn, error) {
 	ln, err := net.ListenTCP("tcp", &net.TCPAddr{Port: t.Port})
 	if err != nil {
-		return nil, nil, errors.New(fmt.Sprintf("Could not listen on :%d. Err: %s", t.Port, err))
+		return nil, nil, fmt.Errorf("Could not listen on :%d. Err: %s", t.Port, err)
 	}
 	t.output("Listening on :" + strconv.Itoa(t.Port))
 
@@ -297,8 +299,8 @@ func listenForPeer(t *Transfer) (*net.TCPListener, *net.Conn, error) {
 func dialPeer(t *Transfer) (*net.Conn, error) {
 	var conn net.Conn
 	var err error
-	t.output("Trying to connect to " + t.RecipientIP + " for " + strconv.Itoa(DIAL_TIMEOUT) + " seconds.")
-	for i := 0; i < DIAL_TIMEOUT; i++ {
+	t.output("Trying to connect to " + t.RecipientIP + " for " + strconv.Itoa(dialTimeout) + " seconds.")
+	for i := 0; i < dialTimeout; i++ {
 		select {
 		case <-t.Ctx.Done():
 			return nil, errors.New("Exiting dialPeer, transfer was canceled.")
@@ -314,7 +316,7 @@ func dialPeer(t *Transfer) (*net.Conn, error) {
 			return &conn, nil
 		}
 	}
-	return nil, errors.New(fmt.Sprintf("Waited %d seconds, no connection.", DIAL_TIMEOUT))
+	return nil, fmt.Errorf("Waited %d seconds, no connection.", dialTimeout)
 }
 
 func generatePassword() string {
