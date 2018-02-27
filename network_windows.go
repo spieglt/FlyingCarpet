@@ -58,7 +58,7 @@ func startAdHoc(t *Transfer) (err error) {
 	if err == nil {
 		t.AdHocCapable = true
 		return
-	// TODO: replace with "echo %errorlevel%" == "1"
+		// TODO: replace with "echo %errorlevel%" == "1"
 	} else if err.Error() == "exit status 1" {
 		t.output("Could not start hosted network, trying Wi-Fi Direct.")
 		t.AdHocCapable = false
@@ -280,7 +280,7 @@ func deleteFirewallRule(t *Transfer) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	result, err := cmd.CombinedOutput()
 	if err != nil {
-		t.output("Could not create firewall rule. You must run as administrator to receive. (Press Win+X and then A to start an administrator command prompt.) " + err.Error())
+		t.output("Could not create firewall rule. You must run as administrator to receive. (Right-click \"Flying Carpet.exe\" and select \"Run as administrator\".) " + err.Error())
 	}
 	t.output(string(result))
 }

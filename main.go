@@ -20,21 +20,21 @@ const findMacTimeout = 60
 // The Transfer struct holds transfer-specific data used throughout program.
 // Should reorganize/clean this up but not sure how best to do so.
 type Transfer struct {
-	Filepath       string
-	FileList       []string
-	Passphrase     string
-	SSID           string
-	RecipientIP    string
-	Peer           string // "mac", "windows", or "linux"
-	Mode           string // "sending" or "receiving"
-	PreviousSSID   string
-	Port           int
-	AdHocCapable   bool
-	Ctx            context.Context
-	CancelCtx      context.CancelFunc
-	WfdSendChan    chan string
-	WfdRecvChan    chan string
-	Frame          *mainFrame
+	Filepath     string
+	FileList     []string
+	Passphrase   string
+	SSID         string
+	RecipientIP  string
+	Peer         string // "mac", "windows", or "linux"
+	Mode         string // "sending" or "receiving"
+	PreviousSSID string
+	Port         int
+	AdHocCapable bool
+	Ctx          context.Context
+	CancelCtx    context.CancelFunc
+	WfdSendChan  chan string
+	WfdRecvChan  chan string
+	Frame        *mainFrame
 }
 
 func main() {

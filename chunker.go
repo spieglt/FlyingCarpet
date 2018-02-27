@@ -186,7 +186,7 @@ func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
 		return errors.New("Error creating out file. Please quit and restart Flying Carpet.")
 	}
 	defer outFile.Close()
-	
+
 	var chunkSize int64
 outer:
 	for {
