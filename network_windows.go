@@ -265,7 +265,7 @@ func addFirewallRule(t *Transfer) (err error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err = cmd.CombinedOutput()
 	if err != nil {
-		return errors.New("Could not create firewall rule. You must run as administrator to receive. (Press Win+X and then A to start an administrator command prompt.) " + err.Error())
+		return errors.New("Could not create firewall rule. You must run as administrator to receive. (Right-click \"Flying Carpet.exe\" and select \"Run as administrator.\") " + err.Error())
 	}
 	// t.output("Firewall rule created.")
 	return
@@ -280,7 +280,7 @@ func deleteFirewallRule(t *Transfer) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	result, err := cmd.CombinedOutput()
 	if err != nil {
-		t.output("Could not create firewall rule. You must run as administrator to receive. (Right-click \"Flying Carpet.exe\" and select \"Run as administrator\".) " + err.Error())
+		t.output("Could not create firewall rule. You must run as administrator to receive. (Right-click \"Flying Carpet.exe\" and select \"Run as administrator.\") " + err.Error())
 	}
 	t.output(string(result))
 }
