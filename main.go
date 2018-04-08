@@ -16,6 +16,7 @@ import (
 const dialTimeout = 60
 const joinAdHocTimeout = 60
 const findMacTimeout = 60
+const os = runtime.GOOS
 
 // The Transfer struct holds transfer-specific data used throughout program.
 // Should reorganize/clean this up but not sure how best to do so.
@@ -58,7 +59,7 @@ func mainRoutine(t *Transfer) {
 	if t.Mode == "sending" {
 		// to stop searching for ad hoc network (if Mac jumps off)
 		defer func() {
-			if runtime.GOOS == "darwin" {
+			if os == "darwin" {
 				t.CancelCtx()
 			}
 		}()
@@ -67,9 +68,9 @@ func mainRoutine(t *Transfer) {
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
-		if runtime.GOOS == "windows" {
+		if os == "windows" {
 			t.PreviousSSID = getCurrentWifi(t)
-		} else if runtime.GOOS == "linux" {
+		} else if os == "linux" {
 			t.PreviousSSID = getCurrentUUID(t)
 		}
 
@@ -118,7 +119,7 @@ func mainRoutine(t *Transfer) {
 		defer func() {
 			// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
 			// and thus don't need to shut down the goroutine trying to stay on it. does this need to happen when peer is linux? yes.
-			if runtime.GOOS == "darwin" && (t.Peer == "windows" || t.Peer == "linux") {
+			if os == "darwin" && (t.Peer == "windows" || t.Peer == "linux") {
 				t.CancelCtx()
 			}
 		}()

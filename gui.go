@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"runtime"
 )
 
 const multipleFileString = "(Multiple files selected)"
@@ -29,7 +28,7 @@ func newGui() *mainFrame {
 	mf := &mainFrame{}
 	mf.Frame = wx.NewFrame(wx.NullWindow, wx.ID_ANY, "Flying Carpet")
 
-	if runtime.GOOS == "windows" {
+	if os == "windows" {
 		icon := wx.NewIcon("appicon", wx.BITMAP_TYPE_ICO_RESOURCE, -1, -1)
 		mf.Frame.SetIcon(icon)
 	}
@@ -267,7 +266,7 @@ func newGui() *mainFrame {
 
 	// menu
 	mf.MenuBar = wx.NewMenuBar()
-	if runtime.GOOS == "windows" || runtime.GOOS == "linux" {
+	if os == "windows" || os == "linux" {
 		fileMenu := wx.NewMenu()
 		fileMenu.Append(wx.ID_ABOUT)
 		fileMenu.Append(wx.ID_EXIT)
@@ -275,7 +274,7 @@ func newGui() *mainFrame {
 			mf.Close(true)
 		}, wx.ID_EXIT)
 		mf.MenuBar.Append(fileMenu, "&File")
-	} else if runtime.GOOS == "darwin" {
+	} else if os == "darwin" {
 		addAboutToOSXMenu(mf.MenuBar)
 	}
 	wx.Bind(mf, wx.EVT_MENU, func(e wx.Event) {
