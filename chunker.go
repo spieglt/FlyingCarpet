@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/dontpanic92/wxGo/wx"
 	"io"
 	"net"
 	"os"
@@ -25,7 +24,7 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 	}
 	defer file.Close()
 
-	showProgressBar(t)
+	// showProgressBar(t)
 	fileSize := getSize(file)
 	t.output(fmt.Sprintf("File size: %s\nMD5 hash: %x", makeSizeReadable(fileSize), getHash(t.Filepath)))
 	numChunks := ceil(fileSize, CHUNKSIZE)
@@ -40,8 +39,8 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 			case <-t.Ctx.Done():
 				return
 			default:
-				percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
-				updateProgressBar(int(percentDone), t)
+				// percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
+				// updateProgressBar(int(percentDone), t)
 			}
 		}
 	}()
@@ -118,7 +117,7 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 	//////////
 
 	ticker.Stop()
-	updateProgressBar(100, t)
+	// updateProgressBar(100, t)
 	t.output(fmt.Sprintf("Sending took %s", time.Since(start)))
 	return nil
 }
@@ -163,9 +162,9 @@ func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
 	}
 
 	t.output(fmt.Sprintf("Filename: %s\nFile size: %s", filename, makeSizeReadable(fileSize)))
-	updateFilename(t)
+	// updateFilename(t)
 	// progress bar
-	showProgressBar(t)
+	// showProgressBar(t)
 	bytesLeft := fileSize
 	ticker := time.NewTicker(time.Millisecond * 1000)
 	go func() {
@@ -174,8 +173,8 @@ func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
 			case <-t.Ctx.Done():
 				return
 			default:
-				percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
-				updateProgressBar(int(percentDone), t)
+				// percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
+				// updateProgressBar(int(percentDone), t)
 			}
 		}
 	}()
@@ -230,7 +229,7 @@ outer:
 	binary.Write(conn, binary.BigEndian, int64(1))
 
 	ticker.Stop()
-	updateProgressBar(100, t)
+	// updateProgressBar(100, t)
 	t.output(fmt.Sprintf("Received file size: %s", makeSizeReadable(getSize(outFile))))
 	t.output(fmt.Sprintf("Received file hash: %x", getHash(t.Filepath)))
 	t.output(fmt.Sprintf("Receiving took %s", time.Since(start)))
@@ -279,22 +278,17 @@ func getHash(filepath string) (md5hash []byte) {
 	return
 }
 
-func updateProgressBar(percentage int, t *Transfer) {
-	progressEvt := wx.NewThreadEvent(wx.EVT_THREAD, progressBarUpdate)
-	progressEvt.SetInt(percentage)
-	t.Frame.QueueEvent(progressEvt)
-}
+// func updateProgressBar(percentage int, t *Transfer) {
 
-func showProgressBar(t *Transfer) {
-	progressEvt := wx.NewThreadEvent(wx.EVT_THREAD, progressBarShow)
-	t.Frame.QueueEvent(progressEvt)
-}
+// }
 
-func updateFilename(t *Transfer) {
-	filenameEvt := wx.NewThreadEvent(wx.EVT_THREAD, receiveFileUpdate)
-	filenameEvt.SetString(t.Filepath)
-	t.Frame.QueueEvent(filenameEvt)
-}
+// func showProgressBar(t *Transfer) {
+
+// }
+
+// func updateFilename(t *Transfer) {
+
+// }
 
 func ceil(x, y int64) int64 {
 	if x%y != 0 {

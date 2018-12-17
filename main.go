@@ -5,18 +5,22 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/dontpanic92/wxGo/wx"
 	"math/rand"
 	"net"
+	"os"
 	"runtime"
 	"strconv"
 	"time"
+
+	"github.com/therecipe/qt/widgets"
 )
 
 const dialTimeout = 60
 const joinAdHocTimeout = 60
 const findMacTimeout = 60
-const os = runtime.GOOS
+const hostOS = runtime.GOOS
+
+type mainFrame struct{}
 
 // The Transfer struct holds transfer-specific data used throughout program.
 // Should reorganize/clean this up but not sure how best to do so.
@@ -39,10 +43,9 @@ type Transfer struct {
 }
 
 func main() {
-	wx1 := wx.NewApp("Flying Carpet")
-	mf := newGui()
-	mf.Show()
-	wx1.MainLoop()
+	app := widgets.NewQApplication(len(os.Args), os.Args)
+	showWindow()
+	app.Exec()
 	return
 }
 
@@ -52,14 +55,14 @@ func mainRoutine(t *Transfer) {
 
 	// cleanup
 	defer func() {
-		enableStartButton(t)
+		// enableStartButton(t)
 		resetWifi(t)
 	}()
 
 	if t.Mode == "sending" {
 		// to stop searching for ad hoc network (if Mac jumps off)
 		defer func() {
-			if os == "darwin" {
+			if hostOS == "darwin" {
 				t.CancelCtx()
 			}
 		}()
@@ -68,9 +71,9 @@ func mainRoutine(t *Transfer) {
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
-		if os == "windows" {
+		if hostOS == "windows" {
 			t.PreviousSSID = getCurrentWifi(t)
-		} else if os == "linux" {
+		} else if hostOS == "linux" {
 			t.PreviousSSID = getCurrentUUID(t)
 		}
 
@@ -119,7 +122,7 @@ func mainRoutine(t *Transfer) {
 		defer func() {
 			// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
 			// and thus don't need to shut down the goroutine trying to stay on it. does this need to happen when peer is linux? yes.
-			if os == "darwin" && (t.Peer == "windows" || t.Peer == "linux") {
+			if hostOS == "darwin" && (t.Peer == "windows" || t.Peer == "linux") {
 				t.CancelCtx()
 			}
 		}()
@@ -129,9 +132,8 @@ func mainRoutine(t *Transfer) {
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
-		showPassphraseEvt := wx.NewThreadEvent(wx.EVT_THREAD, popUpPassword)
-		showPassphraseEvt.SetString(t.Passphrase)
-		t.Frame.QueueEvent(showPassphraseEvt)
+		// showPassphraseEvt
+		// t.Frame.QueueEvent(showPassphraseEvt)
 		t.output(fmt.Sprintf("=============================\n"+
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
 			"=============================\n", t.Passphrase))

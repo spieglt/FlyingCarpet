@@ -40,8 +40,6 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Compilation instructions:
 
-+ Install wxGo. For Windows, I recommend the tdm-gcc link from this page rather than mingw-w64: https://github.com/dontpanic92/wxGo/wiki/Installation-Guide.
-
 + `go get -x github.com/spieglt/flyingcarpet`
 
 + Windows only: Compile WFD_DLL project with Visual Studio (Release, x64 mode) and then run `makeIconSyso.bat` while in `icons/Windows` folder.
