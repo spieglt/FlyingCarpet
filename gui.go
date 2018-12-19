@@ -22,6 +22,7 @@ func newWindow() (window *widgets.QMainWindow) {
 	linuxPeer := widgets.NewQRadioButton2("Linux", nil)
 	macPeer := widgets.NewQRadioButton2("Mac", nil)
 	windowsPeer := widgets.NewQRadioButton2("Windows", nil)
+	linuxPeer.SetChecked(true)
 	peerLayout.AddWidget(linuxPeer, 0, 0)
 	peerLayout.AddWidget(macPeer, 0, 0)
 	peerLayout.AddWidget(windowsPeer, 0, 0)
@@ -30,6 +31,7 @@ func newWindow() (window *widgets.QMainWindow) {
 	modeLayout := widgets.NewQVBoxLayout2(modeWrapper)
 	sendMode := widgets.NewQRadioButton2("Send", nil)
 	receiveMode := widgets.NewQRadioButton2("Receive", nil)
+	sendMode.SetChecked(true)
 	modeLayout.AddWidget(sendMode, 0, 0)
 	modeLayout.AddWidget(receiveMode, 0, 0)
 
