@@ -1,14 +1,13 @@
 package main
 
 import (
-	"github.com/therecipe/qt/core"
 	"github.com/therecipe/qt/widgets"
 )
 
 func newWindow() (window *widgets.QMainWindow) {
 	// frame
 	window = widgets.NewQMainWindow(nil, 0)
-	window.SetMinimumSize2(400, 600)
+	window.SetMinimumSize2(600, 900)
 	window.SetWindowTitle("Flying Carpet")
 	widget := widgets.NewQWidget(nil, 0)
 	widget.SetLayout(widgets.NewQVBoxLayout())
@@ -17,7 +16,6 @@ func newWindow() (window *widgets.QMainWindow) {
 	// radio buttons
 	radioWidget := widgets.NewQWidget(nil, 0)
 	radioWidget.SetLayout(widgets.NewQHBoxLayout())
-	radioWidget.SetMaximumHeight(125)
 
 	peerWrapper := widgets.NewQGroupBox2("Peer OS", nil)
 	peerLayout := widgets.NewQVBoxLayout2(peerWrapper)
@@ -83,18 +81,20 @@ func newWindow() (window *widgets.QMainWindow) {
 
 	sendButton.ConnectClicked(func(bool) {
 		// open dialog
-		fd := widgets.NewQFileDialog(window, core.Qt__Popup)
-		// fd.SetFileMode(widgets.QFileDialog__ExistingFiles)
-		// fd.SetModal(true)
-		x := fd.GetOpenFileNames()
+		fd := widgets.NewQFileDialog(window, 0)
+		files := fd.GetOpenFileNames(window, "Select File(s)", "~", "", "", 0)
+		if len(files) == 1 {
+			fileBox.SetText(files[0])
+		} else {
+			fileBox.SetText("(Multiple files selected)")
+		}
 
 	})
 	receiveButton.ConnectClicked(func(bool) {
 		// open dialog
-		fd := widgets.NewQFileDialog(window, core.Qt__Popup)
-		// fd.SetFileMode(widgets.QFileDialog__Directory)
-		// fd.SetModal(true)
-		x := fd.GetExistingDirectory()
+		fd := widgets.NewQFileDialog(window, 0)
+		folder := fd.GetExistingDirectory(window, "Select Folder", "~", 0)
+		fileBox.SetText(folder)
 	})
 
 	return
