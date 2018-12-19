@@ -22,8 +22,6 @@ const hostOS = runtime.GOOS
 
 type mainFrame struct{}
 
-// The Transfer struct holds transfer-specific data used throughout program.
-// Should reorganize/clean this up but not sure how best to do so.
 type Transfer struct {
 	Filepath     string
 	FileList     []string
@@ -44,7 +42,8 @@ type Transfer struct {
 
 func main() {
 	app := widgets.NewQApplication(len(os.Args), os.Args)
-	showWindow()
+	window := newWindow()
+	window.Show()
 	app.Exec()
 	return
 }

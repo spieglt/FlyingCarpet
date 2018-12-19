@@ -9,7 +9,6 @@ static
 xcuserdata
 *.xcworkspace
 flyingcarpet*
-ui/electron
 adhoc.xml
 wdlap.exe
 go-bindata*

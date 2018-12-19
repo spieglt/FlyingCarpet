@@ -1,64 +1,103 @@
 package main
 
 import (
+	"github.com/therecipe/qt/core"
 	"github.com/therecipe/qt/widgets"
 )
 
-func showWindow() {
-	window := widgets.NewQMainWindow(nil, 0)
+func newWindow() (window *widgets.QMainWindow) {
+	// frame
+	window = widgets.NewQMainWindow(nil, 0)
 	window.SetMinimumSize2(400, 600)
 	window.SetWindowTitle("Flying Carpet")
-
 	widget := widgets.NewQWidget(nil, 0)
 	widget.SetLayout(widgets.NewQVBoxLayout())
 	window.SetCentralWidget(widget)
 
+	// radio buttons
 	radioWidget := widgets.NewQWidget(nil, 0)
 	radioWidget.SetLayout(widgets.NewQHBoxLayout())
+	radioWidget.SetMaximumHeight(125)
 
-	peerWidget := widgets.NewQWidget(nil, 0)
-	peerWidget.SetWindowTitle("this is that title")
-	peerLayout := widgets.NewQVBoxLayout2(peerWidget)
-	peerLayout.AddWidget(widgets.NewQRadioButton2("Linux", nil), 0, 0)
-	peerLayout.AddWidget(widgets.NewQRadioButton2("Mac", nil), 0, 0)
-	peerLayout.AddWidget(widgets.NewQRadioButton2("Windows", nil), 0, 0)
+	peerWrapper := widgets.NewQGroupBox2("Peer OS", nil)
+	peerLayout := widgets.NewQVBoxLayout2(peerWrapper)
+	linuxPeer := widgets.NewQRadioButton2("Linux", nil)
+	macPeer := widgets.NewQRadioButton2("Mac", nil)
+	windowsPeer := widgets.NewQRadioButton2("Windows", nil)
+	peerLayout.AddWidget(linuxPeer, 0, 0)
+	peerLayout.AddWidget(macPeer, 0, 0)
+	peerLayout.AddWidget(windowsPeer, 0, 0)
 
-	modeWidget := widgets.NewQWidget(nil, 0)
-	modeWidget.SetLayout(widgets.NewQVBoxLayout())
+	modeWrapper := widgets.NewQGroupBox2("Mode", nil)
+	modeLayout := widgets.NewQVBoxLayout2(modeWrapper)
+	sendMode := widgets.NewQRadioButton2("Send", nil)
+	receiveMode := widgets.NewQRadioButton2("Receive", nil)
+	modeLayout.AddWidget(sendMode, 0, 0)
+	modeLayout.AddWidget(receiveMode, 0, 0)
 
-	radioWidget.Layout().AddWidget(peerWidget)
-	radioWidget.Layout().AddWidget(modeWidget)
-	widget.Layout().AddWidget(radioWidget)
+	radioWidget.Layout().AddWidget(peerWrapper)
+	radioWidget.Layout().AddWidget(modeWrapper)
 
-	// bottom half
-	bottomWidget := widgets.NewQWidget(nil, 0)
-	bottomWidget.SetLayout(widgets.NewQVBoxLayout())
+	// file box
 	fileWidget := widgets.NewQWidget(nil, 0)
 	fileWidget.SetLayout(widgets.NewQHBoxLayout())
 	fileBox := widgets.NewQLineEdit(nil)
-	sendButton := widgets.NewQPushButton2("Select file(s)...", nil)
-	receiveButton := widgets.NewQPushButton2("Select folder...", nil)
+	sendButton := widgets.NewQPushButton2("Select file(s)", nil)
+	receiveButton := widgets.NewQPushButton2("Select folder", nil)
 	receiveButton.Hide()
 	fileWidget.Layout().AddWidget(sendButton)
 	fileWidget.Layout().AddWidget(receiveButton)
 	fileWidget.Layout().AddWidget(fileBox)
-	bottomWidget.Layout().AddWidget(fileWidget)
-	widget.Layout().AddWidget(bottomWidget)
 
-	// input := widgets.NewQLineEdit(nil)
-	// input.SetPlaceholderText("Write something ...")
-	// widget.Layout().AddWidget(input)
+	// start button
+	startButton := widgets.NewQPushButton2("Start", nil)
 
-	// create a button
-	// connect the clicked signal
-	// and add it to the central widgets layout
-	// button := widgets.NewQPushButton2("and click me!", nil)
-	// button.ConnectClicked(func(bool) {
-	// 	widgets.QMessageBox_Information(nil, "OK", input.Text(), widgets.QMessageBox__Ok, widgets.QMessageBox__Ok)
-	// })
-	// widget.Layout().AddWidget(button)
+	// output box
+	outputBox := widgets.NewQTextEdit(nil)
+	outputBox.SetSizePolicy2(widgets.QSizePolicy__Expanding, widgets.QSizePolicy__Expanding)
+	outputBox.SetText("Welcome to Flying Carpet!\nInstructions:\n1. select the OS of the other device\n2. select whether this device is sending or receiving\n" +
+		"3. select the files you'd like to send or the folder to which you'd like to receive\n4. press Start!")
 
-	window.Show()
+	// progress bar
+	progressBar := widgets.NewQProgressBar(nil)
+	// progressBar.SetValue(50)
+
+	widget.Layout().AddWidget(radioWidget)
+	widget.Layout().AddWidget(fileWidget)
+	widget.Layout().AddWidget(startButton)
+	widget.Layout().AddWidget(outputBox)
+	widget.Layout().AddWidget(progressBar)
+
+	//////////////////////////////
+	/////////// ACTIONS //////////
+	//////////////////////////////
+
+	sendMode.ConnectClicked(func(bool) {
+		sendButton.Show()
+		receiveButton.Hide()
+	})
+	receiveMode.ConnectClicked(func(bool) {
+		receiveButton.Show()
+		sendButton.Hide()
+	})
+
+	sendButton.ConnectClicked(func(bool) {
+		// open dialog
+		fd := widgets.NewQFileDialog(window, core.Qt__Popup)
+		// fd.SetFileMode(widgets.QFileDialog__ExistingFiles)
+		// fd.SetModal(true)
+		x := fd.GetOpenFileNames()
+
+	})
+	receiveButton.ConnectClicked(func(bool) {
+		// open dialog
+		fd := widgets.NewQFileDialog(window, core.Qt__Popup)
+		// fd.SetFileMode(widgets.QFileDialog__Directory)
+		// fd.SetModal(true)
+		x := fd.GetExistingDirectory()
+	})
+
+	return
 }
 
 func (t *Transfer) output(msg string) {
