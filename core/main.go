@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"context"
@@ -7,20 +7,12 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"os"
 	"runtime"
 	"strconv"
 	"time"
-
-	"github.com/therecipe/qt/widgets"
 )
 
-const dialTimeout = 60
-const joinAdHocTimeout = 60
-const findMacTimeout = 60
 const hostOS = runtime.GOOS
-
-type mainFrame struct{}
 
 type Transfer struct {
 	Filepath     string
@@ -37,15 +29,12 @@ type Transfer struct {
 	CancelCtx    context.CancelFunc
 	WfdSendChan  chan string
 	WfdRecvChan  chan string
-	Frame        *mainFrame
 }
 
-func main() {
-	app := widgets.NewQApplication(len(os.Args), os.Args)
-	window := newWindow()
-	window.Show()
-	app.Exec()
-	return
+type Ui interface {
+	output(string)
+	updateProgressBar(int)
+	toggleStartButton()
 }
 
 func mainRoutine(t *Transfer) {

@@ -1,9 +1,10 @@
-package main
+package core
 
 import (
 	"crypto/rand"
-	"golang.org/x/crypto/nacl/secretbox"
 	"io"
+
+	"golang.org/x/crypto/nacl/secretbox"
 )
 
 func encrypt(chunk []byte, passphrase string) (encrypted []byte) {

@@ -1,4 +1,4 @@
-package main
+package core
 
 /*
 #cgo CFLAGS: -x objective-c
