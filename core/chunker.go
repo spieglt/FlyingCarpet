@@ -14,11 +14,11 @@ import (
 
 const CHUNKSIZE = 1000000 // 1MB
 
-func chunkAndSend(pConn *net.Conn, t *Transfer) error {
+func chunkAndSend(pConn *net.Conn, t *Transfer, fileNum int, ui UI) error {
 	start := time.Now()
 	conn := *pConn
 
-	file, err := os.Open(t.Filepath)
+	file, err := os.Open(t.FileList[fileNum])
 	if err != nil {
 		return errors.New("Error opening out file. Please quit and restart Flying Carpet.")
 	}
@@ -26,15 +26,16 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 
 	// showProgressBar(t)
 	fileSize := getSize(file)
-	t.output(fmt.Sprintf("File size: %s\nMD5 hash: %x", makeSizeReadable(fileSize), getHash(t.Filepath)))
+	ui.Output(fmt.Sprintf("File size: %s\nMD5 hash: %x", makeSizeReadable(fileSize), getHash(t.FileList[fileNum])))
 	numChunks := ceil(fileSize, CHUNKSIZE)
 
 	bytesLeft := fileSize
 	var i int64
 
 	ticker := time.NewTicker(time.Millisecond * 1000)
+	ticker.Stop()
 	go func() {
-		for _ = range ticker.C {
+		for range ticker.C {
 			select {
 			case <-t.Ctx.Done():
 				return
@@ -46,7 +47,7 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 	}()
 
 	// transmit filename and size
-	filename := filepath.Base(t.Filepath)
+	filename := filepath.Base(t.FileList[fileNum])
 	filenameLen := int64(len(filename))
 	err = binary.Write(conn, binary.BigEndian, filenameLen)
 	if err != nil {
@@ -76,7 +77,7 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 			bytesLeft -= bufferSize
 
 			// encrypt buffer
-			encryptedBuffer := encrypt(buffer, t.Passphrase)
+			encryptedBuffer := encrypt(buffer, t.Password)
 
 			// send size of buffer
 			chunkSize := int64(len(encryptedBuffer))
@@ -109,20 +110,19 @@ func chunkAndSend(pConn *net.Conn, t *Transfer) error {
 	}()
 	select {
 	case /*comp :=*/ <-replyChan:
-		// t.output(fmt.Sprintf("Receiving end says: %d", comp))
+		// ui.Output(fmt.Sprintf("Receiving end says: %d", comp))
 	case <-timeoutChan:
-		t.output("Receiving end did not acknowledge but should have received signal to close connection.")
+		ui.Output("Receiving end did not acknowledge but should have received signal to close connection.")
 	}
 
 	//////////
 
-	ticker.Stop()
 	// updateProgressBar(100, t)
-	t.output(fmt.Sprintf("Sending took %s", time.Since(start)))
+	ui.Output(fmt.Sprintf("Sending took %s", time.Since(start)))
 	return nil
 }
 
-func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
+func receiveAndAssemble(pConn *net.Conn, t *Transfer, fileNum int, ui UI) error {
 	start := time.Now()
 	conn := *pConn
 
@@ -144,29 +144,30 @@ func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
 		return fmt.Errorf("Error receiving file size: %s\nPlease quit and restart Flying Carpet.", err)
 	}
 
-	// if t.Filepath is not a directory, we're in a multifile transfer (as start button action in gui.go
+	// if t.FileList[fileNum] is not a directory, we're in a multifile transfer (as start button action in gui.go
 	// would've made it a directory for the first transfer), so we need to reset it to be a directory.
-	fpStat, err := os.Stat(t.Filepath)
+	fpStat, err := os.Stat(t.FileList[fileNum])
 	if err != nil {
 		return errors.New("Error accessing destination folder: " + err.Error())
 	}
 	if !fpStat.IsDir() {
-		t.Filepath = filepath.Dir(t.Filepath) + string(os.PathSeparator)
+		t.FileList[fileNum] = filepath.Dir(t.FileList[fileNum]) + string(os.PathSeparator)
 	}
 
 	// now check if file being received already exists. if so, append t.SSID to front end.
-	if _, err := os.Stat(t.Filepath + filename); err != nil {
-		t.Filepath += filename
+	if _, err := os.Stat(t.FileList[fileNum] + filename); err != nil {
+		t.FileList[fileNum] += filename
 	} else {
-		t.Filepath = t.Filepath + t.SSID + "_" + filename
+		t.FileList[fileNum] = t.FileList[fileNum] + t.SSID + "_" + filename
 	}
 
-	t.output(fmt.Sprintf("Filename: %s\nFile size: %s", filename, makeSizeReadable(fileSize)))
+	ui.Output(fmt.Sprintf("Filename: %s\nFile size: %s", filename, makeSizeReadable(fileSize)))
 	// updateFilename(t)
 	// progress bar
 	// showProgressBar(t)
 	bytesLeft := fileSize
 	ticker := time.NewTicker(time.Millisecond * 1000)
+	defer ticker.Stop()
 	go func() {
 		for _ = range ticker.C {
 			select {
@@ -180,7 +181,7 @@ func receiveAndAssemble(pConn *net.Conn, t *Transfer) error {
 	}()
 	/////////////////////////////
 
-	outFile, err := os.OpenFile(t.Filepath, os.O_CREATE|os.O_RDWR, 0666)
+	outFile, err := os.OpenFile(t.FileList[fileNum], os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		return errors.New("Error creating out file. Please quit and restart Flying Carpet.")
 	}
@@ -210,13 +211,13 @@ outer:
 			if err != nil {
 				return errors.New("Error reading from stream: " + err.Error())
 			}
-			// t.output(fmt.Sprintf("read %d bytes", bytesReceived))
+			// ui.Output(fmt.Sprintf("read %d bytes", bytesReceived))
 			if int64(bytesReceived) != chunkSize {
 				return fmt.Errorf("bytesReceived: %d\nchunkSize: %d", bytesReceived, chunkSize)
 			}
 
 			// decrypt and add to outfile
-			decryptedChunk := decrypt(chunk, t.Passphrase)
+			decryptedChunk := decrypt(chunk, t.Password)
 			_, err = outFile.Write(decryptedChunk)
 			if err != nil {
 				return errors.New("Error writing to out file. Please quit and restart Flying Carpet.")
@@ -228,14 +229,13 @@ outer:
 	// wait till we've received everything before signalling to other end that it's okay to stop sending.
 	binary.Write(conn, binary.BigEndian, int64(1))
 
-	ticker.Stop()
 	// updateProgressBar(100, t)
-	t.output(fmt.Sprintf("Received file size: %s", makeSizeReadable(getSize(outFile))))
-	t.output(fmt.Sprintf("Received file hash: %x", getHash(t.Filepath)))
-	t.output(fmt.Sprintf("Receiving took %s", time.Since(start)))
+	ui.Output(fmt.Sprintf("Received file size: %s", makeSizeReadable(getSize(outFile))))
+	ui.Output(fmt.Sprintf("Received file hash: %x", getHash(t.FileList[fileNum])))
+	ui.Output(fmt.Sprintf("Receiving took %s", time.Since(start)))
 
 	speed := (float64(getSize(outFile)*8) / 1000000) / (float64(time.Since(start)) / 1000000000)
-	t.output(fmt.Sprintf("Speed: %.2fmbps", speed))
+	ui.Output(fmt.Sprintf("Speed: %.2fmbps", speed))
 	return err
 }
 
@@ -265,8 +265,8 @@ func getSize(file *os.File) (size int64) {
 	return
 }
 
-func getHash(filepath string) (md5hash []byte) {
-	file, err := os.Open(filepath)
+func getHash(filePath string) (md5hash []byte) {
+	file, err := os.Open(filePath)
 	if err != nil {
 		panic(err)
 	}

@@ -50,8 +50,8 @@ func startAdHoc(t *Transfer) (err error) {
 
 	runCommand("netsh winsock reset")
 	runCommand("netsh wlan stop hostednetwork")
-	t.output("SSID: " + t.SSID)
-	runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Passphrase + t.Passphrase)
+	ui.Output("SSID: " + t.SSID)
+	runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Password + t.Password)
 	cmd := exec.Command("netsh", "wlan", "start", "hostednetwork")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_, err = cmd.CombinedOutput()
@@ -60,7 +60,7 @@ func startAdHoc(t *Transfer) (err error) {
 		return
 		// TODO: replace with "echo %errorlevel%" == "1"
 	} else if err.Error() == "exit status 1" {
-		t.output("Could not start hosted network, trying Wi-Fi Direct.")
+		ui.Output("Could not start hosted network, trying Wi-Fi Direct.")
 		t.AdHocCapable = false
 
 		go startLegacyAP(t)
@@ -75,9 +75,9 @@ func startAdHoc(t *Transfer) (err error) {
 
 func stopAdHoc(t *Transfer) {
 	if t.AdHocCapable {
-		t.output(runCommand("netsh wlan stop hostednetwork"))
+		ui.Output(runCommand("netsh wlan stop hostednetwork"))
 	} else {
-		t.output("Stopping Wi-Fi Direct.")
+		ui.Output("Stopping Wi-Fi Direct.")
 		// blocking here, running this twice
 		timeChan := make(chan int)
 		go func() {
@@ -86,11 +86,11 @@ func stopAdHoc(t *Transfer) {
 		}()
 		select {
 		case t.WfdSendChan <- "quit":
-			t.output("Sent quit")
+			ui.Output("Sent quit")
 			reply := <-t.WfdRecvChan
-			t.output("Wi-Fi Direct says: " + reply)
+			ui.Output("Wi-Fi Direct says: " + reply)
 		case <-timeChan:
-			t.output("Wi-Fi Direct did not respond to quit request, is likely not running.")
+			ui.Output("Wi-Fi Direct did not respond to quit request, is likely not running.")
 		}
 		close(t.WfdSendChan)
 	}
@@ -126,7 +126,7 @@ func joinAdHoc(t *Transfer) (err error) {
 		"			<sharedKey>\r\n" +
 		"				<keyType>passPhrase</keyType>\r\n" +
 		"				<protected>false</protected>\r\n" +
-		"				<keyMaterial>" + t.Passphrase + t.Passphrase + "</keyMaterial>\r\n" +
+		"				<keyMaterial>" + t.Password + t.Password + "</keyMaterial>\r\n" +
 		"			</sharedKey>\r\n" +
 		"		</security>\r\n" +
 		"	</MSM>\r\n" +
@@ -149,10 +149,10 @@ func joinAdHoc(t *Transfer) (err error) {
 	defer os.Remove(tmpLoc)
 
 	// add profile
-	t.output(runCommand("netsh wlan add profile filename=" + tmpLoc + " user=current"))
+	ui.Output(runCommand("netsh wlan add profile filename=" + tmpLoc + " user=current"))
 
 	// join network
-	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(joinAdHocTimeout) + " seconds...")
+	ui.Output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(joinAdHocTimeout) + " seconds...")
 	timeout := joinAdHocTimeout
 	for t.SSID != getCurrentWifi(t) {
 		select {
@@ -168,7 +168,7 @@ func joinAdHoc(t *Transfer) (err error) {
 			joinCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 			/*_, cmdErr :=*/ joinCmd.CombinedOutput()
 			// if cmdErr != nil {
-			// 	t.output(fmt.Sprintf("Failed to find the ad hoc network. Trying for %2d more seconds. %s", timeout, cmdErr))
+			// 	ui.Output(fmt.Sprintf("Failed to find the ad hoc network. Trying for %2d more seconds. %s", timeout, cmdErr))
 			// }
 			timeout -= 3
 			time.Sleep(time.Second * time.Duration(3))
@@ -191,7 +191,7 @@ func findPeer(t *Transfer) (string, error) {
 		ifCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 		ifBytes, err := ifCmd.CombinedOutput()
 		if err != nil {
-			t.output("Error getting ad hoc IP, retrying.")
+			ui.Output("Error getting ad hoc IP, retrying.")
 		}
 		ifAddr = strings.TrimSpace(string(ifBytes))
 		time.Sleep(time.Second * time.Duration(2))
@@ -207,7 +207,7 @@ func findPeer(t *Transfer) (string, error) {
 
 	// run arp for that ip
 	var peerIP string
-	t.output("Looking for peer IP...")
+	ui.Output("Looking for peer IP...")
 	for !ipPattern.Match([]byte(peerIP)) {
 		select {
 		case <-t.Ctx.Done():
@@ -218,13 +218,13 @@ func findPeer(t *Transfer) (string, error) {
 			peerCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 			peerBytes, err := peerCmd.CombinedOutput()
 			if err != nil {
-				t.output("Error getting peer IP, retrying.")
+				ui.Output("Error getting peer IP, retrying.")
 			}
 			peerIP = strings.TrimSpace(string(peerBytes))
 			time.Sleep(time.Second * time.Duration(2))
 		}
 	}
-	t.output(fmt.Sprintf("Peer IP found: %s", peerIP))
+	ui.Output(fmt.Sprintf("Peer IP found: %s", peerIP))
 	return peerIP, nil
 }
 
@@ -234,7 +234,7 @@ func getCurrentWifi(t *Transfer) (SSID string) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmdBytes, err := cmd.CombinedOutput()
 	if err != nil {
-		t.output("Error getting current SSID: " + err.Error())
+		ui.Output("Error getting current SSID: " + err.Error())
 	}
 	SSID = strings.TrimSpace(string(cmdBytes))
 	return
@@ -251,7 +251,7 @@ func resetWifi(t *Transfer) {
 	} else { // if Mode == "sending" && t.Peer == "windows"
 		runCommand("netsh wlan delete profile name=" + t.SSID)
 		// rejoin previous wifi
-		t.output(runCommand("netsh wlan connect name=" + t.PreviousSSID))
+		ui.Output(runCommand("netsh wlan connect name=" + t.PreviousSSID))
 	}
 }
 
@@ -267,22 +267,22 @@ func addFirewallRule(t *Transfer) (err error) {
 	if err != nil {
 		return errors.New("Could not create firewall rule. You must run as administrator to receive. (Right-click \"Flying Carpet.exe\" and select \"Run as administrator.\") " + err.Error())
 	}
-	// t.output("Firewall rule created.")
+	// ui.Output("Firewall rule created.")
 	return
 }
 
 func deleteFirewallRule(t *Transfer) {
 	execPath, err := os.Executable()
 	if err != nil {
-		t.output("Failed to get executable path: " + err.Error())
+		ui.Output("Failed to get executable path: " + err.Error())
 	}
 	cmd := exec.Command("netsh", "advfirewall", "firewall", "delete", "rule", "name="+filepath.Base(execPath))
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	result, err := cmd.CombinedOutput()
 	if err != nil {
-		t.output("Could not create firewall rule. You must run as administrator to receive. (Right-click \"Flying Carpet.exe\" and select \"Run as administrator.\") " + err.Error())
+		ui.Output("Could not create firewall rule. You must run as administrator to receive. (Right-click \"Flying Carpet.exe\" and select \"Run as administrator.\") " + err.Error())
 	}
-	t.output(string(result))
+	ui.Output(string(result))
 }
 
 func runCommand(cmdStr string) (output string) {

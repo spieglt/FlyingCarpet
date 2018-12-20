@@ -146,7 +146,7 @@ func connectToPeer(t *Transfer) (err error) {
 func startAdHoc(t *Transfer) (err error) {
 
 	ssid := C.CString(t.SSID)
-	password := C.CString(t.Passphrase + t.Passphrase)
+	password := C.CString(t.Password + t.Password)
 	var cRes C.int = C.startAdHoc(ssid, password)
 	res := int(cRes)
 
@@ -154,7 +154,7 @@ func startAdHoc(t *Transfer) (err error) {
 	C.free(unsafe.Pointer(password))
 
 	if res == 1 {
-		t.output("SSID " + t.SSID + " started.")
+		ui.Output("SSID " + t.SSID + " started.")
 		return
 	} else {
 		return errors.New("Failed to start ad hoc network.")
@@ -163,12 +163,12 @@ func startAdHoc(t *Transfer) (err error) {
 
 func joinAdHoc(t *Transfer) (err error) {
 	if authRes := int(C.getAuth()); authRes == 0 {
-		t.output("Error getting authorization")
+		ui.Output("Error getting authorization")
 	}
-	t.output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(joinAdHocTimeout) + " seconds...")
+	ui.Output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(joinAdHocTimeout) + " seconds...")
 	timeout := joinAdHocTimeout
 	ssid := C.CString(t.SSID)
-	password := C.CString(t.Passphrase + t.Passphrase)
+	password := C.CString(t.Password + t.Password)
 
 	var cRes C.int = C.joinAdHoc(ssid, password)
 	res := int(cRes)
@@ -181,7 +181,7 @@ func joinAdHoc(t *Transfer) (err error) {
 			if timeout <= 0 {
 				return errors.New("Could not find the ad hoc network within " + strconv.Itoa(joinAdHocTimeout) + " seconds.")
 			}
-			// t.output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
+			// ui.Output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
 			timeout -= 5
 			time.Sleep(time.Second * time.Duration(3))
 			res = int(C.joinAdHoc(ssid, password))
@@ -190,7 +190,7 @@ func joinAdHoc(t *Transfer) (err error) {
 	// prefer flyingCarpet network so mac doesn't jump to another
 	cRes = C.moveNetworkToTop(ssid)
 	res = int(cRes)
-	t.output(fmt.Sprintf("%s is preferred network: %t", t.SSID, (res != 0)))
+	ui.Output(fmt.Sprintf("%s is preferred network: %t", t.SSID, (res != 0)))
 	return
 }
 
@@ -207,7 +207,7 @@ func getWifiInterface() string {
 
 func getIPAddress(t *Transfer) string {
 	var currentIP string
-	t.output("Waiting for local IP...")
+	ui.Output("Waiting for local IP...")
 	for currentIP == "" {
 		currentIPString := "ipconfig getifaddr " + getWifiInterface()
 		currentIPBytes, err := exec.Command("sh", "-c", currentIPString).CombinedOutput()
@@ -217,7 +217,7 @@ func getIPAddress(t *Transfer) string {
 		}
 		currentIP = strings.TrimSpace(string(currentIPBytes))
 	}
-	t.output(fmt.Sprintf("Wi-Fi interface IP found: %s", currentIP))
+	ui.Output(fmt.Sprintf("Wi-Fi interface IP found: %s", currentIP))
 	return currentIP
 }
 
@@ -229,7 +229,7 @@ func findMac(t *Transfer) (peerIP string, err error) {
 		"grep --line-buffered -vE '169.254.255.255' | " + // exclude broadcast address
 		"grep -vE '" + currentIP + "'" // exclude current IP
 
-	t.output("Looking for peer IP for " + strconv.Itoa(findMacTimeout) + " seconds.")
+	ui.Output("Looking for peer IP for " + strconv.Itoa(findMacTimeout) + " seconds.")
 	for peerIP == "" {
 		select {
 		case <-t.Ctx.Done():
@@ -240,7 +240,7 @@ func findMac(t *Transfer) (peerIP string, err error) {
 			}
 			pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 			if pingErr != nil {
-				// t.output(fmt.Sprintf("Could not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
+				// ui.Output(fmt.Sprintf("Could not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
 				timeout -= 2
 				time.Sleep(time.Second * time.Duration(2))
 				continue
@@ -249,7 +249,7 @@ func findMac(t *Transfer) (peerIP string, err error) {
 			peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
 		}
 	}
-	t.output(fmt.Sprintf("Peer IP found: %s", peerIP))
+	ui.Output(fmt.Sprintf("Peer IP found: %s", peerIP))
 	return
 }
 
@@ -270,16 +270,16 @@ func findLinux(t *Transfer) (peerIP string) {
 	// 	"grep --line-buffered -vE $(ifconfig | awk '/" + getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') | " + // exclude broadcast address
 	// 	"grep -vE '" + currentIP + "'" // exclude current IP
 
-	// t.output("Looking for peer IP for " + strconv.Itoa(findMacTimeout) + " seconds.")
+	// ui.Output("Looking for peer IP for " + strconv.Itoa(findMacTimeout) + " seconds.")
 	// for peerIP == "" {
 	// 	if timeout <= 0 {
-	// 		t.output("Could not find the peer computer within " + strconv.Itoa(findMacTimeout) + " seconds.")
+	// 		ui.Output("Could not find the peer computer within " + strconv.Itoa(findMacTimeout) + " seconds.")
 	// 		return "", false
 	// 	}
 	// 	pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 	// 	if pingErr != nil {
-	// 		t.output(fmt.Sprintf("Could not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
-	// 		t.output(fmt.Sprintf("peer IP: %s",string(pingBytes)))
+	// 		ui.Output(fmt.Sprintf("Could not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
+	// 		ui.Output(fmt.Sprintf("peer IP: %s",string(pingBytes)))
 	// 		timeout -= 2
 	// 		time.Sleep(time.Second * time.Duration(2))
 	// 		continue
@@ -287,7 +287,7 @@ func findLinux(t *Transfer) (peerIP string) {
 	// 	peerIPs := string(pingBytes)
 	// 	peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
 	// }
-	// t.output(fmt.Sprintf("Peer IP found: %s", peerIP))
+	// ui.Output(fmt.Sprintf("Peer IP found: %s", peerIP))
 	// success = true
 	// return
 	return "10.42.0.1"
@@ -296,13 +296,13 @@ func findLinux(t *Transfer) (peerIP string) {
 func resetWifi(t *Transfer) {
 	wifiInterface := getWifiInterface()
 	cmdString := "networksetup -setairportpower " + wifiInterface + " off && networksetup -setairportpower " + wifiInterface + " on"
-	t.output(runCommand(cmdString))
+	ui.Output(runCommand(cmdString))
 	if t.Peer == "windows" || t.Peer == "linux" || t.Mode == "sending" {
 		// cmdString = "networksetup -removepreferredwirelessnetwork " + wifiInterface + " " + t.SSID
-		// t.output(runCommand(cmdString) + " (If you did not enter password at prompt, SSID will not be removed from your System keychain or preferred networks list.)")
+		// ui.Output(runCommand(cmdString) + " (If you did not enter password at prompt, SSID will not be removed from your System keychain or preferred networks list.)")
 		res := int(C.deleteNetwork(C.CString(t.SSID)))
 		if res == 0 {
-			t.output("Error removing " + t.SSID + " from preferred wireless networks list.")
+			ui.Output("Error removing " + t.SSID + " from preferred wireless networks list.")
 		}
 	}
 }
@@ -312,7 +312,7 @@ func stayOnAdHoc(t *Transfer) {
 	for {
 		select {
 		case <-t.Ctx.Done():
-			t.output("Stopping ad hoc connection.")
+			ui.Output("Stopping ad hoc connection.")
 			return
 		default:
 			if getCurrentWifi(t) != t.SSID {

@@ -14,10 +14,11 @@ import (
 
 const hostOS = runtime.GOOS
 
+// Transfer holds all information necessary to send or receive files
 type Transfer struct {
-	Filepath     string
 	FileList     []string
-	Passphrase   string
+	ReceiveDir   string
+	Password     string
 	SSID         string
 	RecipientIP  string
 	Peer         string // "mac", "windows", or "linux"
@@ -31,20 +32,22 @@ type Transfer struct {
 	WfdRecvChan  chan string
 }
 
-type Ui interface {
-	output(string)
-	updateProgressBar(int)
-	toggleStartButton()
+// UI interface provides methods to accept information
+// from and update the user
+type UI interface {
+	Output(string)
+	UpdateProgressBar(int)
+	ToggleStartButton()
 }
 
-func mainRoutine(t *Transfer) {
-	t.WfdSendChan, t.WfdRecvChan = make(chan string), make(chan string)
+// StartTransfer is the main routine, invoked by cli and gui.
+func StartTransfer(t *Transfer, ui UI) {
 	var err error
 
 	// cleanup
 	defer func() {
 		// enableStartButton(t)
-		resetWifi(t)
+		resetWifi(t, ui)
 	}()
 
 	if t.Mode == "sending" {
@@ -55,7 +58,7 @@ func mainRoutine(t *Transfer) {
 			}
 		}()
 
-		pwBytes := md5.Sum([]byte(t.Passphrase))
+		pwBytes := md5.Sum([]byte(t.Password))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
@@ -66,45 +69,44 @@ func mainRoutine(t *Transfer) {
 		}
 
 		// make ip connection
-		if err = connectToPeer(t); err != nil {
-			t.output(err.Error())
-			t.output("Aborting transfer.")
+		if err = connectToPeer(t, ui); err != nil {
+			ui.Output(err.Error())
+			ui.Output("Aborting transfer.")
 			return
 		}
 
 		// make tcp connection
-		conn, err := dialPeer(t)
+		conn, err := dialPeer(t, ui)
 		if conn != nil {
 			defer (*conn).Close()
 		}
 		if err != nil {
-			t.output(err.Error())
-			t.output("Could not establish TCP connection with peer. Aborting transfer.")
+			ui.Output(err.Error())
+			ui.Output("Could not establish TCP connection with peer. Aborting transfer.")
 			return
 		}
-		t.output("Connected")
+		ui.Output("Connected")
 
 		// tell receiving end how many files we're sending
 		if err = sendCount(conn, t); err != nil {
-			t.output("Could not send number of files: " + err.Error())
+			ui.Output("Could not send number of files: " + err.Error())
 			return
 		}
 
 		// send files
 		for i, v := range t.FileList {
 			if len(t.FileList) > 1 {
-				t.output("=============================")
-				t.output(fmt.Sprintf("Beginning transfer %d of %d. Filename: %s", i+1, len(t.FileList), v))
+				ui.Output("=============================")
+				ui.Output(fmt.Sprintf("Beginning transfer %d of %d. Filename: %s", i+1, len(t.FileList), v))
 			}
-			t.Filepath = v
-			if err = chunkAndSend(conn, t); err != nil {
-				t.output(err.Error())
-				t.output("Aborting transfer.")
+			if err = chunkAndSend(conn, t, i, ui); err != nil {
+				ui.Output(err.Error())
+				ui.Output("Aborting transfer.")
 				return
 			}
 		}
 
-		t.output("Send complete, resetting WiFi and exiting.")
+		ui.Output("Send complete, resetting WiFi and exiting.")
 
 	} else if t.Mode == "receiving" {
 		defer func() {
@@ -115,78 +117,75 @@ func mainRoutine(t *Transfer) {
 			}
 		}()
 
-		t.Passphrase = generatePassword()
-		pwBytes := md5.Sum([]byte(t.Passphrase))
+		pwBytes := md5.Sum([]byte(t.Password))
 		prefix := pwBytes[:3]
 		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
-		// showPassphraseEvt
-		// t.Frame.QueueEvent(showPassphraseEvt)
-		t.output(fmt.Sprintf("=============================\n"+
+		ui.Output(fmt.Sprintf("=============================\n"+
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
-			"=============================\n", t.Passphrase))
+			"=============================\n", t.Password))
 
 		// make ip connection
-		if err = connectToPeer(t); err != nil {
-			t.output(err.Error())
-			t.output("Aborting transfer.")
+		if err = connectToPeer(t, ui); err != nil {
+			ui.Output(err.Error())
+			ui.Output("Aborting transfer.")
 			return
 		}
 
 		// make tcp connection
-		listener, conn, err := listenForPeer(t)
+		listener, conn, err := listenForPeer(t, ui)
 		// wait till end to close listener and tcp connection for multi-file transfers
 		// need to defer one func that closes both iff each != nil
 		defer func() {
 			if conn != nil {
 				if err := (*conn).Close(); err != nil {
-					t.output("Error closing TCP connection: " + err.Error())
+					ui.Output("Error closing TCP connection: " + err.Error())
 				}
 
 			}
 			if listener != nil {
 				if err := (*listener).Close(); err != nil {
-					t.output("Error closing TCP listener: " + err.Error())
+					ui.Output("Error closing TCP listener: " + err.Error())
 				}
 			}
 		}()
 
 		if err != nil {
-			t.output(err.Error())
-			t.output("Aborting transfer.")
+			ui.Output(err.Error())
+			ui.Output("Aborting transfer.")
 			return
 		}
 
 		// find out how many files we're receiving
 		numFiles, err := receiveCount(conn, t)
 		if err != nil {
-			t.output("Could not receive number of files: " + err.Error())
+			ui.Output("Could not receive number of files: " + err.Error())
 			return
 		}
 
 		// receive files
 		for i := 0; i < numFiles; i++ {
 			if numFiles > 1 {
-				t.output("=============================")
-				t.output(fmt.Sprintf("Receiving file %d of %d.", i+1, numFiles))
+				ui.Output("=============================")
+				ui.Output(fmt.Sprintf("Receiving file %d of %d.", i+1, numFiles))
 			}
-			if err = receiveAndAssemble(conn, t); err != nil {
-				t.output(err.Error())
-				t.output("Aborting transfer.")
+			if err = receiveAndAssemble(conn, t, i, ui); err != nil {
+				ui.Output(err.Error())
+				ui.Output("Aborting transfer.")
 				return
 			}
 		}
 
-		t.output("Reception complete, resetting WiFi and exiting.")
+		ui.Output("Reception complete, resetting WiFi and exiting.")
 	}
 }
 
-func listenForPeer(t *Transfer) (*net.TCPListener, *net.Conn, error) {
+func listenForPeer(t *Transfer, ui UI) (*net.TCPListener, *net.Conn, error) {
 	ln, err := net.ListenTCP("tcp", &net.TCPAddr{Port: t.Port})
 	if err != nil {
 		return nil, nil, fmt.Errorf("Could not listen on :%d. Err: %s", t.Port, err)
 	}
-	t.output("Listening on :" + strconv.Itoa(t.Port))
+	ui.Output("Listening on :" + strconv.Itoa(t.Port))
 
 	for {
 		select {
@@ -196,20 +195,20 @@ func listenForPeer(t *Transfer) (*net.TCPListener, *net.Conn, error) {
 			ln.SetDeadline(time.Now().Add(time.Second))
 			conn, err := ln.Accept()
 			if err != nil {
-				// t.output("Error accepting connection: " + err.Error())
+				// ui.Output("Error accepting connection: " + err.Error())
 				continue
 			}
-			t.output("Connection accepted")
+			ui.Output("Connection accepted")
 			return ln, &conn, nil
 		}
 	}
 }
 
-func dialPeer(t *Transfer) (*net.Conn, error) {
+func dialPeer(t *Transfer, ui UI) (*net.Conn, error) {
 	var conn net.Conn
 	var err error
-	t.output("Trying to connect to " + t.RecipientIP + " for " + strconv.Itoa(dialTimeout) + " seconds.")
-	for i := 0; i < dialTimeout; i++ {
+	ui.Output("Trying to connect to " + t.RecipientIP)
+	for {
 		select {
 		case <-t.Ctx.Done():
 			return nil, errors.New("Exiting dialPeer, transfer was canceled.")
@@ -217,18 +216,18 @@ func dialPeer(t *Transfer) (*net.Conn, error) {
 			err = nil
 			conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond*10)
 			if err != nil {
-				// t.output(fmt.Sprintf("Failed connection %2d to %s, retrying.", i, t.RecipientIP))
+				// ui.Output(fmt.Sprintf("Failed connection %2d to %s, retrying.", i, t.RecipientIP))
 				time.Sleep(time.Second * 1)
 				continue
 			}
-			t.output("Successfully dialed peer.")
+			ui.Output("Successfully dialed peer.")
 			return &conn, nil
 		}
 	}
-	return nil, fmt.Errorf("Waited %d seconds, no connection.", dialTimeout)
 }
 
-func generatePassword() string {
+// GeneratePassword returns a 4 char password to display on the receiving end and enter into the sending end
+func GeneratePassword() string {
 	// no l, I, or O because they look too similar to each other, 1, and 0
 	const chars = "0123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
 	rand.Seed(time.Now().UTC().UnixNano())

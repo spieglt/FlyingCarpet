@@ -30,7 +30,7 @@ func startLegacyAP(t *Transfer) {
 		// write dll to file
 		err = os.Remove(tmpLoc)
 		if err != nil {
-			t.output(err.Error())
+			ui.Output(err.Error())
 		}
 		data, err := Asset("static/wfd.dll")
 		if err != nil {
@@ -59,15 +59,15 @@ func startLegacyAP(t *Transfer) {
 
 	ConsoleInit, err := dll.FindProc("GoConsoleInit")
 	if err != nil {
-		t.output(err.Error())
+		ui.Output(err.Error())
 	}
 	ConsoleFree, err := dll.FindProc("GoConsoleFree")
 	if err != nil {
-		t.output(err.Error())
+		ui.Output(err.Error())
 	}
 	ExecuteCommand, err := dll.FindProc("GoConsoleExecuteCommand")
 	if err != nil {
-		t.output(err.Error())
+		ui.Output(err.Error())
 	}
 
 	cInitRes, _, initErr := ConsoleInit.Call()
@@ -76,14 +76,14 @@ func startLegacyAP(t *Transfer) {
 		t.WfdRecvChan <- fmt.Sprintf("Initializing Windows Runtime for Wi-Fi Direct failed: %s", initErr)
 		return
 	} else if initRes == 1 {
-		t.output("Initialized Windows Runtime.")
+		ui.Output("Initialized Windows Runtime.")
 	} else {
 		t.WfdRecvChan <- fmt.Sprintf("Something went wrong with initializing Windows Runtime: %d.", initRes)
 		return
 	}
 
 	ssid := unsafe.Pointer(C.CString("ssid " + t.SSID))
-	password := unsafe.Pointer(C.CString("pass " + t.Passphrase + t.Passphrase))
+	password := unsafe.Pointer(C.CString("pass " + t.Password + t.Password))
 	autoaccept := unsafe.Pointer(C.CString("autoaccept 1"))
 	start := unsafe.Pointer(C.CString("start"))
 	stop := unsafe.Pointer(C.CString("stop"))
@@ -108,7 +108,7 @@ func startLegacyAP(t *Transfer) {
 				cFreeRes, _, _ := ConsoleFree.Call()
 				freeRes := int(cFreeRes)
 				if freeRes == 0 {
-					t.output("Failed to uninitialize Windows Runtime.")
+					ui.Output("Failed to uninitialize Windows Runtime.")
 				}
 			}
 			t.WfdRecvChan <- "Wifi-Direct stopped."
@@ -119,6 +119,6 @@ func startLegacyAP(t *Transfer) {
 	}
 	// err = dll.Release()
 	// if err != nil {
-	// 	t.output(fmt.Sprintf("Error releasing DLL: %s", err))
+	// 	ui.Output(fmt.Sprintf("Error releasing DLL: %s", err))
 	// }
 }
