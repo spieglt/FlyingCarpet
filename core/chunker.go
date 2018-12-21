@@ -153,13 +153,14 @@ func receive(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	}
 
 	// now check if file being received already exists. if so, find new filename.
+	var currentFilePath string
 	if _, err := os.Stat(t.ReceiveDir + filename); err != nil {
 		t.FileList[fileNum] += filename
 	} else {
 		i := 0
 		for _, err := os.Stat(t.ReceiveDir + fmt.Sprintf("%d_", i) + filename); err == nil; i++ {
 		}
-		currentFilePath := t.ReceiveDir + fmt.Sprintf("%d_", i) + filename
+		currentFilePath = t.ReceiveDir + fmt.Sprintf("%d_", i) + filename
 	}
 
 	ui.Output(fmt.Sprintf("Filename: %s\nFile size: %s", filename, makeSizeReadable(fileSize)))
@@ -184,7 +185,7 @@ func receive(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	}()
 
 	// receive file
-	outFile, err := os.OpenFile(t.FileList[fileNum], os.O_CREATE|os.O_RDWR, 0666)
+	outFile, err := os.OpenFile(currentFilePath, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		return errors.New("Error creating out file. Please quit and restart Flying Carpet.")
 	}
