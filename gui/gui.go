@@ -4,6 +4,24 @@ import (
 	"github.com/therecipe/qt/widgets"
 )
 
+// Gui fulfills the UI interface to be used in the core functions
+type Gui struct {
+	// handles to progress bar, output box, start button
+}
+
+// Output prints messages to outputBox.
+func (gui Gui) Output(msg string) {
+
+	//for testing
+	// file, err := os.OpenFile("err.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// defer file.Close()
+	// file.WriteString(msg)
+	// file.WriteString("\r\n")
+}
+
 func newWindow() (window *widgets.QMainWindow) {
 	// frame
 	window = widgets.NewQMainWindow(nil, 0)
@@ -97,19 +115,8 @@ func newWindow() (window *widgets.QMainWindow) {
 		fd := widgets.NewQFileDialog(window, 0)
 		folder := fd.GetExistingDirectory(window, "Select Folder", "~", 0)
 		fileBox.SetText(folder)
+		// TODO: make sure contents of filebox is actually a folder before transfer
 	})
 
 	return
-}
-
-func (t *Transfer) output(msg string) {
-
-	//for testing
-	// file, err := os.OpenFile("err.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// defer file.Close()
-	// file.WriteString(msg)
-	// file.WriteString("\r\n")
 }

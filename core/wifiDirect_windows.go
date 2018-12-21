@@ -1,4 +1,4 @@
-package main
+package core
 
 //#include <stdlib.h>
 import "C"
@@ -14,9 +14,9 @@ import (
 
 var dll *syscall.DLL
 
-// ERROR HANDLING
+// TODO: error handling
 
-func startLegacyAP(t *Transfer) {
+func startLegacyAP(t *Transfer, ui UI) {
 	cmd := exec.Command("cmd", "/C", "echo %USERPROFILE%")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmdBytes, err := cmd.CombinedOutput()
@@ -113,6 +113,7 @@ func startLegacyAP(t *Transfer) {
 			}
 			t.WfdRecvChan <- "Wifi-Direct stopped."
 			return
+		// TODO: cause of process leak? not releasing dll till 3 seconds after program is closed?
 		default:
 			time.Sleep(time.Second * 3)
 		}

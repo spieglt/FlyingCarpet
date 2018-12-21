@@ -2,12 +2,13 @@ package core
 
 import (
 	"crypto/rand"
+	"errors"
 	"io"
 
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
-func encrypt(chunk []byte, passphrase string) (encrypted []byte) {
+func encrypt(chunk []byte, passphrase string) ([]byte, error) {
 
 	var key [32]byte
 	copy(key[:], passphrase)
@@ -15,14 +16,13 @@ func encrypt(chunk []byte, passphrase string) (encrypted []byte) {
 	var nonce [24]byte
 	_, err := io.ReadFull(rand.Reader, nonce[:])
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	encrypted = secretbox.Seal(nonce[:], chunk, &nonce, &key)
-	return
+	return secretbox.Seal(nonce[:], chunk, &nonce, &key), nil
 }
 
-func decrypt(chunk []byte, passphrase string) (decrypted []byte) {
+func decrypt(chunk []byte, passphrase string) ([]byte, error) {
 
 	var key [32]byte
 	copy(key[:], passphrase)
@@ -32,7 +32,7 @@ func decrypt(chunk []byte, passphrase string) (decrypted []byte) {
 
 	decrypted, ok := secretbox.Open(nil, chunk[24:], &decryptNonce, &key)
 	if !ok {
-		panic("error decrypting")
+		return []byte{}, errors.New("error decrypting")
 	}
-	return
+	return decrypted, nil
 }

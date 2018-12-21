@@ -21,6 +21,9 @@ func (cli Cli) Output(message string) {
 	fmt.Println(message)
 }
 
+// ShowProgressBar is a placeholder to fulfill the UI interface from core.
+func (cli Cli) ShowProgressBar() {}
+
 // UpdateProgressBar prints the status of a file transfer.
 func (cli Cli) UpdateProgressBar(percentDone int) {
 	fmt.Printf("\rProgress: %3d%%", percentDone)
@@ -68,6 +71,7 @@ func getInput(cli Cli) *core.Transfer {
 	t.Ctx, t.CancelCtx = context.WithCancel(context.Background())
 
 	// parse flags
+	var err error
 	if sendFiles == "" && receiveDir != "" { // receiving
 		t.Mode = "receiving"
 		path, err := filepath.Abs(receiveDir)
@@ -77,12 +81,11 @@ func getInput(cli Cli) *core.Transfer {
 		t.ReceiveDir = path + string(os.PathSeparator)
 	} else if receiveDir == "" && sendFiles != "" { // sending
 		t.Mode = "sending"
-		fl, err := parseSendFiles(sendFiles)
+		t.FileList, err = parseSendFiles(sendFiles)
 		if err != nil {
-			cli.Output(fmt.Sprintf("%s", err))
+			cli.Output(err.Error())
 			os.Exit(1)
 		}
-		t.FileList = fl
 	} else {
 		printUsage()
 		os.Exit(1)

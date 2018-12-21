@@ -12,11 +12,12 @@ import (
 	"time"
 )
 
-const CHUNKSIZE = 1000000 // 1MB
+// CHUNKSIZE is 1MB
+const CHUNKSIZE = 1000000
 
-func chunkAndSend(pConn *net.Conn, t *Transfer, fileNum int, ui UI) error {
+func send(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
+	// setup
 	start := time.Now()
-	conn := *pConn
 
 	file, err := os.Open(t.FileList[fileNum])
 	if err != nil {
@@ -24,8 +25,11 @@ func chunkAndSend(pConn *net.Conn, t *Transfer, fileNum int, ui UI) error {
 	}
 	defer file.Close()
 
-	// showProgressBar(t)
-	fileSize := getSize(file)
+	ui.ShowProgressBar()
+	fileSize, err := getSize(file)
+	if err != nil {
+		return errors.New("Could not read file size")
+	}
 	ui.Output(fmt.Sprintf("File size: %s\nMD5 hash: %x", makeSizeReadable(fileSize), getHash(t.FileList[fileNum])))
 	numChunks := ceil(fileSize, CHUNKSIZE)
 
@@ -40,8 +44,8 @@ func chunkAndSend(pConn *net.Conn, t *Transfer, fileNum int, ui UI) error {
 			case <-t.Ctx.Done():
 				return
 			default:
-				// percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
-				// updateProgressBar(int(percentDone), t)
+				percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
+				ui.UpdateProgressBar(int(percentDone))
 			}
 		}
 	}()
@@ -61,70 +65,65 @@ func chunkAndSend(pConn *net.Conn, t *Transfer, fileNum int, ui UI) error {
 	if err != nil {
 		return fmt.Errorf("Error transmitting file size: %s\n Please quit and restart Flying Carpet.", err)
 	}
-	/////////////////////////////
 
+	// send file
+	buffer := make([]byte, CHUNKSIZE)
+	var bytesRead int
 	for i = 0; i < numChunks; i++ {
 		select {
 		case <-t.Ctx.Done():
 			return errors.New("Exiting chunkAndSend, transfer was canceled.")
 		default:
-			bufferSize := min(CHUNKSIZE, bytesLeft)
-			buffer := make([]byte, bufferSize)
-			bytesRead, err := file.Read(buffer)
-			if int64(bytesRead) != bufferSize {
-				return fmt.Errorf("bytesRead: %d\nbufferSize: %d\nError reading out file. Please quit and restart Flying Carpet.", bytesRead, bufferSize)
-			}
-			bytesLeft -= bufferSize
+		}
+		bytesRead, err = file.Read(buffer)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("Error reading file: %s", err)
+		}
 
-			// encrypt buffer
-			encryptedBuffer := encrypt(buffer, t.Password)
+		// encrypt buffer
+		encryptedBuffer, err := encrypt(buffer[:bytesRead], t.Password)
+		if err != nil {
+			return err
+		}
 
-			// send size of buffer
-			chunkSize := int64(len(encryptedBuffer))
-			err = binary.Write(conn, binary.BigEndian, chunkSize)
-			if err != nil {
-				return errors.New("Error writing chunk length. Please quit and restart Flying Carpet. " + err.Error())
-			}
+		// send size
+		chunkSize := int64(len(encryptedBuffer))
+		err = binary.Write(conn, binary.BigEndian, chunkSize)
+		if err != nil {
+			return errors.New("Error writing chunk length. Please quit and restart Flying Carpet. " + err.Error())
+		}
 
-			// send buffer
-			bytes, err := conn.Write(encryptedBuffer)
-			if bytes != len(encryptedBuffer) {
-				return errors.New("Send error. Please quit and restart Flying Carpet. " + err.Error())
-			}
+		// send buffer
+		bytes, err := conn.Write(encryptedBuffer)
+		if bytes != len(encryptedBuffer) {
+			return errors.New("Send error. Please quit and restart Flying Carpet. " + err.Error())
 		}
 	}
 	// send chunkSize of 0 and then wait until receiving end tells us they have everything.
 	binary.Write(conn, binary.BigEndian, int64(0))
-
-	// timeout for binary.Read
 	replyChan := make(chan int64)
-	timeoutChan := make(chan int)
 	go func() {
 		var comp int64
 		binary.Read(conn, binary.BigEndian, &comp)
 		replyChan <- comp
 	}()
-	go func() {
-		time.Sleep(time.Second * 2)
-		timeoutChan <- 0
-	}()
 	select {
+	case <-time.After(time.Second * 2):
+		ui.Output("Receiving end did not acknowledge but should have received signal to close connection.")
 	case /*comp :=*/ <-replyChan:
 		// ui.Output(fmt.Sprintf("Receiving end says: %d", comp))
-	case <-timeoutChan:
-		ui.Output("Receiving end did not acknowledge but should have received signal to close connection.")
 	}
 
-	//////////
-
-	// updateProgressBar(100, t)
+	ui.UpdateProgressBar(100)
 	ui.Output(fmt.Sprintf("Sending took %s", time.Since(start)))
 	return nil
 }
 
-func receiveAndAssemble(pConn *net.Conn, t *Transfer, fileNum int, ui UI) error {
+func receive(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	start := time.Now()
-	conn := *pConn
 
 	// receive filename and size
 	var filenameLen int64
@@ -144,28 +143,32 @@ func receiveAndAssemble(pConn *net.Conn, t *Transfer, fileNum int, ui UI) error 
 		return fmt.Errorf("Error receiving file size: %s\nPlease quit and restart Flying Carpet.", err)
 	}
 
-	// if t.FileList[fileNum] is not a directory, we're in a multifile transfer (as start button action in gui.go
-	// would've made it a directory for the first transfer), so we need to reset it to be a directory.
-	fpStat, err := os.Stat(t.FileList[fileNum])
+	// check destination folder
+	fpStat, err := os.Stat(t.ReceiveDir)
 	if err != nil {
 		return errors.New("Error accessing destination folder: " + err.Error())
 	}
 	if !fpStat.IsDir() {
-		t.FileList[fileNum] = filepath.Dir(t.FileList[fileNum]) + string(os.PathSeparator)
+		t.ReceiveDir = filepath.Dir(t.FileList[fileNum]) + string(os.PathSeparator)
 	}
 
-	// now check if file being received already exists. if so, append t.SSID to front end.
-	if _, err := os.Stat(t.FileList[fileNum] + filename); err != nil {
+	// now check if file being received already exists. if so, find new filename.
+	if _, err := os.Stat(t.ReceiveDir + filename); err != nil {
 		t.FileList[fileNum] += filename
 	} else {
-		t.FileList[fileNum] = t.FileList[fileNum] + t.SSID + "_" + filename
+		i := 0
+		for _, err := os.Stat(t.ReceiveDir + fmt.Sprintf("%d_", i) + filename); err == nil; i++ {
+		}
+		currentFilePath := t.ReceiveDir + fmt.Sprintf("%d_", i) + filename
 	}
 
 	ui.Output(fmt.Sprintf("Filename: %s\nFile size: %s", filename, makeSizeReadable(fileSize)))
 	// updateFilename(t)
-	// progress bar
-	// showProgressBar(t)
+	ui.ShowProgressBar()
+
 	bytesLeft := fileSize
+
+	// start ticker
 	ticker := time.NewTicker(time.Millisecond * 1000)
 	defer ticker.Stop()
 	go func() {
@@ -174,13 +177,13 @@ func receiveAndAssemble(pConn *net.Conn, t *Transfer, fileNum int, ui UI) error 
 			case <-t.Ctx.Done():
 				return
 			default:
-				// percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
-				// updateProgressBar(int(percentDone), t)
+				percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
+				ui.UpdateProgressBar(int(percentDone))
 			}
 		}
 	}()
-	/////////////////////////////
 
+	// receive file
 	outFile, err := os.OpenFile(t.FileList[fileNum], os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		return errors.New("Error creating out file. Please quit and restart Flying Carpet.")
@@ -217,7 +220,10 @@ outer:
 			}
 
 			// decrypt and add to outfile
-			decryptedChunk := decrypt(chunk, t.Password)
+			decryptedChunk, err := decrypt(chunk, t.Password)
+			if err != nil {
+				return err
+			}
 			_, err = outFile.Write(decryptedChunk)
 			if err != nil {
 				return errors.New("Error writing to out file. Please quit and restart Flying Carpet.")
@@ -229,19 +235,22 @@ outer:
 	// wait till we've received everything before signalling to other end that it's okay to stop sending.
 	binary.Write(conn, binary.BigEndian, int64(1))
 
-	// updateProgressBar(100, t)
-	ui.Output(fmt.Sprintf("Received file size: %s", makeSizeReadable(getSize(outFile))))
+	ui.UpdateProgressBar(100)
+	outFileSize, err := getSize(outFile)
+	if err != nil {
+		return errors.New("Could not read file size")
+	}
+	ui.Output(fmt.Sprintf("Received file size: %s", makeSizeReadable(outFileSize)))
 	ui.Output(fmt.Sprintf("Received file hash: %x", getHash(t.FileList[fileNum])))
 	ui.Output(fmt.Sprintf("Receiving took %s", time.Since(start)))
 
-	speed := (float64(getSize(outFile)*8) / 1000000) / (float64(time.Since(start)) / 1000000000)
+	speed := (float64(outFileSize*8) / 1000000) / (float64(time.Since(start)) / 1000000000)
 	ui.Output(fmt.Sprintf("Speed: %.2fmbps", speed))
 	return err
 }
 
-func sendCount(pConn *net.Conn, t *Transfer) error {
-	conn := *pConn
-	numFiles := int64(len(t.FileList))
+func sendCount(conn net.Conn, count int) error {
+	numFiles := int64(count)
 	err := binary.Write(conn, binary.BigEndian, numFiles)
 	if err != nil {
 		return fmt.Errorf("Error transmitting number of files: %s\n Please quit and restart Flying Carpet.", err)
@@ -249,8 +258,7 @@ func sendCount(pConn *net.Conn, t *Transfer) error {
 	return err
 }
 
-func receiveCount(pConn *net.Conn, t *Transfer) (int, error) {
-	conn := *pConn
+func receiveCount(conn net.Conn) (int, error) {
 	var numFiles int64
 	err := binary.Read(conn, binary.BigEndian, &numFiles)
 	if err != nil {
@@ -259,8 +267,11 @@ func receiveCount(pConn *net.Conn, t *Transfer) (int, error) {
 	return int(numFiles), nil
 }
 
-func getSize(file *os.File) (size int64) {
-	fileInfo, _ := file.Stat()
+func getSize(file *os.File) (size int64, err error) {
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return 0, err
+	}
 	size = fileInfo.Size()
 	return
 }
@@ -277,18 +288,6 @@ func getHash(filePath string) (md5hash []byte) {
 	md5hash = hash.Sum(nil)
 	return
 }
-
-// func updateProgressBar(percentage int, t *Transfer) {
-
-// }
-
-// func showProgressBar(t *Transfer) {
-
-// }
-
-// func updateFilename(t *Transfer) {
-
-// }
 
 func ceil(x, y int64) int64 {
 	if x%y != 0 {

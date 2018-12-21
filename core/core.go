@@ -36,6 +36,7 @@ type Transfer struct {
 // from and update the user
 type UI interface {
 	Output(string)
+	ShowProgressBar()
 	UpdateProgressBar(int)
 	ToggleStartButton()
 }
@@ -46,26 +47,26 @@ func StartTransfer(t *Transfer, ui UI) {
 
 	// cleanup
 	defer func() {
-		// enableStartButton(t)
+		ui.ToggleStartButton()
 		resetWifi(t, ui)
 	}()
 
+	// get ssid
+	pwBytes := md5.Sum([]byte(t.Password))
+	prefix := pwBytes[:3]
+	t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
+
 	if t.Mode == "sending" {
 		// to stop searching for ad hoc network (if Mac jumps off)
-		defer func() {
-			if hostOS == "darwin" {
-				t.CancelCtx()
-			}
-		}()
+		if hostOS == "darwin" {
+			defer func() { t.CancelCtx() }()
+		}
 
-		pwBytes := md5.Sum([]byte(t.Password))
-		prefix := pwBytes[:3]
-		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
-
+		// not necessary for mac as it reaches for its most preferred network automatically
 		if hostOS == "windows" {
-			t.PreviousSSID = getCurrentWifi(t)
+			t.PreviousSSID = getCurrentWifi(ui)
 		} else if hostOS == "linux" {
-			t.PreviousSSID = getCurrentUUID(t)
+			t.PreviousSSID = getCurrentUUID()
 		}
 
 		// make ip connection
@@ -78,7 +79,7 @@ func StartTransfer(t *Transfer, ui UI) {
 		// make tcp connection
 		conn, err := dialPeer(t, ui)
 		if conn != nil {
-			defer (*conn).Close()
+			defer conn.Close()
 		}
 		if err != nil {
 			ui.Output(err.Error())
@@ -88,7 +89,7 @@ func StartTransfer(t *Transfer, ui UI) {
 		ui.Output("Connected")
 
 		// tell receiving end how many files we're sending
-		if err = sendCount(conn, t); err != nil {
+		if err = sendCount(conn, len(t.FileList)); err != nil {
 			ui.Output("Could not send number of files: " + err.Error())
 			return
 		}
@@ -99,27 +100,22 @@ func StartTransfer(t *Transfer, ui UI) {
 				ui.Output("=============================")
 				ui.Output(fmt.Sprintf("Beginning transfer %d of %d. Filename: %s", i+1, len(t.FileList), v))
 			}
-			if err = chunkAndSend(conn, t, i, ui); err != nil {
+			if err = send(conn, t, i, ui); err != nil {
 				ui.Output(err.Error())
 				ui.Output("Aborting transfer.")
 				return
 			}
 		}
-
 		ui.Output("Send complete, resetting WiFi and exiting.")
 
 	} else if t.Mode == "receiving" {
-		defer func() {
-			// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
-			// and thus don't need to shut down the goroutine trying to stay on it. does this need to happen when peer is linux? yes.
-			if hostOS == "darwin" && (t.Peer == "windows" || t.Peer == "linux") {
+		// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
+		// and thus don't need to shut down the goroutine trying to stay on it. does this need to happen when peer is linux? yes.
+		if hostOS == "darwin" && (t.Peer == "windows" || t.Peer == "linux") {
+			defer func() {
 				t.CancelCtx()
-			}
-		}()
-
-		pwBytes := md5.Sum([]byte(t.Password))
-		prefix := pwBytes[:3]
-		t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
+			}()
+		}
 
 		ui.Output(fmt.Sprintf("=============================\n"+
 			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
@@ -138,7 +134,7 @@ func StartTransfer(t *Transfer, ui UI) {
 		// need to defer one func that closes both iff each != nil
 		defer func() {
 			if conn != nil {
-				if err := (*conn).Close(); err != nil {
+				if err := conn.Close(); err != nil {
 					ui.Output("Error closing TCP connection: " + err.Error())
 				}
 
@@ -157,7 +153,7 @@ func StartTransfer(t *Transfer, ui UI) {
 		}
 
 		// find out how many files we're receiving
-		numFiles, err := receiveCount(conn, t)
+		numFiles, err := receiveCount(conn)
 		if err != nil {
 			ui.Output("Could not receive number of files: " + err.Error())
 			return
@@ -169,7 +165,7 @@ func StartTransfer(t *Transfer, ui UI) {
 				ui.Output("=============================")
 				ui.Output(fmt.Sprintf("Receiving file %d of %d.", i+1, numFiles))
 			}
-			if err = receiveAndAssemble(conn, t, i, ui); err != nil {
+			if err = receive(conn, t, i, ui); err != nil {
 				ui.Output(err.Error())
 				ui.Output("Aborting transfer.")
 				return
@@ -180,13 +176,15 @@ func StartTransfer(t *Transfer, ui UI) {
 	}
 }
 
-func listenForPeer(t *Transfer, ui UI) (*net.TCPListener, *net.Conn, error) {
+func listenForPeer(t *Transfer, ui UI) (*net.TCPListener, net.Conn, error) {
 	ln, err := net.ListenTCP("tcp", &net.TCPAddr{Port: t.Port})
 	if err != nil {
 		return nil, nil, fmt.Errorf("Could not listen on :%d. Err: %s", t.Port, err)
 	}
 	ui.Output("Listening on :" + strconv.Itoa(t.Port))
-
+	// TODO: why did I do this this way? it's only going to accept one connection on the port.
+	// And keep restarting the listener every second till then? Once it accepts, it returns.
+	// If Accept() errors, we loop indefinitely.
 	for {
 		select {
 		case <-t.Ctx.Done():
@@ -195,35 +193,34 @@ func listenForPeer(t *Transfer, ui UI) (*net.TCPListener, *net.Conn, error) {
 			ln.SetDeadline(time.Now().Add(time.Second))
 			conn, err := ln.Accept()
 			if err != nil {
-				// ui.Output("Error accepting connection: " + err.Error())
+				ui.Output("Error accepting connection: " + err.Error())
 				continue
 			}
 			ui.Output("Connection accepted")
-			return ln, &conn, nil
+			return ln, conn, nil
 		}
 	}
 }
 
-func dialPeer(t *Transfer, ui UI) (*net.Conn, error) {
-	var conn net.Conn
-	var err error
+func dialPeer(t *Transfer, ui UI) (conn net.Conn, err error) {
 	ui.Output("Trying to connect to " + t.RecipientIP)
-	for {
+	for i := 0; i < 1000; i++ {
 		select {
 		case <-t.Ctx.Done():
 			return nil, errors.New("Exiting dialPeer, transfer was canceled.")
 		default:
 			err = nil
-			conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond*10)
+			conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond*50)
 			if err != nil {
-				// ui.Output(fmt.Sprintf("Failed connection %2d to %s, retrying.", i, t.RecipientIP))
+				ui.Output(fmt.Sprintf("Failed connection %2d to %s, retrying.", i, t.RecipientIP))
 				time.Sleep(time.Second * 1)
 				continue
 			}
 			ui.Output("Successfully dialed peer.")
-			return &conn, nil
+			return conn, nil
 		}
 	}
+	return nil, fmt.Errorf("Could not dial peer.")
 }
 
 // GeneratePassword returns a 4 char password to display on the receiving end and enter into the sending end

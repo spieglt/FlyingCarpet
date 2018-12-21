@@ -7,26 +7,25 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 )
 
-func connectToPeer(t *Transfer) (err error) {
+func connectToPeer(t *Transfer, ui UI) (err error) {
 	if t.Mode == "receiving" {
 		if err = addFirewallRule(t); err != nil {
 			return
 		}
-		if err = startAdHoc(t); err != nil {
+		if err = startAdHoc(t, ui); err != nil {
 			return
 		}
 	} else if t.Mode == "sending" {
 		if t.Peer == "windows" {
-			if err = joinAdHoc(t); err != nil {
+			if err = joinAdHoc(t, ui); err != nil {
 				return
 			}
-			t.RecipientIP, err = findPeer(t)
+			t.RecipientIP, err = findPeer(t, ui)
 			if err != nil {
 				return
 			}
@@ -34,10 +33,10 @@ func connectToPeer(t *Transfer) (err error) {
 			if err = addFirewallRule(t); err != nil {
 				return
 			}
-			if err = startAdHoc(t); err != nil {
+			if err = startAdHoc(t, ui); err != nil {
 				return
 			}
-			t.RecipientIP, err = findPeer(t)
+			t.RecipientIP, err = findPeer(t, ui)
 			if err != nil {
 				return
 			}
@@ -46,7 +45,7 @@ func connectToPeer(t *Transfer) (err error) {
 	return
 }
 
-func startAdHoc(t *Transfer) (err error) {
+func startAdHoc(t *Transfer, ui UI) (err error) {
 
 	runCommand("netsh winsock reset")
 	runCommand("netsh wlan stop hostednetwork")
@@ -63,7 +62,7 @@ func startAdHoc(t *Transfer) (err error) {
 		ui.Output("Could not start hosted network, trying Wi-Fi Direct.")
 		t.AdHocCapable = false
 
-		go startLegacyAP(t)
+		go startLegacyAP(t, ui)
 		if msg := <-t.WfdRecvChan; msg != "started" {
 			return errors.New("Could not start Wi-Fi Direct: " + msg)
 		}
@@ -73,7 +72,7 @@ func startAdHoc(t *Transfer) (err error) {
 	}
 }
 
-func stopAdHoc(t *Transfer) {
+func stopAdHoc(t *Transfer, ui UI) {
 	if t.AdHocCapable {
 		ui.Output(runCommand("netsh wlan stop hostednetwork"))
 	} else {
@@ -96,7 +95,7 @@ func stopAdHoc(t *Transfer) {
 	}
 }
 
-func joinAdHoc(t *Transfer) (err error) {
+func joinAdHoc(t *Transfer, ui UI) (err error) {
 	cmd := exec.Command("cmd", "/C", "echo %USERPROFILE%")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmdBytes, err := cmd.CombinedOutput()
@@ -152,16 +151,12 @@ func joinAdHoc(t *Transfer) (err error) {
 	ui.Output(runCommand("netsh wlan add profile filename=" + tmpLoc + " user=current"))
 
 	// join network
-	ui.Output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(joinAdHocTimeout) + " seconds...")
-	timeout := joinAdHocTimeout
-	for t.SSID != getCurrentWifi(t) {
+	ui.Output("Looking for ad-hoc network " + t.SSID)
+	for t.SSID != getCurrentWifi(ui) {
 		select {
 		case <-t.Ctx.Done():
 			return errors.New("Exiting joinAdHoc, transfer was canceled.")
 		default:
-			if timeout <= 0 {
-				return errors.New("Could not find the ad hoc network within " + strconv.Itoa(joinAdHocTimeout) + " seconds.")
-			}
 			cmdStr := "netsh wlan connect name=" + t.SSID
 			cmdSlice := strings.Split(cmdStr, " ")
 			joinCmd := exec.Command(cmdSlice[0], cmdSlice[1:]...)
@@ -170,14 +165,13 @@ func joinAdHoc(t *Transfer) (err error) {
 			// if cmdErr != nil {
 			// 	ui.Output(fmt.Sprintf("Failed to find the ad hoc network. Trying for %2d more seconds. %s", timeout, cmdErr))
 			// }
-			timeout -= 3
 			time.Sleep(time.Second * time.Duration(3))
 		}
 	}
 	return
 }
 
-func findPeer(t *Transfer) (string, error) {
+func findPeer(t *Transfer, ui UI) (string, error) {
 	ipPattern, _ := regexp.Compile("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}")
 
 	// clear arp cache
@@ -228,7 +222,7 @@ func findPeer(t *Transfer) (string, error) {
 	return peerIP, nil
 }
 
-func getCurrentWifi(t *Transfer) (SSID string) {
+func getCurrentWifi(ui UI) (SSID string) {
 	cmdStr := "$(netsh wlan show interfaces | Select-String -Pattern 'Profile *: (?<profile>.*)').Matches.Groups[1].Value.Trim()"
 	cmd := exec.Command("powershell", "-c", cmdStr)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
@@ -244,10 +238,10 @@ func getWifiInterface() string {
 	return ""
 }
 
-func resetWifi(t *Transfer) {
+func resetWifi(t *Transfer, ui UI) {
 	if t.Mode == "receiving" || t.Peer == "mac" || t.Peer == "linux" {
-		deleteFirewallRule(t)
-		stopAdHoc(t)
+		deleteFirewallRule(ui)
+		stopAdHoc(t, ui)
 	} else { // if Mode == "sending" && t.Peer == "windows"
 		runCommand("netsh wlan delete profile name=" + t.SSID)
 		// rejoin previous wifi
@@ -271,7 +265,7 @@ func addFirewallRule(t *Transfer) (err error) {
 	return
 }
 
-func deleteFirewallRule(t *Transfer) {
+func deleteFirewallRule(ui UI) {
 	execPath, err := os.Executable()
 	if err != nil {
 		ui.Output("Failed to get executable path: " + err.Error())
@@ -304,4 +298,4 @@ func runCommand(cmdStr string) (output string) {
 	return strings.TrimSpace(string(cmdBytes))
 }
 
-func getCurrentUUID(t *Transfer) (uuid string) { return "" }
+func getCurrentUUID() (uuid string) { return "" }

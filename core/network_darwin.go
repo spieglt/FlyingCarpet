@@ -111,7 +111,7 @@ import (
 	"unsafe"
 )
 
-func connectToPeer(t *Transfer) (err error) {
+func connectToPeer(t *Transfer, ui Ui) (err error) {
 
 	if t.Mode == "sending" {
 		if err = joinAdHoc(t); err != nil {
@@ -293,7 +293,7 @@ func findLinux(t *Transfer) (peerIP string) {
 	return "10.42.0.1"
 }
 
-func resetWifi(t *Transfer) {
+func resetWifi(t *Transfer, ui UI) {
 	wifiInterface := getWifiInterface()
 	cmdString := "networksetup -setairportpower " + wifiInterface + " off && networksetup -setairportpower " + wifiInterface + " on"
 	ui.Output(runCommand(cmdString))
@@ -331,4 +331,4 @@ func runCommand(cmd string) (output string) {
 	return strings.TrimSpace(string(cmdBytes))
 }
 
-func getCurrentUUID(t *Transfer) (uuid string) { return "" }
+func getCurrentUUID() (uuid string) { return "" }

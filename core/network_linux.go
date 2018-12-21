@@ -114,7 +114,7 @@ func getCurrentWifi(t *Transfer) (ssid string) {
 	return
 }
 
-func getCurrentUUID(t *Transfer) (uuid string) {
+func getCurrentUUID() (uuid string) {
 	command := "nmcli -f active,uuid con | awk '/^yes/{print $2}'"
 	uuid = runCommand(command)
 	return
