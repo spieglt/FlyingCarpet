@@ -21,7 +21,7 @@ func send(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 
 	file, err := os.Open(t.FileList[fileNum])
 	if err != nil {
-		return errors.New("Error opening out file. Please quit and restart Flying Carpet.")
+		return errors.New("Error opening output file. Please quit and restart Flying Carpet.")
 	}
 	defer file.Close()
 
@@ -192,45 +192,45 @@ func receive(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	defer outFile.Close()
 
 	var chunkSize int64
-outer:
+
 	for {
 		select {
 		case <-t.Ctx.Done():
 			return errors.New("Exiting dialPeer, transfer was canceled.")
 		default:
-			// get chunk size
-			chunkSize = -1
-			err := binary.Read(conn, binary.BigEndian, &chunkSize)
-			if err != nil || chunkSize == -1 {
-				return errors.New("Error reading chunk size: " + err.Error())
-			}
-			if chunkSize == 0 {
-				// done receiving
-				break outer
-			}
-
-			// get chunk
-			chunk := make([]byte, chunkSize)
-			bytesReceived, err := io.ReadFull(conn, chunk)
-			if err != nil {
-				return errors.New("Error reading from stream: " + err.Error())
-			}
-			// ui.Output(fmt.Sprintf("read %d bytes", bytesReceived))
-			if int64(bytesReceived) != chunkSize {
-				return fmt.Errorf("bytesReceived: %d\nchunkSize: %d", bytesReceived, chunkSize)
-			}
-
-			// decrypt and add to outfile
-			decryptedChunk, err := decrypt(chunk, t.Password)
-			if err != nil {
-				return err
-			}
-			_, err = outFile.Write(decryptedChunk)
-			if err != nil {
-				return errors.New("Error writing to out file. Please quit and restart Flying Carpet.")
-			}
-			bytesLeft -= int64(len(decryptedChunk))
 		}
+		// get chunk size
+		chunkSize = -1
+		err := binary.Read(conn, binary.BigEndian, &chunkSize)
+		if err != nil || chunkSize == -1 {
+			return errors.New("Error reading chunk size: " + err.Error())
+		}
+		if chunkSize == 0 {
+			// done receiving
+			break outer
+		}
+
+		// get chunk
+		chunk := make([]byte, chunkSize)
+		bytesReceived, err := io.ReadFull(conn, chunk)
+		if err != nil {
+			return errors.New("Error reading from stream: " + err.Error())
+		}
+		// ui.Output(fmt.Sprintf("read %d bytes", bytesReceived))
+		if int64(bytesReceived) != chunkSize {
+			return fmt.Errorf("bytesReceived: %d\nchunkSize: %d", bytesReceived, chunkSize)
+		}
+
+		// decrypt and add to outfile
+		decryptedChunk, err := decrypt(chunk, t.Password)
+		if err != nil {
+			return err
+		}
+		_, err = outFile.Write(decryptedChunk)
+		if err != nil {
+			return errors.New("Error writing to out file. Please quit and restart Flying Carpet.")
+		}
+		bytesLeft -= int64(len(decryptedChunk))
 	}
 
 	// wait till we've received everything before signalling to other end that it's okay to stop sending.
