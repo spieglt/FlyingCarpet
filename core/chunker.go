@@ -30,7 +30,11 @@ func send(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	if err != nil {
 		return errors.New("Could not read file size")
 	}
-	ui.Output(fmt.Sprintf("File size: %s\nMD5 hash: %x", makeSizeReadable(fileSize), getHash(t.FileList[fileNum])))
+	hash, err := getHash(t.FileList[fileNum])
+	if err != nil {
+		return err
+	}
+	ui.Output(fmt.Sprintf("File size: %s\nMD5 hash: %x", makeSizeReadable(fileSize), hash))
 	numChunks := ceil(fileSize, CHUNKSIZE)
 
 	bytesLeft := fileSize
@@ -207,7 +211,7 @@ func receive(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		}
 		if chunkSize == 0 {
 			// done receiving
-			break outer
+			break
 		}
 
 		// get chunk
@@ -241,8 +245,12 @@ func receive(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	if err != nil {
 		return errors.New("Could not read file size")
 	}
+	hash, err := getHash(currentFilePath)
+	if err != nil {
+		return err
+	}
 	ui.Output(fmt.Sprintf("Received file size: %s", makeSizeReadable(outFileSize)))
-	ui.Output(fmt.Sprintf("Received file hash: %x", getHash(t.FileList[fileNum])))
+	ui.Output(fmt.Sprintf("Received file hash: %x", hash))
 	ui.Output(fmt.Sprintf("Receiving took %s", time.Since(start)))
 
 	speed := (float64(outFileSize*8) / 1000000) / (float64(time.Since(start)) / 1000000000)
@@ -277,14 +285,14 @@ func getSize(file *os.File) (size int64, err error) {
 	return
 }
 
-func getHash(filePath string) (md5hash []byte) {
+func getHash(filePath string) (md5hash []byte, err error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	hash := md5.New()
 	if _, err := io.Copy(hash, file); err != nil {
-		panic(err)
+		return nil, err
 	}
 	md5hash = hash.Sum(nil)
 	return

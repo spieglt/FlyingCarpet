@@ -182,9 +182,7 @@ func listenForPeer(t *Transfer, ui UI) (*net.TCPListener, net.Conn, error) {
 		return nil, nil, fmt.Errorf("Could not listen on :%d. Err: %s", t.Port, err)
 	}
 	ui.Output("Listening on :" + strconv.Itoa(t.Port))
-	// TODO: why did I do this this way? it's only going to accept one connection on the port.
-	// And keep restarting the listener every second till then? Once it accepts, it returns.
-	// If Accept() errors, we loop indefinitely.
+	// accept times out every second so that this function can receive context cancellation
 	for {
 		select {
 		case <-t.Ctx.Done():

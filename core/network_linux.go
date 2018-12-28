@@ -108,7 +108,7 @@ func resetWifi(t *Transfer, ui UI) {
 	return
 }
 
-func getCurrentWifi(t *Transfer) (ssid string) {
+func getCurrentWifi(ui UI) (ssid string) {
 	command := "nmcli -f active,ssid dev wifi | awk '/^yes/{print $2}"
 	ssid = runCommand(command)
 	return
@@ -157,9 +157,8 @@ func findWindows(t *Transfer) string {
 	currentIP := getIPAddress(t)
 	if strings.Contains(currentIP, "192.168.137") {
 		return "192.168.137.1"
-	} else {
-		return "192.168.173.1"
 	}
+	return "192.168.173.1"
 }
 
 func findLinux(t *Transfer) string {

@@ -194,7 +194,7 @@ func joinAdHoc(t *Transfer) (err error) {
 	return
 }
 
-func getCurrentWifi(t *Transfer) (SSID string) {
+func getCurrentWifi(ui UI) (SSID string) {
 	cmdStr := "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I | awk '/ SSID/ {print substr($0, index($0, $2))}'"
 	SSID = runCommand(cmdStr)
 	return
@@ -205,7 +205,7 @@ func getWifiInterface() string {
 	return runCommand(getInterfaceString)
 }
 
-func getIPAddress(t *Transfer) string {
+func getIPAddress(ui UI) string {
 	var currentIP string
 	ui.Output("Waiting for local IP...")
 	for currentIP == "" {
@@ -221,7 +221,7 @@ func getIPAddress(t *Transfer) string {
 	return currentIP
 }
 
-func findMac(t *Transfer) (peerIP string, err error) {
+func findMac(t *Transfer, ui UI) (peerIP string, err error) {
 	timeout := findMacTimeout
 	currentIP := getIPAddress(t)
 	pingString := "ping -c 5 169.254.255.255 | " + // ping broadcast address
