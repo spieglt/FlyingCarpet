@@ -78,6 +78,7 @@ func newWindow() (window *widgets.QMainWindow) {
 
 	// progress bar
 	progressBar := widgets.NewQProgressBar(nil)
+	progressBar.Hide()
 	// progressBar.SetValue(50)
 
 	widget.Layout().AddWidget(radioWidget)

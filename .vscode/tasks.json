@@ -6,7 +6,7 @@
         {
             "label": "test",
             "type": "shell",
-            "command": "qtdeploy test desktop $GOPATH/src/github.com/spieglt/flyingcarpet",
+            "command": "qtdeploy test desktop $env:GOPATH/src/github.com/spieglt/flyingcarpet/gui",
             "group": {
                 "kind": "build",
                 "isDefault": true
