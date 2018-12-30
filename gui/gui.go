@@ -2,14 +2,16 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 
 	fccore "github.com/spieglt/flyingcarpet/core"
+	"github.com/therecipe/qt/core"
 	"github.com/therecipe/qt/widgets"
 )
 
 // Gui fulfills the UI interface to be used in the core functions
 type Gui struct {
-	// Window       *widgets.QMainWindow
 	ProgressBar  *widgets.QProgressBar
 	OutputBox    *widgets.QTextEdit
 	StartButton  *widgets.QPushButton
@@ -18,15 +20,7 @@ type Gui struct {
 
 // Output prints messages to outputBox.
 func (gui Gui) Output(msg string) {
-	gui.OutputBox.Append(msg + "\n")
-	//for testing
-	// file, err := os.OpenFile("err.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// defer file.Close()
-	// file.WriteString(msg)
-	// file.WriteString("\r\n")
+	gui.OutputBox.Append(msg)
 }
 
 // ShowProgressBar shows the progress bar when the transfer starts.
@@ -106,7 +100,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	outputBox.SetReadOnly(true)
 	outputBox.SetSizePolicy2(widgets.QSizePolicy__Expanding, widgets.QSizePolicy__Expanding)
 	outputBox.SetText("Welcome to Flying Carpet!\nInstructions:\n1. select the OS of the other device\n2. select whether this device is sending or receiving\n" +
-		"3. select the files you'd like to send or the folder to which you'd like to receive\n4. press Start!")
+		"3. select the files you'd like to send or the folder to which you'd like to receive\n4. press Start!\n")
 
 	// progress bar
 	progressBar := widgets.NewQProgressBar(nil)
@@ -119,106 +113,113 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	widget.Layout().AddWidget(outputBox)
 	widget.Layout().AddWidget(progressBar)
 
+	gui = &Gui{
+		ProgressBar:  progressBar,
+		OutputBox:    outputBox,
+		StartButton:  startButton,
+		CancelButton: cancelButton,
+	}
+
 	//////////////////////////////
 	/////////// ACTIONS //////////
 	//////////////////////////////
 
-	// t := newTransfer()
+	t := &fccore.Transfer{}
 
-	// sendMode.ConnectClicked(func(bool) {
-	// 	sendButton.Show()
-	// 	receiveButton.Hide()
-	// 	t.FileList = nil
-	// 	t.ReceiveDir = ""
-	// })
-	// receiveMode.ConnectClicked(func(bool) {
-	// 	receiveButton.Show()
-	// 	sendButton.Hide()
-	// 	t.FileList = nil
-	// 	t.ReceiveDir = ""
-	// })
+	sendMode.ConnectClicked(func(bool) {
+		sendButton.Show()
+		receiveButton.Hide()
+		t.FileList = nil
+		t.ReceiveDir = ""
+	})
+	receiveMode.ConnectClicked(func(bool) {
+		receiveButton.Show()
+		sendButton.Hide()
+		t.FileList = nil
+		t.ReceiveDir = ""
+	})
 
-	// sendButton.ConnectClicked(func(bool) {
-	// 	// open dialog
-	// 	fd := widgets.NewQFileDialog(window, 0)
-	// 	t.FileList = fd.GetOpenFileNames(window, "Select File(s)", "", "", "", 0)
-	// 	if len(t.FileList) == 1 {
-	// 		fileBox.SetText(t.FileList[0])
-	// 	} else {
-	// 		fileBox.SetText("(Multiple files selected)")
-	// 	}
-	// })
-	// receiveButton.ConnectClicked(func(bool) {
-	// 	// open dialog
-	// 	fd := widgets.NewQFileDialog(window, 0)
-	// 	t.ReceiveDir = fd.GetExistingDirectory(window, "Select Folder", "", 0)
-	// 	fileBox.SetText(t.ReceiveDir)
-	// 	// TODO: make sure contents of filebox is actually a folder before transfer
-	// })
+	sendButton.ConnectClicked(func(bool) {
+		// open dialog
+		fd := widgets.NewQFileDialog(window, 0)
+		t.FileList = fd.GetOpenFileNames(window, "Select File(s)", "", "", "", 0)
+		if len(t.FileList) == 1 {
+			fileBox.SetText(t.FileList[0])
+		} else {
+			fileBox.SetText("(Multiple files selected)")
+		}
+	})
+	receiveButton.ConnectClicked(func(bool) {
+		// open dialog
+		fd := widgets.NewQFileDialog(window, 0)
+		t.ReceiveDir = fd.GetExistingDirectory(window, "Select Folder", "", 0)
+		fileBox.SetText(t.ReceiveDir)
+		// TODO: make sure contents of filebox is actually a folder before transfer
+	})
 
-	// startButton.ConnectClicked(func(bool) {
-	// 	switch {
-	// 	case sendMode.IsChecked():
-	// 		t.Mode = "sending"
-	// 	case receiveMode.IsChecked():
-	// 		t.Mode = "receiving"
-	// 	}
-	// 	switch {
-	// 	case linuxPeer.IsChecked():
-	// 		t.Peer = "linux"
-	// 	case macPeer.IsChecked():
-	// 		t.Peer = "mac"
-	// 	case windowsPeer.IsChecked():
-	// 		t.Peer = "windows"
-	// 	}
-	// 	//make sure something was selected
-	// 	if t.FileList == nil && t.ReceiveDir == "" {
-	// 		gui.Output("Error: please select files or a folder.")
-	// 		return
-	// 	}
-	// 	if t.Mode == "sending" {
-	// 		for _, file := range t.FileList {
-	// 			_, err := os.Stat(file)
-	// 			if err != nil {
-	// 				gui.Output("Could not find output file " + file)
-	// 				gui.Output(err.Error())
-	// 				return
-	// 			}
-	// 		}
-	// 		x := true
-	// 		pw := widgets.QInputDialog_GetText(nil,
-	// 			"Enter Password", "Please start the transfer on the receiving end and enter the password that is displayed.",
-	// 			widgets.QLineEdit__Normal, "", &x, core.Qt__Popup, core.Qt__ImhNone)
-	// 		t.Password = pw
-	// 	} else if t.Mode == "receiving" {
-	// 		fpStat, err := os.Stat(t.ReceiveDir)
-	// 		if err != nil {
-	// 			gui.Output("Please select valid folder.")
-	// 			return
-	// 		}
-	// 		if !fpStat.IsDir() {
-	// 			t.ReceiveDir = filepath.Dir(t.ReceiveDir) + string(os.PathSeparator)
-	// 		}
-	// 	}
-	// 	gui = &Gui{
-	// 		ProgressBar:  progressBar,
-	// 		OutputBox:    outputBox,
-	// 		StartButton:  startButton,
-	// 		CancelButton: cancelButton,
-	// 	}
-	// 	gui.ToggleStartButton()
-	// 	fccore.StartTransfer(t, gui)
-	// })
-	// cancelButton.ConnectClicked(func(bool) {
-	// 	t.CancelCtx()
-	// })
+	startButton.ConnectClicked(func(bool) {
+		switch {
+		case sendMode.IsChecked():
+			t.Mode = "sending"
+		case receiveMode.IsChecked():
+			t.Mode = "receiving"
+		}
+		switch {
+		case linuxPeer.IsChecked():
+			t.Peer = "linux"
+		case macPeer.IsChecked():
+			t.Peer = "mac"
+		case windowsPeer.IsChecked():
+			t.Peer = "windows"
+		}
+		//make sure something was selected
+		if t.FileList == nil && t.ReceiveDir == "" {
+			gui.Output("Error: please select files or a folder.")
+			return
+		}
+		if t.Mode == "sending" {
+			for _, file := range t.FileList {
+				_, err := os.Stat(file)
+				if err != nil {
+					gui.Output("Could not find output file " + file)
+					gui.Output(err.Error())
+					return
+				}
+			}
+			ok := false
+			pw := widgets.QInputDialog_GetText(nil,
+				"Enter Password", "Please start the transfer on the receiving end and enter the password that is displayed.",
+				widgets.QLineEdit__Normal, "", &ok, core.Qt__Popup, core.Qt__ImhNone)
+			if !ok || pw == "" {
+				gui.Output("Transfer was canceled")
+				return
+			}
+			t.Password = pw
+			if len(t.FileList) > 1 {
+				gui.Output("Files selected:")
+				for _, file := range t.FileList {
+					gui.Output(file)
+				}
+			}
+		} else if t.Mode == "receiving" {
+			fpStat, err := os.Stat(t.ReceiveDir)
+			if err != nil {
+				gui.Output("Please select valid folder.")
+				return
+			}
+			if !fpStat.IsDir() {
+				t.ReceiveDir = filepath.Dir(t.ReceiveDir) + string(os.PathSeparator)
+			}
+		}
+		gui.ToggleStartButton()
+		t.WfdSendChan, t.WfdRecvChan = make(chan string), make(chan string)
+		t.Ctx, t.CancelCtx = context.WithCancel(context.Background())
+		t.Port = 3290
+		go fccore.StartTransfer(t, gui)
+	})
+	cancelButton.ConnectClicked(func(bool) {
+		t.CancelCtx()
+	})
 
 	return window
-}
-
-func newTransfer() (t *fccore.Transfer) {
-	t.WfdSendChan, t.WfdRecvChan = make(chan string), make(chan string)
-	t.Ctx, t.CancelCtx = context.WithCancel(context.Background())
-	t.Port = 3290
-	return
 }
