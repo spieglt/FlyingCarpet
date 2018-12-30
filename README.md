@@ -1,10 +1,8 @@
-**MAJOR UPDATES:**
+**Update 12/29/18**
 
-+ **various networking bug fixes**
+I'm most of the way done with re-writing the GUI with github.com/therecipe/qt as wxGo is no longer maintained*. After that, I'm planning on implementing drag-and-drop, better admin detection for Windows on launch, folder upload, redoing CLI flags, making the UI clearer, and some other features. Then I'll have to rewrite the readme, compilation instructions, rebuild scripts, take new screenshots, etc., so this will be out of date for a bit. If you have any other feature requests or feedback, please email me. If you're here for a working copy of Flying Carpet, please go to the Releases page.
 
-+ **multi-file transfers**
-
-+ **cancel button**
+*I tried static linking with Qt, couldn't get it to work. So I tried static linking a GUI rewritten in C++ with wxWidgets/Code::Blocks/(TDM-)GCC, which worked on Windows, but I couldn't get the project files to transfer between computers, and it was a hassle on Linux. So for Linux and Windows, I'm going to write a Go wrapper program that will use go-bindata to embed the main executable, libraries, and resources, write them to `$temp`, and run from there, much like is done with the WiFi Direct DLL currently. This isn't necessary on Mac as `.app`s are bundles anyway.
 
 + **![CLI version](https://github.com/spieglt/FlyingCarpet/tree/cli)**
 
@@ -39,8 +37,6 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + Interoperable GUI and CLI versions.
 
 # Compilation instructions:
-
-+ Install wxGo. For Windows, I recommend the tdm-gcc link from this page rather than mingw-w64: https://github.com/dontpanic92/wxGo/wiki/Installation-Guide.
 
 + `go get -x github.com/spieglt/flyingcarpet`
 
