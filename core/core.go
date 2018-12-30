@@ -132,16 +132,24 @@ func StartTransfer(t *Transfer, ui UI) {
 		listener, conn, err := listenForPeer(t, ui)
 		// wait till end to close listener and tcp connection for multi-file transfers
 		// need to defer one func that closes both iff each != nil
+
+		// problem: if listenForPeer returns err, listener doesn't get defined, so it's nil, so it doesn't close.
+		// but if it is nil and we try to close it, we'll panic with a nil-pointer dereference.
+		// so need to close listener and conn if listenForPeer errors, in that function?
+		// nope, just changed to return listener and conn whether nil or not.
 		defer func() {
 			if conn != nil {
 				if err := conn.Close(); err != nil {
 					ui.Output("Error closing TCP connection: " + err.Error())
+				} else {
+					ui.Output("Closed TCP connection")
 				}
-
 			}
 			if listener != nil {
 				if err := (*listener).Close(); err != nil {
 					ui.Output("Error closing TCP listener: " + err.Error())
+				} else {
+					ui.Output("Closed TCP listener")
 				}
 			}
 		}()
@@ -176,8 +184,8 @@ func StartTransfer(t *Transfer, ui UI) {
 	}
 }
 
-func listenForPeer(t *Transfer, ui UI) (*net.TCPListener, net.Conn, error) {
-	ln, err := net.ListenTCP("tcp", &net.TCPAddr{Port: t.Port})
+func listenForPeer(t *Transfer, ui UI) (ln *net.TCPListener, conn net.Conn, err error) {
+	ln, err = net.ListenTCP("tcp", &net.TCPAddr{Port: t.Port})
 	if err != nil {
 		return nil, nil, fmt.Errorf("Could not listen on :%d. Err: %s", t.Port, err)
 	}
@@ -186,10 +194,10 @@ func listenForPeer(t *Transfer, ui UI) (*net.TCPListener, net.Conn, error) {
 	for {
 		select {
 		case <-t.Ctx.Done():
-			return nil, nil, errors.New("Exiting listenForPeer, transfer was canceled.")
+			return ln, conn, errors.New("Exiting listenForPeer, transfer was canceled.")
 		default:
 			ln.SetDeadline(time.Now().Add(time.Second))
-			conn, err := ln.Accept()
+			conn, err = ln.Accept()
 			if err != nil {
 				// ui.Output("Error accepting connection: " + err.Error())
 				continue

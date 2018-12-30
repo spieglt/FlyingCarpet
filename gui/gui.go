@@ -221,6 +221,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			t.Password = fccore.GeneratePassword()
 			pwBox := widgets.NewQMessageBox(nil)
 			pwBox.SetText("On sending end, after selecting options, press Start and enter this password:\n" + t.Password)
+			// TODO: make this not block
 			pwBox.Exec()
 		}
 		gui.ToggleStartButton()
