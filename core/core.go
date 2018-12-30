@@ -181,7 +181,7 @@ func listenForPeer(t *Transfer, ui UI) (*net.TCPListener, net.Conn, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("Could not listen on :%d. Err: %s", t.Port, err)
 	}
-	ui.Output("Listening on :" + strconv.Itoa(t.Port))
+	ui.Output("Listening on :" + strconv.Itoa(t.Port) + ", waiting for connection....")
 	// accept times out every second so that this function can receive context cancellation
 	for {
 		select {
@@ -191,7 +191,7 @@ func listenForPeer(t *Transfer, ui UI) (*net.TCPListener, net.Conn, error) {
 			ln.SetDeadline(time.Now().Add(time.Second))
 			conn, err := ln.Accept()
 			if err != nil {
-				ui.Output("Error accepting connection: " + err.Error())
+				// ui.Output("Error accepting connection: " + err.Error())
 				continue
 			}
 			ui.Output("Connection accepted")

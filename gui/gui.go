@@ -83,6 +83,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	fileWidget := widgets.NewQWidget(nil, 0)
 	fileWidget.SetLayout(widgets.NewQHBoxLayout())
 	fileBox := widgets.NewQLineEdit(nil)
+	fileBox.SetReadOnly(true)
 	sendButton := widgets.NewQPushButton2("Select file(s)", nil)
 	receiveButton := widgets.NewQPushButton2("Select folder", nil)
 	receiveButton.Hide()
@@ -113,6 +114,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	widget.Layout().AddWidget(outputBox)
 	widget.Layout().AddWidget(progressBar)
 
+	// fill out gui with handles used to update UI from core
 	gui = &Gui{
 		ProgressBar:  progressBar,
 		OutputBox:    outputBox,
@@ -131,12 +133,14 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 		receiveButton.Hide()
 		t.FileList = nil
 		t.ReceiveDir = ""
+		fileBox.SetText("")
 	})
 	receiveMode.ConnectClicked(func(bool) {
 		receiveButton.Show()
 		sendButton.Hide()
 		t.FileList = nil
 		t.ReceiveDir = ""
+		fileBox.SetText("")
 	})
 
 	sendButton.ConnectClicked(func(bool) {
@@ -154,7 +158,6 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 		fd := widgets.NewQFileDialog(window, 0)
 		t.ReceiveDir = fd.GetExistingDirectory(window, "Select Folder", "", 0)
 		fileBox.SetText(t.ReceiveDir)
-		// TODO: make sure contents of filebox is actually a folder before transfer
 	})
 
 	startButton.ConnectClicked(func(bool) {
@@ -172,12 +175,13 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 		case windowsPeer.IsChecked():
 			t.Peer = "windows"
 		}
-		//make sure something was selected
+		// make sure something was selected
 		if t.FileList == nil && t.ReceiveDir == "" {
 			gui.Output("Error: please select files or a folder.")
 			return
 		}
 		if t.Mode == "sending" {
+			// make sure files exist
 			for _, file := range t.FileList {
 				_, err := os.Stat(file)
 				if err != nil {
@@ -186,30 +190,38 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 					return
 				}
 			}
+			// get password
 			ok := false
-			pw := widgets.QInputDialog_GetText(nil,
+			t.Password = widgets.QInputDialog_GetText(nil,
 				"Enter Password", "Please start the transfer on the receiving end and enter the password that is displayed.",
 				widgets.QLineEdit__Normal, "", &ok, core.Qt__Popup, core.Qt__ImhNone)
-			if !ok || pw == "" {
+			if !ok || t.Password == "" {
 				gui.Output("Transfer was canceled")
 				return
 			}
-			t.Password = pw
 			if len(t.FileList) > 1 {
 				gui.Output("Files selected:")
 				for _, file := range t.FileList {
 					gui.Output(file)
 				}
 			}
+			gui.Output("Entered password: " + t.Password)
 		} else if t.Mode == "receiving" {
+			// make sure folder exists. necessary since fileBox is read-only?
 			fpStat, err := os.Stat(t.ReceiveDir)
 			if err != nil {
 				gui.Output("Please select valid folder.")
 				return
 			}
+			// make sure it ends with slash. also not necessary if fileBox is read-only.
 			if !fpStat.IsDir() {
 				t.ReceiveDir = filepath.Dir(t.ReceiveDir) + string(os.PathSeparator)
 			}
+			// show password
+			t.Password = fccore.GeneratePassword()
+			pwBox := widgets.NewQMessageBox(nil)
+			pwBox.SetText("On sending end, after selecting options, press Start and enter this password:\n" + t.Password)
+			pwBox.Exec()
 		}
 		gui.ToggleStartButton()
 		t.WfdSendChan, t.WfdRecvChan = make(chan string), make(chan string)
