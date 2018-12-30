@@ -208,7 +208,7 @@ func dialPeer(t *Transfer, ui UI) (conn net.Conn, err error) {
 			return nil, errors.New("Exiting dialPeer, transfer was canceled.")
 		default:
 			err = nil
-			conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond*50)
+			conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond*500)
 			if err != nil {
 				ui.Output(fmt.Sprintf("Failed connection %2d to %s, retrying.", i, t.RecipientIP))
 				time.Sleep(time.Second * 1)
