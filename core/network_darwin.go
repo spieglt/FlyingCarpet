@@ -105,37 +105,37 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"strconv"
+	// "strconv"
 	"strings"
 	"time"
 	"unsafe"
 )
 
-func connectToPeer(t *Transfer, ui Ui) (err error) {
+func connectToPeer(t *Transfer, ui UI) (err error) {
 
 	if t.Mode == "sending" {
-		if err = joinAdHoc(t); err != nil {
+		if err = joinAdHoc(t, ui); err != nil {
 			return
 		}
-		go stayOnAdHoc(t)
+		go stayOnAdHoc(t, ui)
 		if t.Peer == "mac" {
-			t.RecipientIP, err = findMac(t)
+			t.RecipientIP, err = findMac(t, ui)
 			if err != nil {
 				return
 			}
 		} else if t.Peer == "windows" {
-			t.RecipientIP = findWindows(t)
+			t.RecipientIP = findWindows(t, ui)
 		} else if t.Peer == "linux" {
 			t.RecipientIP = findLinux(t)
 		}
 	} else if t.Mode == "receiving" {
 		if t.Peer == "windows" || t.Peer == "linux" {
-			if err = joinAdHoc(t); err != nil {
+			if err = joinAdHoc(t, ui); err != nil {
 				return
 			}
-			go stayOnAdHoc(t)
+			go stayOnAdHoc(t, ui)
 		} else if t.Peer == "mac" {
-			if err = startAdHoc(t); err != nil {
+			if err = startAdHoc(t, ui); err != nil {
 				return
 			}
 		}
@@ -143,7 +143,7 @@ func connectToPeer(t *Transfer, ui Ui) (err error) {
 	return
 }
 
-func startAdHoc(t *Transfer) (err error) {
+func startAdHoc(t *Transfer, ui UI) (err error) {
 
 	ssid := C.CString(t.SSID)
 	password := C.CString(t.Password + t.Password)
@@ -161,12 +161,11 @@ func startAdHoc(t *Transfer) (err error) {
 	}
 }
 
-func joinAdHoc(t *Transfer) (err error) {
+func joinAdHoc(t *Transfer, ui UI) (err error) {
 	if authRes := int(C.getAuth()); authRes == 0 {
 		ui.Output("Error getting authorization")
 	}
-	ui.Output("Looking for ad-hoc network " + t.SSID + " for " + strconv.Itoa(joinAdHocTimeout) + " seconds...")
-	timeout := joinAdHocTimeout
+	ui.Output("Looking for ad-hoc network " + t.SSID)
 	ssid := C.CString(t.SSID)
 	password := C.CString(t.Password + t.Password)
 
@@ -178,11 +177,6 @@ func joinAdHoc(t *Transfer) (err error) {
 		case <-t.Ctx.Done():
 			return errors.New("Exiting joinAdHoc, transfer was canceled.")
 		default:
-			if timeout <= 0 {
-				return errors.New("Could not find the ad hoc network within " + strconv.Itoa(joinAdHocTimeout) + " seconds.")
-			}
-			// ui.Output(fmt.Sprintf("Failed to join the ad hoc network. Trying for %2d more seconds.", timeout))
-			timeout -= 5
 			time.Sleep(time.Second * time.Duration(3))
 			res = int(C.joinAdHoc(ssid, password))
 		}
@@ -222,26 +216,21 @@ func getIPAddress(ui UI) string {
 }
 
 func findMac(t *Transfer, ui UI) (peerIP string, err error) {
-	timeout := findMacTimeout
-	currentIP := getIPAddress(t)
+	currentIP := getIPAddress(ui)
 	pingString := "ping -c 5 169.254.255.255 | " + // ping broadcast address
 		"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
 		"grep --line-buffered -vE '169.254.255.255' | " + // exclude broadcast address
 		"grep -vE '" + currentIP + "'" // exclude current IP
 
-	ui.Output("Looking for peer IP for " + strconv.Itoa(findMacTimeout) + " seconds.")
+	ui.Output("Looking for peer IP")
 	for peerIP == "" {
 		select {
 		case <-t.Ctx.Done():
 			return "", errors.New("Exiting dialPeer, transfer was canceled.")
 		default:
-			if timeout <= 0 {
-				return "", errors.New("Could not find the peer computer within " + strconv.Itoa(findMacTimeout) + " seconds.")
-			}
 			pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 			if pingErr != nil {
 				// ui.Output(fmt.Sprintf("Could not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
-				timeout -= 2
 				time.Sleep(time.Second * time.Duration(2))
 				continue
 			}
@@ -253,8 +242,8 @@ func findMac(t *Transfer, ui UI) (peerIP string, err error) {
 	return
 }
 
-func findWindows(t *Transfer) (peerIP string) {
-	currentIP := getIPAddress(t)
+func findWindows(t *Transfer, ui UI) (peerIP string) {
+	currentIP := getIPAddress(ui)
 	if strings.Contains(currentIP, "192.168.137") {
 		return "192.168.137.1"
 	} else {
@@ -307,7 +296,7 @@ func resetWifi(t *Transfer, ui UI) {
 	}
 }
 
-func stayOnAdHoc(t *Transfer) {
+func stayOnAdHoc(t *Transfer, ui UI) {
 
 	for {
 		select {
@@ -315,8 +304,8 @@ func stayOnAdHoc(t *Transfer) {
 			ui.Output("Stopping ad hoc connection.")
 			return
 		default:
-			if getCurrentWifi(t) != t.SSID {
-				joinAdHoc(t)
+			if getCurrentWifi(ui) != t.SSID {
+				joinAdHoc(t, ui)
 			}
 			time.Sleep(time.Second * 3)
 		}

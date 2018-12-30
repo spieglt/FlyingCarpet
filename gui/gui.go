@@ -1,11 +1,9 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
+	"context"
 
 	fccore "github.com/spieglt/flyingcarpet/core"
-	"github.com/therecipe/qt/core"
 	"github.com/therecipe/qt/widgets"
 )
 
@@ -53,10 +51,10 @@ func (gui Gui) ToggleStartButton() {
 	gui.StartButton.Hide()
 }
 
-func newWindow(t *fccore.Transfer, gui *Gui) *widgets.QMainWindow {
+func newWindow(gui *Gui) *widgets.QMainWindow {
 	// frame
 	window := widgets.NewQMainWindow(nil, 0)
-	window.SetMinimumSize2(600, 900)
+	window.SetMinimumSize2(400, 600)
 	window.SetWindowTitle("Flying Carpet")
 	widget := widgets.NewQWidget(nil, 0)
 	widget.SetLayout(widgets.NewQVBoxLayout())
@@ -125,93 +123,102 @@ func newWindow(t *fccore.Transfer, gui *Gui) *widgets.QMainWindow {
 	/////////// ACTIONS //////////
 	//////////////////////////////
 
-	sendMode.ConnectClicked(func(bool) {
-		sendButton.Show()
-		receiveButton.Hide()
-		t.FileList = nil
-		t.ReceiveDir = ""
-	})
-	receiveMode.ConnectClicked(func(bool) {
-		receiveButton.Show()
-		sendButton.Hide()
-		t.FileList = nil
-		t.ReceiveDir = ""
-	})
+	// t := newTransfer()
 
-	sendButton.ConnectClicked(func(bool) {
-		// open dialog
-		fd := widgets.NewQFileDialog(window, 0)
-		t.FileList = fd.GetOpenFileNames(window, "Select File(s)", "", "", "", 0)
-		if len(t.FileList) == 1 {
-			fileBox.SetText(t.FileList[0])
-		} else {
-			fileBox.SetText("(Multiple files selected)")
-		}
-	})
-	receiveButton.ConnectClicked(func(bool) {
-		// open dialog
-		fd := widgets.NewQFileDialog(window, 0)
-		t.ReceiveDir = fd.GetExistingDirectory(window, "Select Folder", "", 0)
-		fileBox.SetText(t.ReceiveDir)
-		// TODO: make sure contents of filebox is actually a folder before transfer
-	})
+	// sendMode.ConnectClicked(func(bool) {
+	// 	sendButton.Show()
+	// 	receiveButton.Hide()
+	// 	t.FileList = nil
+	// 	t.ReceiveDir = ""
+	// })
+	// receiveMode.ConnectClicked(func(bool) {
+	// 	receiveButton.Show()
+	// 	sendButton.Hide()
+	// 	t.FileList = nil
+	// 	t.ReceiveDir = ""
+	// })
 
-	startButton.ConnectClicked(func(bool) {
-		switch {
-		case sendMode.IsChecked():
-			t.Mode = "sending"
-		case receiveMode.IsChecked():
-			t.Mode = "receiving"
-		}
-		switch {
-		case linuxPeer.IsChecked():
-			t.Peer = "linux"
-		case macPeer.IsChecked():
-			t.Peer = "mac"
-		case windowsPeer.IsChecked():
-			t.Peer = "windows"
-		}
-		//make sure something was selected
-		if t.FileList == nil && t.ReceiveDir == "" {
-			gui.Output("Error: please select files or a folder.")
-			return
-		}
-		if t.Mode == "sending" {
-			for _, file := range t.FileList {
-				_, err := os.Stat(file)
-				if err != nil {
-					gui.Output("Could not find output file " + file)
-					gui.Output(err.Error())
-					return
-				}
-			}
-			x := true
-			pw := widgets.QInputDialog_GetText(nil,
-				"Enter Password", "Please start the transfer on the receiving end and enter the password that is displayed.",
-				widgets.QLineEdit__Normal, "", &x, core.Qt__Popup, core.Qt__ImhNone)
-			t.Password = pw
-		} else if t.Mode == "receiving" {
-			fpStat, err := os.Stat(t.ReceiveDir)
-			if err != nil {
-				gui.Output("Please select valid folder.")
-				return
-			}
-			if !fpStat.IsDir() {
-				t.ReceiveDir = filepath.Dir(t.ReceiveDir) + string(os.PathSeparator)
-			}
-		}
-		gui = &Gui{
-			ProgressBar:  progressBar,
-			OutputBox:    outputBox,
-			StartButton:  startButton,
-			CancelButton: cancelButton,
-		}
-		gui.ToggleStartButton()
-		fccore.StartTransfer(t, gui)
-	})
-	cancelButton.ConnectClicked(func(bool) {
-		t.CancelCtx()
-	})
+	// sendButton.ConnectClicked(func(bool) {
+	// 	// open dialog
+	// 	fd := widgets.NewQFileDialog(window, 0)
+	// 	t.FileList = fd.GetOpenFileNames(window, "Select File(s)", "", "", "", 0)
+	// 	if len(t.FileList) == 1 {
+	// 		fileBox.SetText(t.FileList[0])
+	// 	} else {
+	// 		fileBox.SetText("(Multiple files selected)")
+	// 	}
+	// })
+	// receiveButton.ConnectClicked(func(bool) {
+	// 	// open dialog
+	// 	fd := widgets.NewQFileDialog(window, 0)
+	// 	t.ReceiveDir = fd.GetExistingDirectory(window, "Select Folder", "", 0)
+	// 	fileBox.SetText(t.ReceiveDir)
+	// 	// TODO: make sure contents of filebox is actually a folder before transfer
+	// })
+
+	// startButton.ConnectClicked(func(bool) {
+	// 	switch {
+	// 	case sendMode.IsChecked():
+	// 		t.Mode = "sending"
+	// 	case receiveMode.IsChecked():
+	// 		t.Mode = "receiving"
+	// 	}
+	// 	switch {
+	// 	case linuxPeer.IsChecked():
+	// 		t.Peer = "linux"
+	// 	case macPeer.IsChecked():
+	// 		t.Peer = "mac"
+	// 	case windowsPeer.IsChecked():
+	// 		t.Peer = "windows"
+	// 	}
+	// 	//make sure something was selected
+	// 	if t.FileList == nil && t.ReceiveDir == "" {
+	// 		gui.Output("Error: please select files or a folder.")
+	// 		return
+	// 	}
+	// 	if t.Mode == "sending" {
+	// 		for _, file := range t.FileList {
+	// 			_, err := os.Stat(file)
+	// 			if err != nil {
+	// 				gui.Output("Could not find output file " + file)
+	// 				gui.Output(err.Error())
+	// 				return
+	// 			}
+	// 		}
+	// 		x := true
+	// 		pw := widgets.QInputDialog_GetText(nil,
+	// 			"Enter Password", "Please start the transfer on the receiving end and enter the password that is displayed.",
+	// 			widgets.QLineEdit__Normal, "", &x, core.Qt__Popup, core.Qt__ImhNone)
+	// 		t.Password = pw
+	// 	} else if t.Mode == "receiving" {
+	// 		fpStat, err := os.Stat(t.ReceiveDir)
+	// 		if err != nil {
+	// 			gui.Output("Please select valid folder.")
+	// 			return
+	// 		}
+	// 		if !fpStat.IsDir() {
+	// 			t.ReceiveDir = filepath.Dir(t.ReceiveDir) + string(os.PathSeparator)
+	// 		}
+	// 	}
+	// 	gui = &Gui{
+	// 		ProgressBar:  progressBar,
+	// 		OutputBox:    outputBox,
+	// 		StartButton:  startButton,
+	// 		CancelButton: cancelButton,
+	// 	}
+	// 	gui.ToggleStartButton()
+	// 	fccore.StartTransfer(t, gui)
+	// })
+	// cancelButton.ConnectClicked(func(bool) {
+	// 	t.CancelCtx()
+	// })
 
 	return window
+}
+
+func newTransfer() (t *fccore.Transfer) {
+	t.WfdSendChan, t.WfdRecvChan = make(chan string), make(chan string)
+	t.Ctx, t.CancelCtx = context.WithCancel(context.Background())
+	t.Port = 3290
+	return
 }
