@@ -5,7 +5,7 @@ import (
 )
 
 func main() {
-	cli := Cli{}
+	cli := &Cli{}
 	t := getInput(cli)
 	core.StartTransfer(t, cli)
 }

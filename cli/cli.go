@@ -32,7 +32,7 @@ func (cli Cli) UpdateProgressBar(percentDone int) {
 // ToggleStartButton is a placeholder to fulfill the UI interface from core.
 func (cli Cli) ToggleStartButton() {}
 
-func getInput(cli Cli) *core.Transfer {
+func getInput(cli *Cli) *core.Transfer {
 	// get flags
 	if len(os.Args) == 1 {
 		printUsage()
