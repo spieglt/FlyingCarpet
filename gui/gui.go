@@ -58,7 +58,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	radioWidget := widgets.NewQWidget(nil, 0)
 	radioWidget.SetLayout(widgets.NewQHBoxLayout())
 
-	peerWrapper := widgets.NewQGroupBox2("Peer OS", nil)
+	peerWrapper := widgets.NewQGroupBox2("Step 1: Select Peer OS", nil)
 	peerLayout := widgets.NewQVBoxLayout2(peerWrapper)
 	linuxPeer := widgets.NewQRadioButton2("Linux", nil)
 	macPeer := widgets.NewQRadioButton2("Mac", nil)
@@ -68,7 +68,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	peerLayout.AddWidget(macPeer, 0, 0)
 	peerLayout.AddWidget(windowsPeer, 0, 0)
 
-	modeWrapper := widgets.NewQGroupBox2("Mode", nil)
+	modeWrapper := widgets.NewQGroupBox2("Step 2: Select Mode", nil)
 	modeLayout := widgets.NewQVBoxLayout2(modeWrapper)
 	sendMode := widgets.NewQRadioButton2("Send", nil)
 	receiveMode := widgets.NewQRadioButton2("Receive", nil)
@@ -80,13 +80,13 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	radioWidget.Layout().AddWidget(modeWrapper)
 
 	// file box
-	fileWidget := widgets.NewQWidget(nil, 0)
+	fileWidget := widgets.NewQGroupBox2("Step 3: Select Files to Send or Destination Folder", nil)
 	fileWidget.SetLayout(widgets.NewQHBoxLayout())
-	fileBox := widgets.NewQLineEdit(nil)
-	fileBox.SetReadOnly(true)
 	sendButton := widgets.NewQPushButton2("Select file(s)", nil)
 	receiveButton := widgets.NewQPushButton2("Select folder", nil)
 	receiveButton.Hide()
+	fileBox := widgets.NewQLineEdit(nil)
+	fileBox.SetReadOnly(true)
 	fileWidget.Layout().AddWidget(sendButton)
 	fileWidget.Layout().AddWidget(receiveButton)
 	fileWidget.Layout().AddWidget(fileBox)
@@ -100,8 +100,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	outputBox := widgets.NewQTextEdit(nil)
 	outputBox.SetReadOnly(true)
 	outputBox.SetSizePolicy2(widgets.QSizePolicy__Expanding, widgets.QSizePolicy__Expanding)
-	outputBox.SetText("Welcome to Flying Carpet!\nInstructions:\n1. select the OS of the other device\n2. select whether this device is sending or receiving\n" +
-		"3. select the files you'd like to send or the folder to which you'd like to receive\n4. press Start!\n")
+	outputBox.SetText("Welcome to Flying Carpet!\n")
 
 	// progress bar
 	progressBar := widgets.NewQProgressBar(nil)
