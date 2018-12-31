@@ -84,7 +84,7 @@ func joinAdHoc(t *Transfer, ui UI) (err error) {
 	for string(outBytes)[:5] == "Error" {
 		select {
 		case <-t.Ctx.Done():
-			return errors.New("Exiting joinAdHoc, transfer was canceled.")
+			return errors.New("Exiting joinAdHoc, transfer was canceled")
 		default:
 			time.Sleep(time.Second * time.Duration(5))
 			outBytes, err = exec.Command("sh", "-c", "nmcli con up \""+t.SSID+"\"").CombinedOutput()

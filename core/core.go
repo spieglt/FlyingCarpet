@@ -194,7 +194,7 @@ func listenForPeer(t *Transfer, ui UI) (ln *net.TCPListener, conn net.Conn, err 
 	for {
 		select {
 		case <-t.Ctx.Done():
-			return ln, conn, errors.New("Exiting listenForPeer, transfer was canceled.")
+			return ln, conn, errors.New("Exiting listenForPeer, transfer was canceled")
 		default:
 			ln.SetDeadline(time.Now().Add(time.Second))
 			conn, err = ln.Accept()
@@ -213,7 +213,7 @@ func dialPeer(t *Transfer, ui UI) (conn net.Conn, err error) {
 	for i := 0; i < 1000; i++ {
 		select {
 		case <-t.Ctx.Done():
-			return nil, errors.New("Exiting dialPeer, transfer was canceled.")
+			return nil, errors.New("Exiting dialPeer, transfer was canceled")
 		default:
 			err = nil
 			conn, err = net.DialTimeout("tcp", t.RecipientIP+":"+strconv.Itoa(t.Port), time.Millisecond*500)
@@ -226,7 +226,7 @@ func dialPeer(t *Transfer, ui UI) (conn net.Conn, err error) {
 			return conn, nil
 		}
 	}
-	return nil, fmt.Errorf("Could not dial peer.")
+	return nil, fmt.Errorf("Could not dial peer")
 }
 
 // GeneratePassword returns a 4 char password to display on the receiving end and enter into the sending end
