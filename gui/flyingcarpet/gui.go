@@ -237,26 +237,28 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 }
 
 func adminCheck(gui *Gui) {
-	inGroup := fcc.IsUserInAdminGroup()
-	isAdmin := fcc.IsRunAsAdmin()
-	mb := widgets.NewQMessageBox(nil)
-	if isAdmin == 0 {
-		switch inGroup {
-		case 0:
-			mb.SetText("Flying Carpet needs admin privileges to create/delete a firewall rule and listen on a TCP port. Please run with an administrator account.")
-			mb.Exec()
+	if fcc.HostOS == "windows" {
+		inGroup := fcc.IsUserInAdminGroup()
+		isAdmin := fcc.IsRunAsAdmin()
+		mb := widgets.NewQMessageBox(nil)
+		if isAdmin == 0 {
+			switch inGroup {
+			case 0:
+				mb.SetText("Flying Carpet needs admin privileges to create/delete a firewall rule, listen on a TCP port, and clear your ARP cache. Please run with an administrator account.")
+				mb.Exec()
+				os.Exit(5)
+			case 1:
+				mb.SetText("Flying Carpet needs admin privileges to create/delete a firewall rule, listen on a TCP port, and clear your ARP cache. Please click yes at the prompt to \"Run as administrator\" or no to exit.")
+				mb.Exec()
+				fcc.RelaunchAsAdmin()
+				os.Exit(0)
+			case 2:
+				gui.Output("Error determining if current user is admin.")
+			}
 			os.Exit(5)
-		case 1:
-			mb.SetText("Flying Carpet needs admin privileges to create/delete a firewall rule and listen on a TCP port. Please click yes at the prompt to \"Run as administrator\" or no to exit.")
-			mb.Exec()
-			fcc.RelaunchAsAdmin()
-			os.Exit(0)
-		case 2:
-			gui.Output("Error determining if current user is admin.")
+		} else {
+			// TODO: why doesn't this print?
+			gui.Output("We're admin!")
 		}
-		os.Exit(5)
-	} else {
-		// TODO: why doesn't this print?
-		gui.Output("We're admin!")
 	}
 }

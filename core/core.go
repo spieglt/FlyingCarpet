@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const hostOS = runtime.GOOS
+const HostOS = runtime.GOOS
 
 // Transfer holds all information necessary to send or receive files
 type Transfer struct {
@@ -58,14 +58,14 @@ func StartTransfer(t *Transfer, ui UI) {
 
 	if t.Mode == "sending" {
 		// to stop searching for ad hoc network (if Mac jumps off)
-		if hostOS == "darwin" {
+		if HostOS == "darwin" {
 			defer func() { t.CancelCtx() }()
 		}
 
 		// not necessary for mac as it reaches for its most preferred network automatically
-		if hostOS == "windows" {
+		if HostOS == "windows" {
 			t.PreviousSSID = getCurrentWifi(ui)
-		} else if hostOS == "linux" {
+		} else if HostOS == "linux" {
 			t.PreviousSSID = getCurrentUUID()
 		}
 
@@ -111,7 +111,7 @@ func StartTransfer(t *Transfer, ui UI) {
 	} else if t.Mode == "receiving" {
 		// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
 		// and thus don't need to shut down the goroutine trying to stay on it. does this need to happen when peer is linux? yes.
-		if hostOS == "darwin" && (t.Peer == "windows" || t.Peer == "linux") {
+		if HostOS == "darwin" && (t.Peer == "windows" || t.Peer == "linux") {
 			defer func() {
 				t.CancelCtx()
 			}()

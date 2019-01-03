@@ -33,8 +33,9 @@ func (cli Cli) UpdateProgressBar(percentDone int) {
 func (cli Cli) ToggleStartButton() {}
 
 func getInput(cli *Cli) *core.Transfer {
-
-	adminCheck(cli)
+	if core.HostOS == "windows" {
+		adminCheck(cli)
+	}
 
 	// get flags
 	if len(os.Args) == 1 {
@@ -163,7 +164,7 @@ func adminCheck(cli *Cli) {
 	// fmt.Printf("User in admin group: %t\n", inGroup == 1)
 	// fmt.Printf("Process run as admin: %t\n", isAdmin == 1)
 	if isAdmin == 0 {
-		fmt.Println("Flying Carpet needs admin privileges to create/delete a firewall rule and listen on a TCP port. Please right-click cmd or PowerShell and select \"Run as Administrator\".")
+		fmt.Println("Flying Carpet needs admin privileges to create/delete a firewall rule, listen on a TCP port, and clear your ARP cache. Please right-click cmd or PowerShell and select \"Run as Administrator\".")
 		os.Exit(5)
 	}
 }
