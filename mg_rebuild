@@ -1,5 +1,6 @@
 qtdeploy build desktop ./gui/flyingcarpet
 
+rm "./bin/Flying Carpet (Mac).zip"
 rm -rf "./Flying Carpet.app"
 mkdir "./Flying Carpet.app"
 
@@ -7,4 +8,6 @@ cp -r ./gui/flyingcarpet/deploy/darwin/flyingcarpet.app/* "./Flying Carpet.app"
 cp ./icons/Mac/info.plist "./Flying Carpet.app/Contents/info.plist"
 cp ./icons/Mac/fc.icns "./Flying Carpet.app/Contents/Resources/"
 mv "./Flying Carpet.app/Contents/MacOS/flyingcarpet" "./Flying Carpet.app/Contents/MacOS/Flying Carpet"
+
+zip -r "./bin/Flying Carpet (Mac).zip" "./Flying Carpet.app"
 open "./Flying Carpet.app"
