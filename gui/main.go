@@ -11,6 +11,7 @@ func main() {
 	gui := &Gui{}
 	window := newWindow(gui)
 	window.Show()
+	adminCheck(gui)
 	app.Exec()
 	return
 }
