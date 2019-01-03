@@ -33,6 +33,9 @@ func (cli Cli) UpdateProgressBar(percentDone int) {
 func (cli Cli) ToggleStartButton() {}
 
 func getInput(cli *Cli) *core.Transfer {
+
+	adminCheck(cli)
+
 	// get flags
 	if len(os.Args) == 1 {
 		printUsage()
@@ -152,4 +155,21 @@ func printUsage() {
 	fmt.Println("(Windows) $ flyingcarpet.exe -receive .\\picturesFolder -peer linux")
 	fmt.Println("[Enter password into sending end.]\n")
 	return
+}
+
+func adminCheck(cli *Cli) {
+	inGroup := core.IsUserInAdminGroup()
+	fmt.Printf("User in admin group: %t\n", inGroup == 1)
+
+	isAdmin := core.IsRunAsAdmin()
+	fmt.Printf("Process run as admin: %t\n", isAdmin == 1)
+
+	if isAdmin == 0 {
+		// C.RelaunchAsAdmin()
+		fmt.Println("Flying Carpet needs admin privileges to create/delete a firewall rule and listen on a TCP port. "
+			+ "Please right-click cmd or PowerShell and select \"Run as Administrator\".")
+		os.Exit(5)
+	} else {
+		fmt.Println("We're admin!")
+	}
 }

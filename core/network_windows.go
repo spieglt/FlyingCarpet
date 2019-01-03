@@ -155,7 +155,7 @@ func joinAdHoc(t *Transfer, ui UI) (err error) {
 	for t.SSID != getCurrentWifi(ui) {
 		select {
 		case <-t.Ctx.Done():
-			return errors.New("Exiting joinAdHoc, transfer was canceled.")
+			return errors.New("Exiting joinAdHoc, transfer was canceled")
 		default:
 			cmdStr := "netsh wlan connect name=" + t.SSID
 			cmdSlice := strings.Split(cmdStr, " ")
@@ -205,7 +205,7 @@ func findPeer(t *Transfer, ui UI) (string, error) {
 	for !ipPattern.Match([]byte(peerIP)) {
 		select {
 		case <-t.Ctx.Done():
-			return "", errors.New("Exiting joinAdHoc, transfer was canceled.")
+			return "", errors.New("Exiting joinAdHoc, transfer was canceled")
 		default:
 			peerString := "$(arp -a -N " + ifAddr + " | Select-String -Pattern '(?<ip>192\\.168\\." + thirdOctet + "\\.\\d{1,3})' | Select-String -NotMatch '(?<nm>(" + ifAddr + "|192.168." + thirdOctet + ".255)\\s)').Matches.Value"
 			peerCmd := exec.Command("powershell", "-c", peerString)

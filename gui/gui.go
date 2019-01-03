@@ -236,3 +236,27 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 
 	return window
 }
+
+func adminCheck(gui *Gui) {
+	inGroup := fccore.IsUserInAdminGroup()
+	isAdmin := fccore.IsRunAsAdmin()
+	mb := widgets.NewQMessageBox(nil)
+	if isAdmin == 0 {
+		switch inGroup {
+		case 0:
+			mb.SetText("Flying Carpet needs admin privileges to create/delete a firewall rule and listen on a TCP port. Please run with an administrator account.")
+			mb.Exec()
+			os.Exit(5)
+		case 1:
+			mb.SetText("Flying Carpet needs admin privileges to create/delete a firewall rule and listen on a TCP port. Please click yes at the prompt to \"Run as administrator\" or no to exit.")
+			mb.Exec()
+			fccore.RelaunchAsAdmin()
+			os.Exit(0)
+		case 2:
+			gui.Output("Error determining if current user is admin.")
+		}
+		os.Exit(5)
+	} else {
+		gui.Output("We're admin!")
+	}
+}
