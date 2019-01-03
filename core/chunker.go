@@ -162,9 +162,9 @@ func receive(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		i := 0
 		for _, err := os.Stat(t.ReceiveDir + fmt.Sprintf("%d_", i) + filename); err == nil; i++ {
 		}
-		currentFilePath = t.ReceiveDir + fmt.Sprintf("%d_", i) + filename
+		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + filename
 	} else {
-		currentFilePath = t.ReceiveDir + filename
+		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + filename
 	}
 
 	ui.Output(fmt.Sprintf("Filename: %s\nFile size: %s", filename, makeSizeReadable(fileSize)))
