@@ -1,6 +1,5 @@
 rebuild.bat
 notes
-flyingcarpet
 Flying Carpet.exe
 Flying Carpet.app
 Flying Carpet
@@ -8,7 +7,6 @@ Flying Carpet
 static
 xcuserdata
 *.xcworkspace
-flyingcarpet*
 adhoc.xml
 wdlap.exe
 go-bindata*
