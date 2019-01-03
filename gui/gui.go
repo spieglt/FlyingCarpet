@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	fccore "github.com/spieglt/flyingcarpet/core"
+	fcc "github.com/spieglt/flyingcarpet/core"
 	"github.com/therecipe/qt/core"
 	"github.com/therecipe/qt/widgets"
 )
@@ -125,7 +125,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	/////////// ACTIONS //////////
 	//////////////////////////////
 
-	t := &fccore.Transfer{}
+	t := &fcc.Transfer{}
 
 	sendMode.ConnectClicked(func(bool) {
 		sendButton.Show()
@@ -217,7 +217,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 				t.ReceiveDir = filepath.Dir(t.ReceiveDir) + string(os.PathSeparator)
 			}
 			// show password
-			t.Password = fccore.GeneratePassword()
+			t.Password = fcc.GeneratePassword()
 			pwBox := widgets.NewQMessageBox(nil)
 			pwBox.SetText("On sending end, after selecting options, press Start and enter this password:\n" + t.Password)
 			// TODO: make this not block
@@ -227,7 +227,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 		t.WfdSendChan, t.WfdRecvChan = make(chan string), make(chan string)
 		t.Ctx, t.CancelCtx = context.WithCancel(context.Background())
 		t.Port = 3290
-		go fccore.StartTransfer(t, gui)
+		go fcc.StartTransfer(t, gui)
 	})
 	cancelButton.ConnectClicked(func(bool) {
 		t.CancelCtx()
@@ -237,8 +237,8 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 }
 
 func adminCheck(gui *Gui) {
-	inGroup := fccore.IsUserInAdminGroup()
-	isAdmin := fccore.IsRunAsAdmin()
+	inGroup := fcc.IsUserInAdminGroup()
+	isAdmin := fcc.IsRunAsAdmin()
 	mb := widgets.NewQMessageBox(nil)
 	if isAdmin == 0 {
 		switch inGroup {
@@ -249,13 +249,14 @@ func adminCheck(gui *Gui) {
 		case 1:
 			mb.SetText("Flying Carpet needs admin privileges to create/delete a firewall rule and listen on a TCP port. Please click yes at the prompt to \"Run as administrator\" or no to exit.")
 			mb.Exec()
-			fccore.RelaunchAsAdmin()
+			fcc.RelaunchAsAdmin()
 			os.Exit(0)
 		case 2:
 			gui.Output("Error determining if current user is admin.")
 		}
 		os.Exit(5)
 	} else {
+		// TODO: why doesn't this print?
 		gui.Output("We're admin!")
 	}
 }
