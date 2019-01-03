@@ -4,7 +4,7 @@ Flying Carpet.exe
 Flying Carpet.app
 Flying Carpet
 .DS_Store
-static
+static.go
 xcuserdata
 *.xcworkspace
 adhoc.xml
