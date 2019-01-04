@@ -225,7 +225,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			// show password
 			t.Password = fcc.GeneratePassword()
 			pwBox := widgets.NewQMessageBox(nil)
-			pwBox.SetText("On sending end, after selecting options, press Start and enter this password:\n" + t.Password)
+			pwBox.SetText("On sending end, after selecting options, press Start and enter this password:\n\n" + t.Password)
 			// TODO: make this not block
 			pwBox.Exec()
 		}
@@ -270,5 +270,5 @@ func adminCheck(gui *Gui) {
 }
 
 func aboutBox() {
-	widgets.QMessageBox_About(nil, "About Flying Carpet", core.AboutMessage)
+	widgets.QMessageBox_About(nil, "About Flying Carpet", fcc.AboutMessage)
 }

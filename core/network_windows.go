@@ -180,15 +180,20 @@ func findPeer(t *Transfer, ui UI) (string, error) {
 	// get ad hoc ip
 	var ifAddr string
 	for !ipPattern.Match([]byte(ifAddr)) {
-		ifString := "$(ipconfig | Select-String -Pattern '(?<ipaddr>192\\.168\\.(137|173)\\..*)').Matches.Groups[2].Value.Trim()"
-		ifCmd := exec.Command("powershell", "-c", ifString)
-		ifCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		ifBytes, err := ifCmd.CombinedOutput()
-		if err != nil {
-			ui.Output("Error getting ad hoc IP, retrying.")
+		select {
+		case <-t.Ctx.Done():
+			return "", errors.New("Exiting joinAdHoc, transfer was canceled")
+		default:
+			ifString := "$(ipconfig | Select-String -Pattern '(?<ipaddr>192\\.168\\.(137|173)\\..*)').Matches.Groups[2].Value.Trim()"
+			ifCmd := exec.Command("powershell", "-c", ifString)
+			ifCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			ifBytes, err := ifCmd.CombinedOutput()
+			if err != nil {
+				ui.Output("Error getting ad hoc IP, retrying.")
+			}
+			ifAddr = strings.TrimSpace(string(ifBytes))
+			time.Sleep(time.Second * time.Duration(2))
 		}
-		ifAddr = strings.TrimSpace(string(ifBytes))
-		time.Sleep(time.Second * time.Duration(2))
 	}
 
 	// necessary for wifi direct ip addresses
