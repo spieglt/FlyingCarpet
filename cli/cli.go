@@ -30,6 +30,9 @@ func (cli Cli) ShowProgressBar() {}
 // UpdateProgressBar prints the status of a file transfer.
 func (cli Cli) UpdateProgressBar(percentDone int) {
 	fmt.Printf("\rProgress: %3d%%", percentDone)
+	if percentDone == 100 {
+		fmt.Println()
+	}
 }
 
 // ToggleStartButton is a placeholder to fulfill the UI interface from core.

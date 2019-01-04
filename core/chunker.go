@@ -169,7 +169,6 @@ func receive(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	}
 
 	ui.Output(fmt.Sprintf("Filename: %s\nFile size: %s", filename, makeSizeReadable(fileSize)))
-	// updateFilename(t)
 	ui.ShowProgressBar()
 
 	bytesLeft := fileSize
@@ -242,7 +241,6 @@ func receive(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	binary.Write(conn, binary.BigEndian, int64(1))
 
 	ui.UpdateProgressBar(100)
-	ui.Output("\n")
 	outFileSize, err := getSize(outFile)
 	if err != nil {
 		return errors.New("Could not read file size")
