@@ -41,7 +41,7 @@ func send(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	var i int64
 
 	ticker := time.NewTicker(time.Millisecond * 1000)
-	ticker.Stop()
+	defer ticker.Stop()
 	go func() {
 		for range ticker.C {
 			select {
@@ -80,6 +80,7 @@ func send(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		default:
 		}
 		bytesRead, err = file.Read(buffer)
+		bytesLeft -= int64(bytesRead) // for ticker
 		if err == io.EOF {
 			break
 		}
