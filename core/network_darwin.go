@@ -105,7 +105,6 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	// "strconv"
 	"strings"
 	"time"
 	"unsafe"
@@ -156,9 +155,8 @@ func startAdHoc(t *Transfer, ui UI) (err error) {
 	if res == 1 {
 		ui.Output("SSID " + t.SSID + " started.")
 		return
-	} else {
-		return errors.New("Failed to start ad hoc network.")
 	}
+	return errors.New("Failed to start ad hoc network")
 }
 
 func joinAdHoc(t *Transfer, ui UI) (err error) {
@@ -175,7 +173,7 @@ func joinAdHoc(t *Transfer, ui UI) (err error) {
 	for res == 0 {
 		select {
 		case <-t.Ctx.Done():
-			return errors.New("Exiting joinAdHoc, transfer was canceled.")
+			return errors.New("Exiting joinAdHoc, transfer was canceled")
 		default:
 			time.Sleep(time.Second * time.Duration(3))
 			res = int(C.joinAdHoc(ssid, password))
@@ -226,7 +224,7 @@ func findMac(t *Transfer, ui UI) (peerIP string, err error) {
 	for peerIP == "" {
 		select {
 		case <-t.Ctx.Done():
-			return "", errors.New("Exiting dialPeer, transfer was canceled.")
+			return "", errors.New("exiting dialPeer, transfer was canceled")
 		default:
 			pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 			if pingErr != nil {
@@ -246,9 +244,8 @@ func findWindows(t *Transfer, ui UI) (peerIP string) {
 	currentIP := getIPAddress(ui)
 	if strings.Contains(currentIP, "192.168.137") {
 		return "192.168.137.1"
-	} else {
-		return "192.168.173.1"
 	}
+	return "192.168.173.1"
 }
 
 func findLinux(t *Transfer) (peerIP string) {
