@@ -1,1 +1,1 @@
-appicon ICON "fc.ico"
+IDI_ICON1 ICON DISCARDABLE "fc.ico"

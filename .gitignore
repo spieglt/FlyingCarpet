@@ -13,3 +13,4 @@ wdlap.exe
 go-bindata*
 err.txt
 deploy
+rice-box.go

@@ -1,14 +1,28 @@
+# clean up old executable
+rm "./Flying Carpet.exe"
 
-Copy-Item .\WFD_DLL\x64\Release\WFD_DLL.dll .\static\wfd.dll
-mkdir static
-go-bindata -o static.go static\
-
+# copy file with icon
 Copy-Item .\icons\Windows\fc.syso .\gui\flyingcarpet\
 
-qtdeploy.exe build desktop .\gui\flyingcarpet
+# build with github.com/therecipe/qt
+cd .\gui\flyingcarpet
+qtdeploy.exe build desktop
+cd ..\..
 
+# use Windows SDK utility to embed application manifest, 
+# which will force Flying Carpet to launch "as Administrator" if the user has UAC enabled
 mt.exe -manifest .\gui\flyingcarpet\flyingcarpet.exe.manifest -outputresource:.\gui\flyingcarpet\deploy\windows\flyingcarpet.exe;1
 
-# bundle
+# copy WiFi Direct DLL to Qt output directory
+Copy-Item .\WFD_DLL\x64\Release\WFD_DLL.dll .\gui\flyingcarpet\deploy\windows\wfd.dll
 
-.\gui\flyingcarpet\deploy\windows\flyingcarpet.exe
+# bundle
+cd gui
+rice.exe embed-go
+# extra flags prevent console window from showing while wrapper extracts files to temp directory
+go build -ldflags -H=windowsgui -o "Flying Carpet.exe"
+
+# execute
+mv -Force "Flying Carpet.exe" ..
+cd ..
+cmd /C "./Flying Carpet.exe"

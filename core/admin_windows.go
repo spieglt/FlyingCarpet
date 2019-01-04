@@ -6,7 +6,6 @@ package core
 #include <windowsx.h>
 #include <strsafe.h>
 #include <shlobj.h>
-// #include <stdint.h>
 
 // These functions have been adapted from https://code.msdn.microsoft.com/windowsapps/CppUACSelfElevation-5bfc52dd.
 // Return value of 2 means error.
