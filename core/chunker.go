@@ -161,7 +161,7 @@ func receive(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	var currentFilePath string
 	if _, err := os.Stat(t.ReceiveDir + filename); err == nil {
 		i := 0
-		for _, err := os.Stat(t.ReceiveDir + fmt.Sprintf("%d_", i) + filename); err == nil; i++ {
+		for _, err := os.Stat(t.ReceiveDir + fmt.Sprintf("%d_", i) + filename); err != nil; i++ {
 		}
 		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + filename
 	} else {
