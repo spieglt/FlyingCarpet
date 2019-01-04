@@ -6,10 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"syscall"
 
 	rice "github.com/GeertJohan/go.rice"
 )
@@ -73,7 +70,6 @@ func findTempLoc() string {
 }
 
 func main() {
-	hostOS := runtime.GOOS
 	tempLoc := findTempLoc()
 	fmt.Println("temp location: ", tempLoc)
 
@@ -83,28 +79,18 @@ func main() {
 	// files that rice will ignore
 	box, err := getBox()
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal("error locating box: ", err)
 	}
 
 	// walks the tree of embedded files in box and writes them to the temp location
 	walkFunc := newCopyToTempWalkFunc(tempLoc, box)
-	err = box.Walk(".", walkFunc)
+	err = box.Walk("", walkFunc)
 	if err != nil {
 		log.Fatal("error referencing box: " + err.Error())
 	}
 
 	// run flyingcarpet
 	programName := tempLoc + string(os.PathSeparator) + "flyingcarpet"
-	if hostOS == "windows" {
-		programName += ".exe"
-		// "cmd /C" is necessary because it will error with "process requires elevation" if launched from non-admin shell
-		// but "cmd /C" will make a console window appear for the life of the program, so we hide it with syscall.
-		cmd := exec.Command("cmd", "/C", programName)
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		cmd.Start() // Start() == don't wait for it to return
-		os.Exit(0)
-	} else if hostOS == "linux" {
-		exec.Command(programName).Start()
-	}
+	runCommand(programName)
 	return
 }
