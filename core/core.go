@@ -40,6 +40,7 @@ type UI interface {
 	ShowProgressBar()
 	UpdateProgressBar(int)
 	ToggleStartButton()
+	ShowPwPrompt() bool
 }
 
 // StartTransfer is the main routine, invoked by cli and gui.

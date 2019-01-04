@@ -180,9 +180,9 @@ func joinAdHoc(t *Transfer, ui UI) (err error) {
 		}
 	}
 	// prefer flyingCarpet network so mac doesn't jump to another
-	cRes = C.moveNetworkToTop(ssid)
-	res = int(cRes)
-	ui.Output(fmt.Sprintf("%s is preferred network: %t", t.SSID, (res != 0)))
+	// cRes = C.moveNetworkToTop(ssid)
+	// res = int(cRes)
+	// ui.Output(fmt.Sprintf("%s is preferred network: %t", t.SSID, (res != 0)))
 	return
 }
 
@@ -286,15 +286,18 @@ func resetWifi(t *Transfer, ui UI) {
 	if t.Peer == "windows" || t.Peer == "linux" || t.Mode == "sending" {
 		// cmdString = "networksetup -removepreferredwirelessnetwork " + wifiInterface + " " + t.SSID
 		// ui.Output(runCommand(cmdString) + " (If you did not enter password at prompt, SSID will not be removed from your System keychain or preferred networks list.)")
-		res := int(C.deleteNetwork(C.CString(t.SSID)))
-		if res == 0 {
-			ui.Output("Error removing " + t.SSID + " from preferred wireless networks list.")
+		if shouldPrompt := ui.ShowPwPrompt(); shouldPrompt {
+			res := int(C.deleteNetwork(C.CString(t.SSID)))
+			if res == 0 {
+				ui.Output("Error removing " + t.SSID + " from preferred wireless networks list.")
+			} else {
+				ui.Output("Removed " + t.SSID + " from preferred wireless networks list.")
+			}
 		}
 	}
 }
 
 func stayOnAdHoc(t *Transfer, ui UI) {
-
 	for {
 		select {
 		case <-t.Ctx.Done():
@@ -304,7 +307,7 @@ func stayOnAdHoc(t *Transfer, ui UI) {
 			if getCurrentWifi(ui) != t.SSID {
 				joinAdHoc(t, ui)
 			}
-			time.Sleep(time.Second * 3)
+			time.Sleep(time.Second * 1)
 		}
 	}
 }
