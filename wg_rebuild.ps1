@@ -3,6 +3,7 @@ rm "./Flying Carpet.exe"
 
 # copy file with icon
 Copy-Item .\icons\Windows\fc.syso .\gui\flyingcarpet\
+Copy-Item .\icons\Windows\fc.syso .\gui\
 
 # build with github.com/therecipe/qt
 cd .\gui\flyingcarpet
