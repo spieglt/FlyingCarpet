@@ -27,7 +27,7 @@ mv -Force "Flying Carpet.exe" ..
 cd ..
 
 # zip to /bin
-Compress-Archive -Force -Path '.\Flying Carpet.exe' -DestinationPath '.\bin\Flying Carpet (Windows).zip'
+# Compress-Archive -Force -Path '.\Flying Carpet.exe' -DestinationPath '.\bin\Flying Carpet (Windows).zip'
 
 # execute
 cmd /C "./Flying Carpet.exe"

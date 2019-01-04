@@ -1,14 +1,10 @@
-**Update 12/29/18**
+**Update January 4, 2019**
 
-I'm most of the way done with re-writing the GUI with github.com/therecipe/qt as wxGo is no longer maintained*. After that, I'm planning on implementing drag-and-drop, better admin detection for Windows on launch, folder upload, redoing CLI flags, making the UI clearer, and some other features. Then I'll have to rewrite the readme, compilation instructions, rebuild scripts, take new screenshots, etc., so this will be out of date for a bit. If you have any other feature requests or feedback, please email me. If you're here for a working copy of Flying Carpet, please go to the Releases page.
-
-*I tried static linking with Qt, couldn't get it to work. So I tried static linking a GUI rewritten in C++ with wxWidgets/Code::Blocks/(TDM-)GCC, which worked on Windows, but I couldn't get the project files to transfer between computers, and it was a hassle on Linux. So for Linux and Windows, I'm going to write a Go wrapper program that will use go-bindata to embed the main executable, libraries, and resources, write them to `$temp`, and run from there, much like is done with the WiFi Direct DLL currently. This isn't necessary on Mac as `.app`s are bundles anyway.
-
-+ **![CLI version](https://github.com/spieglt/FlyingCarpet/tree/cli)**
+The major refactor and rewrite in Qt is done. There is no longer a need for a separate CLI branch. The Qt version requires external files, but I wanted to keep it a standalone binary, so I've written a wrapper that outputs everything to `$temp` and runs from there. The code is much improved and the program should be stabler and easier to use. I'm calling this version 2.0 and will be working through the planned features mentioned below soon. 
 
 # Flying Carpet
 
-Ready-to-use x64 `Flying Carpet (Linux).zip`, `Flying Carpet (Mac).zip`, and `Flying Carpet (Windows).zip` in ![`/bin`](bin)!
+To download, visit the ![releases](https://github.com/spieglt/FlyingCarpet/releases) page!
 
 Wireless, encrypted file transfer over automatically configured ad hoc networking. No network infrastructure required (access point, router, switch). Just two laptops (Mac, Linux, and Windows supported) with wireless chips in close range.
 
@@ -20,7 +16,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Features:
 
-+ Cross-platform: Mac, Windows, and now Linux!
++ Cross-platform: Linux, Mac, and Windows.
 
 + Transfer multiple files at once, without losing progress if the transfer is interrupted or canceled.
 
@@ -36,15 +32,33 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + Interoperable GUI and CLI versions.
 
-# Compilation instructions:
+# GUI Compilation instructions:
 
 + `go get -x github.com/spieglt/flyingcarpet`
 
 + Windows only: Compile WFD_DLL project with Visual Studio (Release, x64 mode) and then run `makeIconSyso.bat` while in `icons/Windows` folder.
 
-+ Compile ![`go-bindata`](https://github.com/jteeuwen/go-bindata) and copy executable to `flyingcarpet` folder.
++ If compiling on Windows, get `mt.exe` (available in Windows SDKs) and make sure it's in your path.
 
-+ Run `.\rebuild.ps1` from Powershell (for Windows), `./rebuild_mac` from Terminal (for Mac), or `./rebuild_linux` (for Linux).
++ Set up ![therecipe/qt](https://github.com/therecipe/qt/wiki/Installation) and make sure `qtdeploy` is in your path.
+
++ Install ![go.rice](https://github.com/GeertJohan/go.rice) and make sure `rice` is in your path.
+
++ Optional: get `windres.exe` if you want to change the icon on Windows (available in MinGW).
+
++ Run `.\wg_rebuild.ps1` from Powershell (for Windows), `./mg_rebuild` from Terminal (for Mac), or `./lg_rebuild` (for Linux).
+
+# CLI Compilation instructions
+
++ `go get -x github.com/spieglt/flyingcarpet`
+
++ Windows only: Install ![go.rice](https://github.com/GeertJohan/go.rice) and make sure `rice` is in your path. 
+
++ Windows only: Compile WFD_DLL project with Visual Studio (Release, x64 mode). Then copy `flyingcarpet\WFD_DLL\x64\Release\WFD_DLL.dll` to `flyingcarpet\cli\static`, change directory to `flyingcarpet\cli`, and run `rice.exe embed-go`
+
++ `cd $GOPATH/src/github.com/spieglt/flyingcarpet/cli`
+
++ `go build -o flyingcarpet.exe`
 
 # Restrictions:
 
@@ -62,9 +76,15 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Planned features:
 
-+ Maybe warn about running as administrator upon start on Windows.
++ Drag and drop for sending files.
+
++ Folder upload.
+
++ Make CLI version easier to use.
 
 + Replace `netsh wlan` with Native WiFi API on Windows.
+
++ Mobile versions, integrating functionality from https://github.com/claudiodangelis/qr-filetransfer.
 
 Disclaimer: I am not a cryptography expert. Do not use for private files if you think a skilled attacker is less than 100 feet from you and trying to intercept them.
 
