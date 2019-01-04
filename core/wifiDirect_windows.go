@@ -4,9 +4,6 @@ package core
 import "C"
 import (
 	"fmt"
-	"os"
-	"os/exec"
-	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -17,40 +14,9 @@ var dll *syscall.DLL
 // TODO: error handling
 
 func startLegacyAP(t *Transfer, ui UI) {
-	cmd := exec.Command("cmd", "/C", "echo %USERPROFILE%")
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	cmdBytes, err := cmd.CombinedOutput()
-	if err != nil {
-		t.WfdRecvChan <- "Error getting temp location."
-		return
-	}
-	tmpLoc := strings.TrimSpace(string(cmdBytes)) + "\\AppData\\Local\\Temp\\wfd.dll"
-
 	if dll == nil {
-		// write dll to file
-		err = os.Remove(tmpLoc)
-		if err != nil {
-			ui.Output(err.Error())
-		}
-		data, err := Asset("static/wfd.dll")
-		if err != nil {
-			t.WfdRecvChan <- err.Error()
-			return
-		}
-		outFile, err := os.OpenFile(tmpLoc, os.O_CREATE|os.O_RDWR, 0744)
-		if err != nil {
-			t.WfdRecvChan <- err.Error()
-			return
-		}
-		if _, err = outFile.Write(data); err != nil {
-			t.WfdRecvChan <- err.Error()
-			return
-		}
-		outFile.Close()
-		defer os.Remove(tmpLoc)
-
-		// Use DLL
-		dll, err = syscall.LoadDLL(tmpLoc)
+		var err error
+		dll, err = syscall.LoadDLL(".\\wfd.dll")
 		if err != nil {
 			t.WfdRecvChan <- fmt.Sprintf("Loading DLL failed: %s", err)
 			return
