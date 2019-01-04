@@ -60,6 +60,8 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + `go build -o flyingcarpet.exe`
 
+(Note: CLI version is not working on Windows due to needing to rewrite DLL embedding. Will be fixed soon.)
+
 # Restrictions:
 
 + 64-bit only. Supported Operating Systems: macOS 10.12+, Windows 7+, and Linux Mint 18. I only have access to so many laptops, so if you've tried on other platforms please let me know whether it worked. 
