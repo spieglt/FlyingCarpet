@@ -16,6 +16,9 @@ type Gui struct {
 	OutputBox    *widgets.QTextEdit
 	StartButton  *widgets.QPushButton
 	CancelButton *widgets.QPushButton
+	// for password prompt dialog on Mac
+	PromptAction *widgets.QAction
+	PromptChan   *chan bool
 }
 
 // Output prints messages to outputBox.
@@ -43,6 +46,13 @@ func (gui Gui) ToggleStartButton() {
 	}
 	gui.CancelButton.Show()
 	gui.StartButton.Hide()
+}
+
+// ShowPwPrompt is only used on Mac after a transfer to prompt whether the user wants to enter
+// their password to remove the Flying Carpet wireless network from their list of preferred networks.
+func (gui Gui) ShowPwPrompt() bool {
+	gui.PromptAction.Trigger()
+	return <-*(gui.PromptChan)
 }
 
 func newWindow(gui *Gui) *widgets.QMainWindow {
@@ -112,6 +122,18 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	progressBar := widgets.NewQProgressBar(nil)
 	progressBar.Hide()
 
+	// password prompt box
+	promptBox := widgets.NewQMessageBox(nil)
+	promptChan := make(chan bool)
+	promptAction := widgets.NewQAction(nil)
+	promptAction.ConnectTriggered(func(bool) {
+		// password prompt box
+		answer := promptBox.Question(nil, "Remove wireless network?",
+			"Would you like Flying Carpet to remove itself from your preferred networks list? Click Yes to enter your password or No to skip. You can do this yourself later from the System Preferences menu.",
+			widgets.QMessageBox__No|widgets.QMessageBox__Yes, widgets.QMessageBox__No)
+		promptChan <- answer == widgets.QMessageBox__Yes
+	})
+
 	widget.Layout().AddWidget(radioWidget)
 	widget.Layout().AddWidget(fileWidget)
 	widget.Layout().AddWidget(startButton)
@@ -125,6 +147,8 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 		OutputBox:    outputBox,
 		StartButton:  startButton,
 		CancelButton: cancelButton,
+		PromptAction: promptAction,
+		PromptChan:   &promptChan,
 	}
 
 	//////////////////////////////

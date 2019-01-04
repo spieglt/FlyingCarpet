@@ -32,6 +32,9 @@ func (cli Cli) UpdateProgressBar(percentDone int) {
 // ToggleStartButton is a placeholder to fulfill the UI interface from core.
 func (cli Cli) ToggleStartButton() {}
 
+// ShowPwPrompt is a placeholder to fulfill the UI interface from core.
+func (cli Cli) ShowPwPrompt() bool { return false }
+
 func getInput(cli *Cli) *core.Transfer {
 	if core.HostOS == "windows" {
 		adminCheck(cli)
