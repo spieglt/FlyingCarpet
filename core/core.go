@@ -24,6 +24,7 @@ type Transfer struct {
 	Peer         string // "mac", "windows", or "linux"
 	Mode         string // "sending" or "receiving"
 	PreviousSSID string
+	DllLocation  string
 	Port         int
 	AdHocCapable bool
 	Ctx          context.Context

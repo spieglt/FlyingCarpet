@@ -1,18 +1,16 @@
-rebuild.bat
-notes
+wfd.dll
+bin
+deploy
+static
+rice-box.go
+
+.DS_Store
+xcuserdata
+*.xcworkspace
+
+Flying Carpet
 Flying Carpet.exe
 Flying Carpet.app
 Flying Carpet.run
-Flying Carpet
-.DS_Store
-wfd.dll
-static.go
-xcuserdata
-*.xcworkspace
-adhoc.xml
-wdlap.exe
-go-bindata*
-err.txt
-deploy
-rice-box.go
-bin
+flyingcarpet
+flyingcarpet.exe

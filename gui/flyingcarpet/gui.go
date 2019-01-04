@@ -233,6 +233,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 		t.WfdSendChan, t.WfdRecvChan = make(chan string), make(chan string)
 		t.Ctx, t.CancelCtx = context.WithCancel(context.Background())
 		t.Port = 3290
+		t.DllLocation = ".\\wfd.dll"
 		go fcc.StartTransfer(t, gui)
 	})
 	cancelButton.ConnectClicked(func(bool) {

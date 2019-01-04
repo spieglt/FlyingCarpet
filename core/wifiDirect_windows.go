@@ -14,9 +14,10 @@ var dll *syscall.DLL
 // TODO: error handling
 
 func startLegacyAP(t *Transfer, ui UI) {
+
 	if dll == nil {
 		var err error
-		dll, err = syscall.LoadDLL(".\\wfd.dll")
+		dll, err = syscall.LoadDLL(t.DllLocation)
 		if err != nil {
 			t.WfdRecvChan <- fmt.Sprintf("Loading DLL failed: %s", err)
 			return
@@ -69,7 +70,8 @@ func startLegacyAP(t *Transfer, ui UI) {
 	// in loop, listen on chan to commands from rest of program
 	for {
 		select {
-		case msg, ok := <-t.WfdSendChan:
+		case <-time.After(time.Second * 1): // check every second for stop command
+		case msg, ok := <-t.WfdSendChan: // why check though? why not just block and wait for exit? leaves room for other commands later.
 			if !ok || msg == "quit" {
 				cFreeRes, _, _ := ConsoleFree.Call()
 				freeRes := int(cFreeRes)
@@ -77,15 +79,8 @@ func startLegacyAP(t *Transfer, ui UI) {
 					ui.Output("Failed to uninitialize Windows Runtime.")
 				}
 			}
-			t.WfdRecvChan <- "Wifi-Direct stopped."
+			t.WfdRecvChan <- "stopped"
 			return
-		// TODO: cause of process leak? not releasing dll till 3 seconds after program is closed?
-		default:
-			time.Sleep(time.Second * 3)
 		}
 	}
-	// err = dll.Release()
-	// if err != nil {
-	// 	ui.Output(fmt.Sprintf("Error releasing DLL: %s", err))
-	// }
 }

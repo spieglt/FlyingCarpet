@@ -36,15 +36,13 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + `go get -x github.com/spieglt/flyingcarpet`
 
-+ Windows only: Compile WFD_DLL project with Visual Studio (Release, x64 mode) and then run `makeIconSyso.bat` while in `icons/Windows` folder.
++ Windows only: Open `flyingcarpet\WFD_DLL\WFD_DLL.sln` with Visual Studio, and compile in Release mode for x64.
 
 + If compiling on Windows, get `mt.exe` (available in Windows SDKs) and make sure it's in your path.
 
-+ Set up ![therecipe/qt](https://github.com/therecipe/qt/wiki/Installation) and make sure `qtdeploy` is in your path.
++ Go through the entire setup guide for ![therecipe/qt](https://github.com/therecipe/qt/wiki/Installation) and make sure `qtdeploy` is in your path.
 
 + Install ![go.rice](https://github.com/GeertJohan/go.rice) and make sure `rice` is in your path.
-
-+ Optional: get `windres.exe` if you want to change the icon on Windows (available in MinGW).
 
 + Run `.\wg_rebuild.ps1` from Powershell (for Windows), `./mg_rebuild` from Terminal (for Mac), or `./lg_rebuild` (for Linux).
 
@@ -52,15 +50,13 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + `go get -x github.com/spieglt/flyingcarpet`
 
-+ Windows only: Install ![go.rice](https://github.com/GeertJohan/go.rice) and make sure `rice` is in your path. 
-
-+ Windows only: Compile WFD_DLL project with Visual Studio (Release, x64 mode). Then copy `flyingcarpet\WFD_DLL\x64\Release\WFD_DLL.dll` to `flyingcarpet\cli\static`, change directory to `flyingcarpet\cli`, and run `rice.exe embed-go`
++ Windows only: Open `flyingcarpet\WFD_DLL\WFD_DLL.sln` with Visual Studio, and compile in Release mode for x64. Then install ![go.rice](https://github.com/GeertJohan/go.rice) and make sure `rice` is in your path.
 
 + `cd $GOPATH/src/github.com/spieglt/flyingcarpet/cli`
 
-+ `go build -o flyingcarpet.exe`
++ Windows only: `.\embed_dll.ps1` from Powershell
 
-(Note: CLI version is not working on Windows due to needing to rewrite DLL embedding. Will be fixed soon.)
++ `go build -o flyingcarpet.exe`
 
 # Restrictions:
 

@@ -21,19 +21,20 @@ func newCopyToTempWalkFunc(tempLoc string, box *rice.Box) filepath.WalkFunc {
 		// fmt.Println(path)
 		// open the embedded file
 		file, err := box.Open(path)
-		defer file.Close()
 		if err != nil {
 			return errors.New("error opening embedded file: " + err.Error())
 		}
+		defer file.Close()
 		// if the embedded file is a directory, create it
 		if info.IsDir() {
 			os.Mkdir(tempLoc+string(os.PathSeparator)+path, 0755)
 		} else { // else open the output file and make the main program executable
 			outputFile, err := os.Create(tempLoc + string(os.PathSeparator) + path)
-			defer outputFile.Close()
 			if err != nil {
 				return errors.New("error creating output file: " + err.Error())
 			}
+			defer outputFile.Close()
+			// TODO: why does this not seem to work?
 			if outputFile.Name() == "flyingcarpet" || outputFile.Name() == "flyingcarpet.exe" {
 				outputFile.Chmod(0755)
 			}
