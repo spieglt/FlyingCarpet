@@ -3,13 +3,16 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
+	rice "github.com/GeertJohan/go.rice"
 	"github.com/spieglt/flyingcarpet/core"
 )
 
@@ -95,6 +98,14 @@ func getInput(cli *Cli) *core.Transfer {
 		os.Exit(1)
 	}
 
+	// make sure DLL is available
+	location, err := writeDLL()
+	if err != nil {
+		cli.Output("Error writing WiFi Direct dll to temp location: " + err.Error())
+		os.Exit(1)
+	}
+	t.DllLocation = location
+
 	// deal with password
 	if t.Mode == "sending" {
 		t.Password = getPassword()
@@ -167,4 +178,44 @@ func adminCheck(cli *Cli) {
 		fmt.Println("Flying Carpet needs admin privileges to create/delete a firewall rule, listen on a TCP port, and clear your ARP cache. Please right-click cmd or PowerShell and select \"Run as Administrator\".")
 		os.Exit(5)
 	}
+}
+
+// used if running CLI version as the wifi direct
+// dll won't have been bundled with the GUI
+func writeDLL() (string, error) {
+	// use rice to bundle
+	box, err := rice.FindBox(".\\static")
+	if err != nil {
+		return "", errors.New("error locating box: " + err.Error())
+	}
+
+	// get handle to dll from box
+	file, err := box.Open(".\\wfd.dll")
+	if err != nil {
+		return "", errors.New("error getting file from box: " + err.Error())
+	}
+	defer file.Close()
+
+	// find suitable location to write dll and complete filepath
+	tempLoc := os.TempDir()
+	if tempLoc == "" {
+		tempLoc, err = os.Executable()
+		if err != nil {
+			return "", errors.New("error finding suitable location to write dll: " + err.Error())
+		}
+	}
+	tempLoc = tempLoc + string(os.PathSeparator) + "wfd.dll"
+
+	// delete preexisting dll, create new one, and write it
+	os.Remove(tempLoc)
+	outputFile, err := os.Create(tempLoc)
+	if err != nil {
+		return "", errors.New("error creating dll: " + err.Error())
+	}
+	defer outputFile.Close()
+	_, err = io.Copy(outputFile, file)
+	if err != nil {
+		return "", errors.New("error writing embedded data to output file: " + err.Error())
+	}
+	return tempLoc, err
 }
