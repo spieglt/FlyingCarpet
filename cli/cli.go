@@ -20,15 +20,15 @@ import (
 type Cli struct{}
 
 // Output prints messages. It's a function to fulfill the UI interface from core.
-func (cli Cli) Output(message string) {
+func (cli *Cli) Output(message string) {
 	fmt.Println(message)
 }
 
 // ShowProgressBar is a placeholder to fulfill the UI interface from core.
-func (cli Cli) ShowProgressBar() {}
+func (cli *Cli) ShowProgressBar() {}
 
 // UpdateProgressBar prints the status of a file transfer.
-func (cli Cli) UpdateProgressBar(percentDone int) {
+func (cli *Cli) UpdateProgressBar(percentDone int) {
 	fmt.Printf("\rProgress: %3d%%", percentDone)
 	if percentDone == 100 {
 		fmt.Println()
@@ -36,10 +36,10 @@ func (cli Cli) UpdateProgressBar(percentDone int) {
 }
 
 // ToggleStartButton is a placeholder to fulfill the UI interface from core.
-func (cli Cli) ToggleStartButton() {}
+func (cli *Cli) ToggleStartButton() {}
 
 // ShowPwPrompt is a placeholder to fulfill the UI interface from core.
-func (cli Cli) ShowPwPrompt() bool { return false }
+func (cli *Cli) ShowPwPrompt() bool { return false }
 
 func getInput(cli *Cli) *core.Transfer {
 	if core.HostOS == "windows" {
@@ -122,6 +122,17 @@ func getInput(cli *Cli) *core.Transfer {
 	return t
 }
 
+func adminCheck(cli *Cli) {
+	// inGroup := core.IsUserInAdminGroup()
+	isAdmin := core.IsRunAsAdmin()
+	// fmt.Printf("User in admin group: %t\n", inGroup == 1)
+	// fmt.Printf("Process run as admin: %t\n", isAdmin == 1)
+	if isAdmin == 0 {
+		fmt.Println("Flying Carpet needs admin privileges to create/delete a firewall rule, listen on a TCP port, and clear your ARP cache. Please right-click cmd or PowerShell and select \"Run as Administrator\".")
+		os.Exit(5)
+	}
+}
+
 func parseSendFiles(flagVal string) (sendFiles []string, err error) {
 	if flagVal == "multi" { // -send multi
 		baseList := flag.Args()
@@ -173,17 +184,6 @@ func printUsage() {
 	fmt.Println("(Windows) $ flyingcarpet.exe -receive .\\picturesFolder -peer linux")
 	fmt.Println("[Enter password into sending end.]\n")
 	return
-}
-
-func adminCheck(cli *Cli) {
-	// inGroup := core.IsUserInAdminGroup()
-	isAdmin := core.IsRunAsAdmin()
-	// fmt.Printf("User in admin group: %t\n", inGroup == 1)
-	// fmt.Printf("Process run as admin: %t\n", isAdmin == 1)
-	if isAdmin == 0 {
-		fmt.Println("Flying Carpet needs admin privileges to create/delete a firewall rule, listen on a TCP port, and clear your ARP cache. Please right-click cmd or PowerShell and select \"Run as Administrator\".")
-		os.Exit(5)
-	}
 }
 
 // used if running CLI version as the wifi direct

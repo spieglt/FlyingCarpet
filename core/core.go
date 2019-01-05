@@ -108,6 +108,7 @@ func StartTransfer(t *Transfer, ui UI) {
 				return
 			}
 		}
+		ui.Output("=============================\n")
 		ui.Output("Send complete, resetting WiFi and exiting.")
 
 	} else if t.Mode == "receiving" {
@@ -182,6 +183,7 @@ func StartTransfer(t *Transfer, ui UI) {
 			}
 		}
 
+		ui.Output("=============================\n")
 		ui.Output("Reception complete, resetting WiFi and exiting.")
 	}
 }

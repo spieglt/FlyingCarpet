@@ -124,6 +124,9 @@ func send(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 
 	ui.UpdateProgressBar(100)
 	ui.Output(fmt.Sprintf("Sending took %s", time.Since(start)))
+
+	speed := (float64(fileSize*8) / 1000000) / (float64(time.Since(start)) / 1000000000)
+	ui.Output(fmt.Sprintf("Speed: %.2fmbps", speed))
 	return nil
 }
 

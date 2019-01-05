@@ -22,23 +22,23 @@ type Gui struct {
 }
 
 // Output prints messages to outputBox.
-func (gui Gui) Output(msg string) {
+func (gui *Gui) Output(msg string) {
 	gui.OutputBox.Append(msg)
 }
 
 // ShowProgressBar shows the progress bar when the transfer starts.
-func (gui Gui) ShowProgressBar() {
+func (gui *Gui) ShowProgressBar() {
 	gui.ProgressBar.Show()
 }
 
 // UpdateProgressBar sets the percentage of the current file transferred.
-func (gui Gui) UpdateProgressBar(percentDone int) {
+func (gui *Gui) UpdateProgressBar(percentDone int) {
 	gui.ProgressBar.SetValue(percentDone)
 }
 
 // ToggleStartButton flips between the start and cancel buttons at the start
 // and end of a transfer.
-func (gui Gui) ToggleStartButton() {
+func (gui *Gui) ToggleStartButton() {
 	if gui.StartButton.IsHidden() {
 		gui.CancelButton.Hide()
 		gui.StartButton.Show()
@@ -50,7 +50,7 @@ func (gui Gui) ToggleStartButton() {
 
 // ShowPwPrompt is only used on Mac after a transfer to prompt whether the user wants to enter
 // their password to remove the Flying Carpet wireless network from their list of preferred networks.
-func (gui Gui) ShowPwPrompt() bool {
+func (gui *Gui) ShowPwPrompt() bool {
 	gui.PromptAction.Trigger()
 	return <-*(gui.PromptChan)
 }
