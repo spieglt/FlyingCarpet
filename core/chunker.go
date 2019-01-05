@@ -116,8 +116,8 @@ func send(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		replyChan <- comp
 	}()
 	select {
-	case <-time.After(time.Second * 2):
-		ui.Output("Receiving end did not acknowledge but should have received signal to close connection.")
+	case <-time.After(time.Second * 5):
+		return errors.New("Error: file finished sending but receiving end did not acknowledge reception within 5 seconds")
 	case /*comp :=*/ <-replyChan:
 		// ui.Output(fmt.Sprintf("Receiving end says: %d", comp))
 	}
