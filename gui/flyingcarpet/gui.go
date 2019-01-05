@@ -116,7 +116,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	outputBox := widgets.NewQTextEdit(nil)
 	outputBox.SetReadOnly(true)
 	outputBox.SetSizePolicy2(widgets.QSizePolicy__Expanding, widgets.QSizePolicy__Expanding)
-	outputBox.SetText("Welcome to Flying Carpet!\n")
+	outputBox.SetText("Welcome to Flying Carpet!")
 
 	// progress bar
 	progressBar := widgets.NewQProgressBar(nil)
@@ -168,8 +168,8 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 		receiveButton.Show()
 		sendButton.Hide()
 		t.FileList = nil
-		t.ReceiveDir = ""
-		fileBox.SetText("")
+		t.ReceiveDir = getHomePath()
+		fileBox.SetText(getHomePath())
 	})
 
 	sendButton.ConnectClicked(func(bool) {

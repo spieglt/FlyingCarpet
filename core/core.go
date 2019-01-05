@@ -58,6 +58,7 @@ func StartTransfer(t *Transfer, ui UI) {
 	prefix := pwBytes[:3]
 	t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
+	ui.Output("\nStarting Transfer\n=============================")
 	if t.Mode == "sending" {
 		// to stop searching for ad hoc network (if Mac jumps off)
 		if HostOS == "darwin" {
