@@ -190,13 +190,13 @@ func printUsage() {
 // dll won't have been bundled with the GUI
 func writeDLL() (string, error) {
 	// use rice to bundle
-	box, err := rice.FindBox(".\\static")
+	box, err := rice.FindBox("static")
 	if err != nil {
 		return "", errors.New("error locating box: " + err.Error())
 	}
 
 	// get handle to dll from box
-	file, err := box.Open(".\\wfd.dll")
+	file, err := box.Open("wfd.dll")
 	if err != nil {
 		return "", errors.New("error getting file from box: " + err.Error())
 	}
