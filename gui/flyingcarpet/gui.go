@@ -174,7 +174,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 
 	sendButton.ConnectClicked(func(bool) {
 		// open dialog
-		fd := widgets.NewQFileDialog(window, 0)
+		fd := widgets.NewQFileDialog2(window, "Select Files", getHomePath(), "")
 		t.FileList = fd.GetOpenFileNames(window, "Select File(s)", "", "", "", 0)
 		if len(t.FileList) == 1 {
 			fileBox.SetText(t.FileList[0])
@@ -184,7 +184,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	})
 	receiveButton.ConnectClicked(func(bool) {
 		// open dialog
-		fd := widgets.NewQFileDialog(window, 0)
+		fd := widgets.NewQFileDialog2(window, "Select Files", getHomePath(), "")
 		t.ReceiveDir = fd.GetExistingDirectory(window, "Select Folder", "", 0)
 		fileBox.SetText(t.ReceiveDir)
 	})
@@ -296,4 +296,13 @@ func adminCheck(gui *Gui) {
 
 func aboutBox() {
 	widgets.QMessageBox_About(nil, "About Flying Carpet", fcc.AboutMessage)
+}
+
+func getHomePath() (homePath string) {
+	if fcc.HostOS == "windows" {
+		homePath = os.Getenv("USERPROFILE")
+	} else {
+		homePath = os.Getenv("HOME")
+	}
+	return
 }
