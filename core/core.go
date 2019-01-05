@@ -121,8 +121,7 @@ func StartTransfer(t *Transfer, ui UI) {
 			}()
 		}
 
-		ui.Output(fmt.Sprintf("=============================\n"+
-			"Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
+		ui.Output(fmt.Sprintf("Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
 			"=============================\n", t.Password))
 
 		// make ip connection
