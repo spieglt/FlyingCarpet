@@ -1,6 +1,8 @@
-**Update January 4, 2019**
+**Update January 7, 2019**
 
-The major refactor and rewrite in Qt is done. There is no longer a need for a separate CLI branch. The Qt version requires external files, but I wanted to keep it a standalone binary, so I've written a wrapper that outputs everything to `$temp` and runs from there. The code is much improved and the program should be stabler and easier to use. I'm calling this version 2.0 and will be working through the planned features mentioned below soon. 
+I'm going to try improve the network code before posting new binaries. Ad hoc wifi does not seem very stable on Linux and I worry is not supported for many cards.
+
+The major refactor and rewrite in Qt is done. There is no longer a need for a separate CLI branch. The Qt version requires external files, but I wanted to keep it a standalone binary, so I've written a wrapper that outputs everything to `$temp` and runs from there.
 
 # Flying Carpet
 
