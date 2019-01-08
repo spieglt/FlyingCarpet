@@ -76,11 +76,11 @@ func stopAdHoc(t *Transfer, ui UI) {
 	if t.AdHocCapable {
 		ui.Output(runCommand("netsh wlan stop hostednetwork"))
 	} else {
-		ui.Output("Stopping Wi-Fi Direct.")
+		// ui.Output("Stopping Wi-Fi Direct.")
 		select {
 		case t.WfdSendChan <- "quit":
-			reply := <-t.WfdRecvChan
-			ui.Output("Wi-Fi Direct says: " + reply)
+			/*reply :=*/ <-t.WfdRecvChan
+			// ui.Output("Wi-Fi Direct says: " + reply)
 		case <-time.After(time.Second * 2):
 			ui.Output("Wi-Fi Direct did not respond to quit request, is likely not running.")
 		}
