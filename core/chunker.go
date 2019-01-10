@@ -3,7 +3,6 @@ package core
 import (
 	"crypto/md5"
 	"encoding/binary"
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"io"
@@ -56,6 +55,16 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	ui.Output(fmt.Sprintf("File size: %s\nMD5 hash: %x", makeSizeReadable(fileSize), hash))
 	bytesLeft := fileSize
 
+	// set deadline for write
+	extendDeadline(conn)
+
+	// send file details
+	sendFileDetails(
+		conn,
+		t.FileList[fileNum],
+		fileSize,
+		fmt.Sprintf("%x", hash))
+
 	// show progress bar and start updating it
 	ui.ShowProgressBar()
 	ticker := time.NewTicker(time.Millisecond * 1000)
@@ -71,17 +80,6 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 			}
 		}
 	}()
-
-	// set deadline for write
-	extendDeadline(conn)
-
-	// make encoder and send file details
-	writer := gob.NewEncoder(conn)
-	writer.Encode(fileDetail{
-		filepath.Base(t.FileList[fileNum]),
-		int(fileSize),
-		hash,
-	})
 
 	// send file
 	buffer := make([]byte, CHUNKSIZE)
@@ -104,7 +102,7 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		// try to send, retrying if there's a timeout
 		for retry := 0; retry < NUMRETRIES; retry++ {
 			extendDeadline(conn)
-			err = encryptAndSendChunk(buffer[:bytesRead], t.Password, writer, conn)
+			err = encryptAndSendChunk(buffer[:bytesRead], t.Password, conn)
 			if err != nil {
 				switch errType := err.(type) {
 				case net.Error:
@@ -143,7 +141,7 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	return err
 }
 
-func encryptAndSendChunk(chunk []byte, pw string, writer *gob.Encoder, conn net.Conn) (err error) {
+func encryptAndSendChunk(chunk []byte, pw string, conn net.Conn) (err error) {
 	encryptedChunk, err := encrypt(chunk, pw)
 	if err != nil {
 		return err
@@ -172,11 +170,12 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	// set deadline for read
 	extendDeadline(conn)
 
-	// make decoder and get file details
-	reader := gob.NewDecoder(conn)
-	details := &fileDetail{}
-	reader.Decode(details)
-	bytesLeft := details.FileSize
+	// get file details
+	fileName, fileSize, fileHash, err := receiveFileDetails(conn)
+	if err != nil {
+		return err
+	}
+	bytesLeft := fileSize
 
 	// check destination folder
 	fpStat, err := os.Stat(t.ReceiveDir)
@@ -190,18 +189,20 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	// now check if file being received already exists. if so, find new filename.
 	// err == nil means file is there. err != nil means file is not there.
 	var currentFilePath string
-	if _, err := os.Stat(t.ReceiveDir + string(os.PathSeparator) + details.FileName); err == nil {
+	if _, err := os.Stat(t.ReceiveDir + string(os.PathSeparator) + fileName); err == nil {
 		i := 1
 		for err == nil {
-			_, err = os.Stat(t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + details.FileName)
-			i++
+			_, err = os.Stat(t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + fileName)
+			if err == nil {
+				i++
+			}
 		}
-		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + details.FileName
+		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + fileName
 	} else {
-		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + details.FileName
+		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + fileName
 	}
 
-	ui.Output(fmt.Sprintf("Filename: %s\nFile size: %s", details.FileName, makeSizeReadable(int64(details.FileSize))))
+	ui.Output(fmt.Sprintf("Filename: %s\nFile size: %s", currentFilePath, makeSizeReadable(int64(fileSize))))
 
 	// show progress bar and start updating it
 	ui.ShowProgressBar()
@@ -213,7 +214,7 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 			case <-t.Ctx.Done():
 				return
 			default:
-				percentDone := 100 * float64(float64(details.FileSize)-float64(bytesLeft)) / float64(details.FileSize)
+				percentDone := 100 * float64(float64(fileSize)-float64(bytesLeft)) / float64(fileSize)
 				ui.UpdateProgressBar(int(percentDone))
 			}
 		}
@@ -236,7 +237,7 @@ outer:
 		// try to receive, retrying if there's a timeout
 		for retry := 0; retry < NUMRETRIES; retry++ {
 			extendDeadline(conn)
-			bytesDecrypted, err := receiveAndDecryptChunk(outFile, t.Password, reader, conn)
+			bytesDecrypted, err := receiveAndDecryptChunk(outFile, t.Password, conn)
 			if bytesDecrypted == 0 {
 				break outer
 			}
@@ -253,7 +254,7 @@ outer:
 					return err
 				}
 			}
-			bytesLeft -= bytesDecrypted
+			bytesLeft -= int64(bytesDecrypted)
 		}
 	}
 
@@ -270,9 +271,9 @@ outer:
 	if err != nil {
 		return err
 	}
-	if fmt.Sprintf("%x", hash) != fmt.Sprintf("%x", details.Hash) {
-		return fmt.Errorf("Mismatched file hashes!\nHash sent at start of transfer: %x\nHash of received file: %x",
-			details.Hash, hash)
+	if fmt.Sprintf("%x", hash) != fileHash {
+		return fmt.Errorf("Mismatched file hashes!\nHash sent at start of transfer: %x\nHash of received file: %x\nOutput size: %d",
+			fileHash, hash, outFileSize)
 	}
 	ui.Output(fmt.Sprintf("Received file size: %s", makeSizeReadable(outFileSize)))
 	ui.Output(fmt.Sprintf("Received file hash: %x", hash))
@@ -283,16 +284,16 @@ outer:
 	return err
 }
 
-func receiveAndDecryptChunk(outFile *os.File, pw string, reader *gob.Decoder, conn net.Conn) (bytesDecrypted int, err error) {
+func receiveAndDecryptChunk(outFile *os.File, pw string, conn net.Conn) (bytesDecrypted int, err error) {
 	// get chunk size
 	var chunkSize int64 = -1
 	err = binary.Read(conn, binary.BigEndian, &chunkSize)
 	if err != nil || chunkSize == -1 {
 		return 0, errors.New("Error reading chunk size: " + err.Error())
 	}
-	// if chunkSize == 0 {
-	// 	return -1, nil // done receiving
-	// }
+	if chunkSize == 0 {
+		return // done receiving
+	}
 	// receive chunk
 	chunk := make([]byte, chunkSize)
 	bytesReceived, err := io.ReadFull(conn, chunk)
@@ -314,6 +315,72 @@ func receiveAndDecryptChunk(outFile *os.File, pw string, reader *gob.Decoder, co
 	}
 	// return number of decrypted bytes for progress bar
 	bytesDecrypted = len(decryptedChunk)
+	return
+}
+
+func sendFileDetails(conn net.Conn, name string, size int64, hash string) (err error) {
+	// send size of filename
+	filenameLen := int64(len(name))
+	err = binary.Write(conn, binary.BigEndian, filenameLen)
+	if err != nil {
+		return fmt.Errorf("Error sending filename length: %s", err)
+	}
+	// send filename
+	_, err = conn.Write([]byte(name))
+	if err != nil {
+		return fmt.Errorf("Error sending filename: %s", err)
+	}
+	// send file size
+	err = binary.Write(conn, binary.BigEndian, size)
+	if err != nil {
+		return fmt.Errorf("Error sending file size: %s", err)
+	}
+	// send size of file hash
+	hashSize := int64(len(hash))
+	err = binary.Write(conn, binary.BigEndian, hashSize)
+	if err != nil {
+		return fmt.Errorf("Error sending size of file hash: %s", err)
+	}
+	// send file hash
+	_, err = conn.Write([]byte(hash))
+	if err != nil {
+		return fmt.Errorf("Error sending file hash: %s", err)
+	}
+	return
+}
+
+func receiveFileDetails(conn net.Conn) (name string, size int64, hash string, err error) {
+	// receive size of filename
+	err = binary.Read(conn, binary.BigEndian, &size)
+	if err != nil {
+		return "", 0, "", fmt.Errorf("Error receiving filename length: %s", err)
+	}
+	// receive filename
+	filenameBytes := make([]byte, size)
+	_, err = io.ReadFull(conn, filenameBytes)
+	if err != nil {
+		return "", 0, "", fmt.Errorf("Error receiving filename: %s", err)
+	}
+	name = string(filenameBytes)
+	// receive file size
+	var fileSize int64
+	err = binary.Read(conn, binary.BigEndian, &fileSize)
+	if err != nil {
+		return "", 0, "", fmt.Errorf("Error receiving file size: %s", err)
+	}
+	// receive size of file hash
+	var hashSize int64
+	err = binary.Read(conn, binary.BigEndian, &hashSize)
+	if err != nil {
+		return "", 0, "", fmt.Errorf("Error receiving size of file hash: %s", err)
+	}
+	// receive file hash
+	hashBytes := make([]byte, hashSize)
+	_, err = io.ReadFull(conn, hashBytes)
+	if err != nil {
+		return "", 0, "", fmt.Errorf("Error receiving file hash: %s", err)
+	}
+	hash = string(hashBytes)
 	return
 }
 
