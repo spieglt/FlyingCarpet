@@ -29,8 +29,8 @@ type fileDetail struct {
 }
 
 // needed?
-type fileChunk struct {
-	Data []byte
+type chunkDetail struct {
+	Size int
 }
 
 func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
@@ -104,7 +104,7 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		// try to send, retrying if there's a timeout
 		for retry := 0; retry < NUMRETRIES; retry++ {
 			extendDeadline(conn)
-			err = encryptAndSendChunk(buffer[:bytesRead], t.Password, writer)
+			err = encryptAndSendChunk(buffer[:bytesRead], t.Password, writer, conn)
 			if err != nil {
 				switch errType := err.(type) {
 				case net.Error:
@@ -130,22 +130,21 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	return nil
 }
 
-func encryptAndSendChunk(chunk []byte, pw string, writer *gob.Encoder) (err error) {
-	_, err = encrypt(chunk, pw)
+func encryptAndSendChunk(chunk []byte, pw string, writer *gob.Encoder, conn net.Conn) (err error) {
+	encryptedChunk, err := encrypt(chunk, pw)
 	if err != nil {
 		return err
 	}
 	// TODO: make sure this returns timeout error
-	err = writer.Encode(fileChunk{chunk})
+	err = writer.Encode(chunkDetail{len(chunk)})
+	bytesWritten, err := conn.Write(encryptedChunk)
+	if err != nil {
+		return err
+	}
+	if bytesWritten != len(encryptedChunk) {
+		return errors.New("Send error: not all bytes written")
+	}
 	return
-
-	// bytesWritten, err := conn.Write(encryptedChunk)
-	// if err != nil {
-	// 	return err
-	// }
-	// if bytesWritten != len(encryptedChunk) {
-	// 	return errors.New("Send error: not all bytes written")
-	// }
 }
 
 func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
@@ -171,10 +170,13 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	}
 
 	// now check if file being received already exists. if so, find new filename.
+	// err == nil means file is there. err != nil means file is not there.
 	var currentFilePath string
 	if _, err := os.Stat(t.ReceiveDir + string(os.PathSeparator) + details.FileName); err == nil {
 		i := 1
-		for _, err := os.Stat(t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + details.FileName); err == nil; i++ {
+		for err == nil {
+			_, err = os.Stat(t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + details.FileName)
+			i++
 		}
 		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + details.FileName
 	} else {
@@ -213,10 +215,13 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 			return errors.New("Exiting receive, transfer was canceled")
 		default:
 		}
+		if bytesLeft == 0 {
+			break
+		}
 		// try to receive, retrying if there's a timeout
 		for retry := 0; retry < NUMRETRIES; retry++ {
 			extendDeadline(conn)
-			bytesDecrypted, err := receiveAndDecryptChunk(outFile, t.Password, reader)
+			bytesDecrypted, err := receiveAndDecryptChunk(outFile, t.Password, reader, conn)
 			if err != nil {
 				switch errType := err.(type) {
 				case net.Error:
@@ -257,15 +262,23 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	return err
 }
 
-func receiveAndDecryptChunk(outFile *os.File, pw string, reader *gob.Decoder) (bytesDecrypted int, err error) {
-	chunk := &fileChunk{}
+func receiveAndDecryptChunk(outFile *os.File, pw string, reader *gob.Decoder, conn net.Conn) (bytesDecrypted int, err error) {
+	detail := chunkDetail{}
 	// receive chunk
-	err = reader.Decode(chunk)
+	err = reader.Decode(&detail)
 	if err != nil {
 		return
 	}
+	chunk := make([]byte, detail.Size)
+	bytesReceived, err := io.ReadFull(conn, chunk)
+	if err != nil {
+		return 0, errors.New("Error reading from stream: " + err.Error())
+	}
+	if bytesReceived != detail.Size {
+		return 0, fmt.Errorf("bytesReceived: %d\ndetail.Size: %d", bytesReceived, detail.Size)
+	}
 	// decrypt
-	decryptedChunk, err := decrypt(chunk.Data, pw)
+	decryptedChunk, err := decrypt(chunk, pw)
 	if err != nil {
 		return
 	}
