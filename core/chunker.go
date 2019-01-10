@@ -136,7 +136,7 @@ func encryptAndSendChunk(chunk []byte, pw string, writer *gob.Encoder, conn net.
 		return err
 	}
 	// TODO: make sure this returns timeout error
-	err = writer.Encode(chunkDetail{len(chunk)})
+	err = writer.Encode(chunkDetail{len(encryptedChunk)})
 	bytesWritten, err := conn.Write(encryptedChunk)
 	if err != nil {
 		return err
