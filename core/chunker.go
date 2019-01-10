@@ -23,14 +23,14 @@ const TCPTIMEOUT = 10
 const NUMRETRIES = 3
 
 type fileDetail struct {
-	fileName string
-	fileSize int
-	hash     []byte
+	FileName string
+	FileSize int
+	Hash     []byte
 }
 
 // needed?
 type fileChunk struct {
-	data []byte
+	Data []byte
 }
 
 func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
@@ -159,7 +159,7 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	reader := gob.NewDecoder(conn)
 	details := &fileDetail{}
 	reader.Decode(details)
-	bytesLeft := details.fileSize
+	bytesLeft := details.FileSize
 
 	// check destination folder
 	fpStat, err := os.Stat(t.ReceiveDir)
@@ -172,16 +172,16 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 
 	// now check if file being received already exists. if so, find new filename.
 	var currentFilePath string
-	if _, err := os.Stat(t.ReceiveDir + string(os.PathSeparator) + details.fileName); err == nil {
+	if _, err := os.Stat(t.ReceiveDir + string(os.PathSeparator) + details.FileName); err == nil {
 		i := 1
-		for _, err := os.Stat(t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + details.fileName); err == nil; i++ {
+		for _, err := os.Stat(t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + details.FileName); err == nil; i++ {
 		}
-		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + details.fileName
+		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + details.FileName
 	} else {
-		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + details.fileName
+		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + details.FileName
 	}
 
-	ui.Output(fmt.Sprintf("Filename: %s\nFile size: %s", details.fileName, makeSizeReadable(int64(details.fileSize))))
+	ui.Output(fmt.Sprintf("Filename: %s\nFile size: %s", details.FileName, makeSizeReadable(int64(details.FileSize))))
 
 	// show progress bar and start updating it
 	ui.ShowProgressBar()
@@ -193,7 +193,7 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 			case <-t.Ctx.Done():
 				return
 			default:
-				percentDone := 100 * float64(float64(details.fileSize)-float64(bytesLeft)) / float64(details.fileSize)
+				percentDone := 100 * float64(float64(details.FileSize)-float64(bytesLeft)) / float64(details.FileSize)
 				ui.UpdateProgressBar(int(percentDone))
 			}
 		}
@@ -244,9 +244,9 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	if err != nil {
 		return err
 	}
-	if fmt.Sprintf("%x", hash) != fmt.Sprintf("%x", details.hash) {
+	if fmt.Sprintf("%x", hash) != fmt.Sprintf("%x", details.Hash) {
 		return fmt.Errorf("Mismatched file hashes!\nHash sent at start of transfer: %x\nHash of received file: %x",
-			details.hash, hash)
+			details.Hash, hash)
 	}
 	ui.Output(fmt.Sprintf("Received file size: %s", makeSizeReadable(outFileSize)))
 	ui.Output(fmt.Sprintf("Received file hash: %x", hash))
@@ -265,7 +265,7 @@ func receiveAndDecryptChunk(outFile *os.File, pw string, reader *gob.Decoder) (b
 		return
 	}
 	// decrypt
-	decryptedChunk, err := decrypt(chunk.data, pw)
+	decryptedChunk, err := decrypt(chunk.Data, pw)
 	if err != nil {
 		return
 	}
