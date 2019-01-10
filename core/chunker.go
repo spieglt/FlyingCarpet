@@ -351,20 +351,20 @@ func sendFileDetails(conn net.Conn, name string, size int64, hash string) (err e
 
 func receiveFileDetails(conn net.Conn) (name string, size int64, hash string, err error) {
 	// receive size of filename
-	err = binary.Read(conn, binary.BigEndian, &size)
+	var filenameLen int64
+	err = binary.Read(conn, binary.BigEndian, &filenameLen)
 	if err != nil {
 		return "", 0, "", fmt.Errorf("Error receiving filename length: %s", err)
 	}
 	// receive filename
-	filenameBytes := make([]byte, size)
+	filenameBytes := make([]byte, filenameLen)
 	_, err = io.ReadFull(conn, filenameBytes)
 	if err != nil {
 		return "", 0, "", fmt.Errorf("Error receiving filename: %s", err)
 	}
 	name = string(filenameBytes)
 	// receive file size
-	var fileSize int64
-	err = binary.Read(conn, binary.BigEndian, &fileSize)
+	err = binary.Read(conn, binary.BigEndian, &size)
 	if err != nil {
 		return "", 0, "", fmt.Errorf("Error receiving file size: %s", err)
 	}
