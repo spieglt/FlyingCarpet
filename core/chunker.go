@@ -121,13 +121,25 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		}
 	}
 
+	// send chunkSize of 0 and then wait until receiving end tells us they have everything.
+	extendDeadline(conn)
+	var comp int64 = -1
+	err = binary.Write(conn, binary.BigEndian, int64(0))
+	if err != nil {
+		return err
+	}
+	err = binary.Read(conn, binary.BigEndian, &comp)
+	if err != nil {
+		return err
+	}
+
 	// print stats
 	ui.UpdateProgressBar(100)
 	ui.Output(fmt.Sprintf("Sending took %s", time.Since(start)))
 
 	speed := (float64(fileSize*8) / 1000000) / (float64(time.Since(start)) / 1000000000)
 	ui.Output(fmt.Sprintf("Speed: %.2fmbps", speed))
-	return nil
+	return err
 }
 
 func encryptAndSendChunk(chunk []byte, pw string, writer *gob.Encoder, conn net.Conn) (err error) {
@@ -212,7 +224,7 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		return errors.New("Error creating out file: " + err.Error())
 	}
 	defer outFile.Close()
-
+outer:
 	for {
 		// bail if user canceled transfer
 		select {
@@ -220,13 +232,13 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 			return errors.New("Exiting receive, transfer was canceled")
 		default:
 		}
-		if bytesLeft == 0 {
-			break
-		}
 		// try to receive, retrying if there's a timeout
 		for retry := 0; retry < NUMRETRIES; retry++ {
 			extendDeadline(conn)
 			bytesDecrypted, err := receiveAndDecryptChunk(outFile, t.Password, reader, conn)
+			if bytesDecrypted == 0 {
+				break outer
+			}
 			if err != nil {
 				switch errType := err.(type) {
 				case net.Error:
@@ -243,6 +255,9 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 			bytesLeft -= bytesDecrypted
 		}
 	}
+
+	// tell sending end we're finished
+	binary.Write(conn, binary.BigEndian, int64(1))
 
 	// stats
 	ui.UpdateProgressBar(100)
@@ -269,10 +284,13 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 
 func receiveAndDecryptChunk(outFile *os.File, pw string, reader *gob.Decoder, conn net.Conn) (bytesDecrypted int, err error) {
 	// get chunk size
-	chunkSize := -1
+	var chunkSize int64 = -1
 	err = binary.Read(conn, binary.BigEndian, &chunkSize)
 	if err != nil || chunkSize == -1 {
 		return 0, errors.New("Error reading chunk size: " + err.Error())
+	}
+	if chunkSize == 0 {
+		return -1, nil // done receiving
 	}
 	// receive chunk
 	chunk := make([]byte, chunkSize)
@@ -280,7 +298,7 @@ func receiveAndDecryptChunk(outFile *os.File, pw string, reader *gob.Decoder, co
 	if err != nil {
 		return 0, errors.New("Error reading from stream: " + err.Error())
 	}
-	if bytesReceived != chunkSize {
+	if int64(bytesReceived) != chunkSize {
 		return 0, fmt.Errorf("bytesReceived: %d\ndetail.Size: %d", bytesReceived, chunkSize)
 	}
 	// decrypt
