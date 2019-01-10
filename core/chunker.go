@@ -135,8 +135,13 @@ func encryptAndSendChunk(chunk []byte, pw string, writer *gob.Encoder, conn net.
 	if err != nil {
 		return err
 	}
-	// TODO: make sure this returns timeout error
-	err = writer.Encode(chunkDetail{len(encryptedChunk)})
+	// send size
+	chunkSize := int64(len(encryptedChunk))
+	err = binary.Write(conn, binary.BigEndian, chunkSize)
+	if err != nil {
+		return errors.New("Error writing chunk length: " + err.Error())
+	}
+
 	bytesWritten, err := conn.Write(encryptedChunk)
 	if err != nil {
 		return err
@@ -263,19 +268,20 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 }
 
 func receiveAndDecryptChunk(outFile *os.File, pw string, reader *gob.Decoder, conn net.Conn) (bytesDecrypted int, err error) {
-	detail := chunkDetail{}
-	// receive chunk
-	err = reader.Decode(&detail)
-	if err != nil {
-		return
+	// get chunk size
+	chunkSize := -1
+	err = binary.Read(conn, binary.BigEndian, &chunkSize)
+	if err != nil || chunkSize == -1 {
+		return 0, errors.New("Error reading chunk size: " + err.Error())
 	}
-	chunk := make([]byte, detail.Size)
+	// receive chunk
+	chunk := make([]byte, chunkSize)
 	bytesReceived, err := io.ReadFull(conn, chunk)
 	if err != nil {
 		return 0, errors.New("Error reading from stream: " + err.Error())
 	}
-	if bytesReceived != detail.Size {
-		return 0, fmt.Errorf("bytesReceived: %d\ndetail.Size: %d", bytesReceived, detail.Size)
+	if bytesReceived != chunkSize {
+		return 0, fmt.Errorf("bytesReceived: %d\ndetail.Size: %d", bytesReceived, chunkSize)
 	}
 	// decrypt
 	decryptedChunk, err := decrypt(chunk, pw)
