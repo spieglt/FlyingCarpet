@@ -94,13 +94,13 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		}
 		// fill the buffer with bytes
 		bytesRead, err := file.Read(buffer)
-		bytesLeft -= int64(bytesRead) // for ticker
 		if err == io.EOF {
 			break // done reading file
 		}
 		if err != nil {
 			return fmt.Errorf("Error reading file: %s", err)
 		}
+		bytesLeft -= int64(bytesRead) // for ticker
 		// try to send, retrying if there's a timeout
 		for retry := 0; retry < NUMRETRIES; retry++ {
 			extendDeadline(conn)
@@ -118,6 +118,7 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 					return err
 				}
 			}
+			break
 		}
 	}
 
@@ -289,9 +290,9 @@ func receiveAndDecryptChunk(outFile *os.File, pw string, reader *gob.Decoder, co
 	if err != nil || chunkSize == -1 {
 		return 0, errors.New("Error reading chunk size: " + err.Error())
 	}
-	if chunkSize == 0 {
-		return -1, nil // done receiving
-	}
+	// if chunkSize == 0 {
+	// 	return -1, nil // done receiving
+	// }
 	// receive chunk
 	chunk := make([]byte, chunkSize)
 	bytesReceived, err := io.ReadFull(conn, chunk)
