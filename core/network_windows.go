@@ -81,7 +81,7 @@ func stopAdHoc(t *Transfer, ui UI) {
 		case t.WfdSendChan <- "quit":
 			/*reply :=*/ <-t.WfdRecvChan
 			// ui.Output("Wi-Fi Direct says: " + reply)
-		case <-time.After(time.Second * 2):
+		case <-time.After(time.Second * 3):
 			ui.Output("Wi-Fi Direct did not respond to quit request, is likely not running.")
 		}
 		close(t.WfdSendChan)

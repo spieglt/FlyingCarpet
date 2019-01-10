@@ -133,13 +133,6 @@ func StartTransfer(t *Transfer, ui UI) {
 
 		// make tcp connection
 		listener, conn, err := listenForPeer(t, ui)
-		// wait till end to close listener and tcp connection for multi-file transfers
-		// need to defer one func that closes both iff each != nil
-
-		// problem: if listenForPeer returns err, listener doesn't get defined, so it's nil, so it doesn't close.
-		// but if it is nil and we try to close it, we'll panic with a nil-pointer dereference.
-		// so need to close listener and conn if listenForPeer errors, in that function?
-		// nope, just changed to return listener and conn whether nil or not.
 		defer func() {
 			if conn != nil {
 				if err := conn.Close(); err != nil {
