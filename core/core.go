@@ -103,7 +103,7 @@ func StartTransfer(t *Transfer, ui UI) {
 				ui.Output("=============================")
 				ui.Output(fmt.Sprintf("Beginning transfer %d of %d. Filename: %s", i+1, len(t.FileList), v))
 			}
-			if err = send(conn, t, i, ui); err != nil {
+			if err = sendFile(conn, t, i, ui); err != nil {
 				ui.Output(err.Error())
 				ui.Output("Aborting transfer.")
 				return
@@ -169,7 +169,7 @@ func StartTransfer(t *Transfer, ui UI) {
 				ui.Output("=============================")
 				ui.Output(fmt.Sprintf("Receiving file %d of %d.", i+1, numFiles))
 			}
-			if err = receive(conn, t, i, ui); err != nil {
+			if err = receiveFile(conn, t, i, ui); err != nil {
 				ui.Output(err.Error())
 				ui.Output("Aborting transfer.")
 				return
