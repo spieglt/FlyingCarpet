@@ -61,7 +61,7 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	// send file details
 	sendFileDetails(
 		conn,
-		t.FileList[fileNum],
+		filepath.Base(t.FileList[fileNum]),
 		fileSize,
 		fmt.Sprintf("%x", hash))
 
@@ -189,17 +189,17 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	// now check if file being received already exists. if so, find new filename.
 	// err == nil means file is there. err != nil means file is not there.
 	var currentFilePath string
-	if _, err := os.Stat(t.ReceiveDir + string(os.PathSeparator) + fileName); err == nil {
+	if _, err := os.Stat(t.ReceiveDir + fileName); err == nil {
 		i := 1
 		for err == nil {
-			_, err = os.Stat(t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + fileName)
+			_, err = os.Stat(t.ReceiveDir + fmt.Sprintf("%d_", i) + fileName)
 			if err == nil {
 				i++
 			}
 		}
-		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + fileName
+		currentFilePath = t.ReceiveDir + fmt.Sprintf("%d_", i) + fileName
 	} else {
-		currentFilePath = t.ReceiveDir + string(os.PathSeparator) + fileName
+		currentFilePath = t.ReceiveDir + fileName
 	}
 
 	ui.Output(fmt.Sprintf("Filename: %s\nFile size: %s", currentFilePath, makeSizeReadable(int64(fileSize))))

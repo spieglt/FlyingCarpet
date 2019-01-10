@@ -87,6 +87,12 @@ func getInput(cli *Cli) *core.Transfer {
 		path, err := filepath.Abs(receiveDir)
 		if err != nil {
 			cli.Output(fmt.Sprintf("Error getting abs path for %s: %s", receiveDir, err))
+			os.Exit(1)
+		}
+		fpStat, err := os.Stat(receiveDir)
+		if err != nil || !fpStat.IsDir() {
+			cli.Output("Please select valid folder.")
+			os.Exit(1)
 		}
 		t.ReceiveDir = path + string(os.PathSeparator)
 	} else if receiveDir == "" && sendFiles != "" { // sending
