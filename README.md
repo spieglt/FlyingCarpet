@@ -32,7 +32,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + Large files supported (<10MB RAM usage while transferring a 4.5GB file).
 
-+ Standalone executable, no installation required and no dependencies needed.
++ No installation required and no dependencies needed.
 
 + Interoperable GUI and CLI versions.
 
@@ -64,13 +64,15 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Restrictions:
 
++ The Mac version is a standard `.app` bundle, the Linux version is an executable that writes dependencies to a temp location and runs from there, and the Windows version is a `.zip` with an `.exe` and other dependencies inside. I'm working on a better solution for Windows. It was a standalone `.exe` when I was using wxWidgets but this has not been possible since moving to Qt. PRs welcome.
+
 + 64-bit only. Supported Operating Systems: macOS 10.12+, Windows 7+, and Linux Mint 18. I only have access to so many laptops, so if you've tried on other platforms please let me know whether it worked. 
 
 + Disables your wireless internet connection while in use (does not apply to Windows when receiving).
 
-+ On Mac: May have to click Allow or enter username and password at prompt to clear Flying Carpet SSID from your preferred networks list. You may also have to right-click and select "Open" if your settings don't allow running unsigned applications. 
++ On Mac: You may have to right-click and select "Open" if your settings don't allow running unsigned applications. 
 
-+ On Windows: Must run as administrator (to allow connection through firewall and clear ARP cache). Right-click "Flying Carpet.exe" and select "Run as administrator." Click "More info" and "Run anyway" if you receive a Windows SmartScreen prompt. You may also need to disable WiFi Sense.
++ On Windows: Click "More info" and "Run anyway" if you receive a Windows SmartScreen prompt. You may also need to disable WiFi Sense.
 
 + I need help testing on Linux and supporting non-Debian-based distributions! Currently only confirmed to work on Mint 18, and only on wireless cards/drivers that support ad hoc networking with `nmcli`.
 
