@@ -1,5 +1,5 @@
 # clean up old executable
-rm "./Flying Carpet.exe"
+# rm "./Flying Carpet.exe"
 
 # copy file with icon for real and wrapper programs
 # fc.syso is automatically detected for inclusion
@@ -19,15 +19,18 @@ mt.exe -manifest .\gui\flyingcarpet\flyingcarpet.exe.manifest -outputresource:.\
 Copy-Item .\WFD_DLL\x64\Release\WFD_DLL.dll .\gui\flyingcarpet\deploy\windows\wfd.dll
 
 # bundle
-cd gui
-rice.exe embed-go
+# cd gui
+# rice.exe embed-go
 # extra flags prevent console window from showing while wrapper extracts files to temp directory
-go build -ldflags -H=windowsgui -o "Flying Carpet.exe"
-mv -Force "Flying Carpet.exe" ..
-cd ..
+# go build -ldflags -H=windowsgui -o "Flying Carpet.exe"
+# mv -Force "Flying Carpet.exe" ..
+# cd ..
+
+
 
 # zip to /bin
-# Compress-Archive -Force -Path '.\Flying Carpet.exe' -DestinationPath '.\bin\Flying Carpet (Windows).zip'
+Compress-Archive -Force -Path '.\gui\flyingcarpet\deploy\windows\*' -DestinationPath '.\bin\Flying Carpet (Windows).zip'
 
 # execute
-cmd /C "./Flying Carpet.exe"
+# cmd /C "./Flying Carpet.exe"
+cmd /C .\gui\flyingcarpet\deploy\windows\flyingcarpet.exe
