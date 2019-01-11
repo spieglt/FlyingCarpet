@@ -49,6 +49,7 @@ func StartTransfer(t *Transfer, ui UI) {
 
 	// cleanup
 	defer func() {
+		ui.UpdateProgressBar(0)
 		ui.ToggleStartButton()
 		resetWifi(t, ui)
 	}()
@@ -228,8 +229,8 @@ func dialPeer(t *Transfer, ui UI) (conn net.Conn, err error) {
 
 // GeneratePassword returns a 4 char password to display on the receiving end and enter into the sending end
 func GeneratePassword() string {
-	// no l, I, or O because they look too similar to each other, 1, and 0
-	const chars = "0123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
+	// no l, I, 0, or O, because they look too similar
+	const chars = "23456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
 	rand.Seed(time.Now().UTC().UnixNano())
 	pwBytes := make([]byte, 4)
 	for i := range pwBytes {

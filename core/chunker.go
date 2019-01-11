@@ -235,9 +235,6 @@ outer:
 		for retry := 0; retry < NUMRETRIES; retry++ {
 			extendDeadline(conn)
 			bytesDecrypted, err := receiveAndDecryptChunk(outFile, t.Password, conn)
-			if bytesDecrypted == 0 {
-				break outer
-			}
 			if err != nil {
 				switch errType := err.(type) {
 				case net.Error:
@@ -250,6 +247,9 @@ outer:
 				default:
 					return err
 				}
+			}
+			if bytesDecrypted == 0 {
+				break outer
 			}
 			bytesLeft -= int64(bytesDecrypted)
 		}
@@ -295,7 +295,7 @@ func receiveAndDecryptChunk(outFile *os.File, pw string, conn net.Conn) (bytesDe
 	chunk := make([]byte, chunkSize)
 	bytesReceived, err := io.ReadFull(conn, chunk)
 	if err != nil {
-		return 0, errors.New("Error reading from stream: " + err.Error())
+		return
 	}
 	if int64(bytesReceived) != chunkSize {
 		return 0, fmt.Errorf("bytesReceived: %d\ndetail.Size: %d", bytesReceived, chunkSize)
