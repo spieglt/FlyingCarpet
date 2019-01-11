@@ -4,6 +4,8 @@ Flying Carpet 2.0 is ready to use on the ![releases](https://github.com/spieglt/
 
 It includes a GUI rewritten with Qt, a refactor uniting the CLI and GUI branches, retry logic, better admin handling on Windows and Mac, clearer instructions, and better filesystem and transfer code. Please send feedback if you use it and thank you for your interest.
 
+Note for Windows users: I had tried to bundle the GUI version as a single `.exe` file, but it's not currently working. For now, please extract `Flying Carpet (Windows).zip` and run the `flyingcarpet.exe` inside.
+
 # Flying Carpet
 
 To download, visit the ![releases](https://github.com/spieglt/FlyingCarpet/releases) page!
