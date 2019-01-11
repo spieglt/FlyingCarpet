@@ -14,7 +14,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Screenshots:
 
-![](pictures/linuxDemo.png)  ![](pictures/winDemo.png)  ![](pictures/macDemo.png)
+<img src="pictures/winDemo.png" width=400> <img src="pictures/macDemo.png" width=400> <img src="pictures/linuxDemo.png" width=400> 
 
 # Features:
 
