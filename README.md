@@ -1,8 +1,8 @@
-**Update January 7, 2019**
+**Update January 10, 2019**
 
-I'm going to try improve the network code before posting new binaries. Ad hoc wifi does not seem very stable on Linux and I worry is not supported for many cards.
+Flying Carpet 2.0 is ready to use on the ![releases](https://github.com/spieglt/FlyingCarpet/releases) page! (Binaries for CLI version coming soon.)
 
-The major refactor and rewrite in Qt is done. There is no longer a need for a separate CLI branch. The Qt version requires external files, but I wanted to keep it a standalone binary, so I've written a wrapper that outputs everything to `$temp` and runs from there.
+It includes a GUI rewritten with Qt, a refactor uniting the CLI and GUI branches, retry logic, better admin handling on Windows and Mac, clearer instructions, and better filesystem and transfer code. Please send feedback if you use it and thank you for your interest.
 
 # Flying Carpet
 
@@ -14,7 +14,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Screenshots:
 
-![](pictures/linuxDemo.png)  ![](pictures/winDemo.png)  ![](pictures/macDemo.png)
+<img src="pictures/winDemo.png" width=400> <img src="pictures/macDemo.png" width=400> <img src="pictures/linuxDemo.png" width=400> 
 
 # Features:
 
@@ -70,7 +70,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + On Windows: Must run as administrator (to allow connection through firewall and clear ARP cache). Right-click "Flying Carpet.exe" and select "Run as administrator." Click "More info" and "Run anyway" if you receive a Windows SmartScreen prompt. You may also need to disable WiFi Sense.
 
-+ I need help testing on Linux and supporting non-Debian-based distributions! Currently only confirmed to work on Mint 18.
++ I need help testing on Linux and supporting non-Debian-based distributions! Currently only confirmed to work on Mint 18, and only on wireless cards/drivers that support ad hoc networking with `nmcli`.
 
 + Flying Carpet should rejoin you to your previous wireless network after a completed or canceled transfer. This will not happen if the program freezes, crashes, or if the windows is closed during operation.
 
