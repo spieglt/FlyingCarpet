@@ -142,6 +142,7 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 }
 
 func encryptAndSendChunk(chunk []byte, pw string, conn net.Conn) (err error) {
+	// encrypt
 	encryptedChunk, err := encrypt(chunk, pw)
 	if err != nil {
 		return err
@@ -152,7 +153,7 @@ func encryptAndSendChunk(chunk []byte, pw string, conn net.Conn) (err error) {
 	if err != nil {
 		return errors.New("Error writing chunk length: " + err.Error())
 	}
-
+	// write chunk
 	bytesWritten, err := conn.Write(encryptedChunk)
 	if err != nil {
 		return err
@@ -187,7 +188,6 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	}
 
 	// now check if file being received already exists. if so, find new filename.
-	// err == nil means file is there. err != nil means file is not there.
 	var currentFilePath string
 	if _, err := os.Stat(t.ReceiveDir + fileName); err == nil {
 		i := 1
