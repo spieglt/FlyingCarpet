@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"os"
-	"path/filepath"
 
 	fcc "github.com/spieglt/flyingcarpet/core"
 	"github.com/therecipe/qt/core"
@@ -238,20 +237,19 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 		} else if t.Mode == "receiving" {
 			// make sure folder exists. necessary since fileBox is read-only?
 			fpStat, err := os.Stat(t.ReceiveDir)
-			if err != nil {
+			if err != nil || !fpStat.IsDir() {
 				gui.Output("Please select valid folder.")
 				return
 			}
-			// make sure it ends with slash. also not necessary if fileBox is read-only.
-			if !fpStat.IsDir() {
-				t.ReceiveDir = filepath.Dir(t.ReceiveDir) + string(os.PathSeparator)
+			// make sure it ends with slash
+			if t.ReceiveDir[len(t.ReceiveDir)-1] != os.PathSeparator {
+				t.ReceiveDir += string(os.PathSeparator)
 			}
 			// show password
 			t.Password = fcc.GeneratePassword()
 			pwBox := widgets.NewQMessageBox(nil)
 			pwBox.SetText("On sending end, after selecting options, press Start and enter this password:\n\n" + t.Password)
-			// TODO: make this not block
-			pwBox.Exec()
+			pwBox.Show()
 		}
 		gui.ToggleStartButton()
 		t.WfdSendChan, t.WfdRecvChan = make(chan string), make(chan string)

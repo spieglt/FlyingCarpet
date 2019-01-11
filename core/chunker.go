@@ -179,12 +179,9 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	bytesLeft := fileSize
 
 	// check destination folder
-	fpStat, err := os.Stat(t.ReceiveDir)
+	_, err = os.Stat(t.ReceiveDir)
 	if err != nil {
 		return errors.New("Error accessing destination folder: " + err.Error())
-	}
-	if !fpStat.IsDir() {
-		t.ReceiveDir = filepath.Dir(t.FileList[fileNum]) + string(os.PathSeparator)
 	}
 
 	// now check if file being received already exists. if so, find new filename.
