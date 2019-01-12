@@ -19,19 +19,18 @@ mt.exe -manifest .\gui\flyingcarpet\flyingcarpet.exe.manifest -outputresource:.\
 Copy-Item .\WFD_DLL\x64\Release\WFD_DLL.dll .\gui\flyingcarpet\deploy\windows\wfd.dll
 
 # bundle
-cd gui
-rice.exe embed-go
+# cd gui
+# rice.exe embed-go
 # extra flags prevent console window from showing while wrapper extracts files to temp directory
-go build -ldflags -H=windowsgui -o "Flying Carpet.exe"
-mv -Force "Flying Carpet.exe" ..
-cd ..
+# go build -ldflags -H=windowsgui -o "Flying Carpet.exe"
+# mv -Force "Flying Carpet.exe" ..
+# cd ..
 
-# embed manifest to run wrapper as admin
-mt.exe -manifest .\gui\flyingcarpet.exe.manifest -outputresource:".\Flying Carpet.exe"
+
 
 # zip to /bin
-Compress-Archive -Force -Path '.\Flying Carpet.exe' -DestinationPath '.\bin\Flying Carpet (Windows).zip'
+Compress-Archive -Force -Path '.\gui\flyingcarpet\deploy\windows\*' -DestinationPath '.\bin\Flying Carpet (Windows).zip'
 
 # execute
-cmd /C "./Flying Carpet.exe"
-# cmd /C .\gui\flyingcarpet\deploy\windows\flyingcarpet.exe
+# cmd /C "./Flying Carpet.exe"
+cmd /C .\gui\flyingcarpet\deploy\windows\flyingcarpet.exe

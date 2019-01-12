@@ -53,21 +53,18 @@ func newCopyToTempWalkFunc(tempLoc string, box *rice.Box) filepath.WalkFunc {
 func findTempLoc() string {
 	subDir := "flyingcarpet"
 	tempLoc := os.TempDir()
-	err := os.RemoveAll(tempLoc + string(os.PathSeparator) + subDir)
+	os.RemoveAll(tempLoc + string(os.PathSeparator) + subDir)
+	err := os.Mkdir(tempLoc+string(os.PathSeparator)+subDir, 0755)
 	if err != nil {
 		fmt.Println("Could not create directory in temp folder: " + err.Error())
 		tempLoc, err = os.Executable()
 		if err != nil {
 			log.Fatal("Could not find a suitable place to extract Flying Carpet.")
 		}
+		os.RemoveAll(tempLoc + string(os.PathSeparator) + subDir)
 		err = os.Mkdir(tempLoc+string(os.PathSeparator)+subDir, 0755)
 		if err != nil {
 			log.Fatal("Could not create directory in current folder: " + err.Error())
-		}
-	} else {
-		err = os.Mkdir(tempLoc+string(os.PathSeparator)+subDir, 0755)
-		if err != nil {
-			log.Fatal("Could not find a suitable place to extract Flying Carpet.")
 		}
 	}
 	return tempLoc + string(os.PathSeparator) + subDir
