@@ -26,6 +26,9 @@ func (cli *Cli) ShowProgressBar() {}
 
 // UpdateProgressBar prints the status of a file transfer.
 func (cli *Cli) UpdateProgressBar(percentDone int) {
+	if percentDone == 0 {
+		return
+	}
 	fmt.Printf("\rProgress: %3d%%", percentDone)
 	if percentDone == 100 {
 		fmt.Println()
