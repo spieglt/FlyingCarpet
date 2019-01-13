@@ -172,6 +172,10 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	})
 
 	sendButton.ConnectClicked(func(bool) {
+		if !sendMode.IsChecked() {
+			gui.Output("Error: please select whether this device is sending or receiving.")
+			return
+		}
 		// open dialog
 		fd := widgets.NewQFileDialog2(window, "Select Files", getHomePath(), "")
 		t.FileList = fd.GetOpenFileNames(window, "Select File(s)", "", "", "", 0)
@@ -190,15 +194,6 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 
 	startButton.ConnectClicked(func(bool) {
 		switch {
-		case sendMode.IsChecked():
-			t.Mode = "sending"
-		case receiveMode.IsChecked():
-			t.Mode = "receiving"
-		default:
-			gui.Output("Error: please select whether this device is sending or receiving.")
-			return
-		}
-		switch {
 		case linuxPeer.IsChecked():
 			t.Peer = "linux"
 		case macPeer.IsChecked():
@@ -207,6 +202,15 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			t.Peer = "windows"
 		default:
 			gui.Output("Error: please select the operating system of the other device.")
+			return
+		}
+		switch {
+		case sendMode.IsChecked():
+			t.Mode = "sending"
+		case receiveMode.IsChecked():
+			t.Mode = "receiving"
+		default:
+			gui.Output("Error: please select whether this device is sending or receiving.")
 			return
 		}
 		// make sure something was selected
