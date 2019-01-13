@@ -1,6 +1,6 @@
 **Update January 10, 2019**
 
-Flying Carpet 2.0 is ready to use on the ![releases](https://github.com/spieglt/FlyingCarpet/releases) page! (Binaries for CLI version coming soon.)
+Flying Carpet 2.0 is ready to use on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page! (Binaries for CLI version coming soon.)
 
 It includes a GUI rewritten with Qt, a refactor uniting the CLI and GUI branches, retry logic, better admin handling on Windows and Mac, clearer instructions, and better filesystem and transfer code. Please send feedback if you use it and thank you for your interest.
 
@@ -8,7 +8,7 @@ Note for Windows users: I had tried to bundle the GUI version as a single `.exe`
 
 # Flying Carpet
 
-To download, visit the ![releases](https://github.com/spieglt/FlyingCarpet/releases) page!
+To download, visit the [releases](https://github.com/spieglt/FlyingCarpet/releases) page!
 
 Wireless, encrypted file transfer over automatically configured ad hoc networking. No network infrastructure required (access point, router, switch). Just two laptops (Mac, Linux, and Windows supported) with wireless chips in close range.
 
