@@ -194,6 +194,9 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			t.Mode = "sending"
 		case receiveMode.IsChecked():
 			t.Mode = "receiving"
+		default:
+			gui.Output("Error: please select whether this device is sending or receiving.")
+			return
 		}
 		switch {
 		case linuxPeer.IsChecked():
@@ -202,6 +205,9 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			t.Peer = "mac"
 		case windowsPeer.IsChecked():
 			t.Peer = "windows"
+		default:
+			gui.Output("Error: please select the operating system of the other device.")
+			return
 		}
 		// make sure something was selected
 		if t.FileList == nil && t.ReceiveDir == "" {
