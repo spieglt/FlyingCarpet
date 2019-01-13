@@ -51,15 +51,21 @@ func getInput(cli *Cli) *core.Transfer {
 		printUsage()
 		os.Exit(1)
 	}
+	var pAbout = flag.Bool("about", false, "About the program and license.")
 	var pSend = flag.Bool("send", false, "Use this flag to send files. List files last. Globs accepted. Put filenames with spaces in quotes.")
 	var pReceive = flag.Bool("receive", false, "Use this flag to receive files. Provide the path of a destination folder as the last argument.")
 	var pPort = flag.Int("port", 3290, "TCP port to use (must match on both ends).")
 	var pPeer = flag.String("peer", "", "Use \"-peer linux\", \"-peer mac\", or \"-peer windows\" to match the other computer.")
 	flag.Parse()
+	about := *pAbout
 	send := *pSend
 	receive := *pReceive
 	port := *pPort
 	peer := *pPeer
+	if about {
+		cli.Output(core.AboutMessage)
+		os.Exit(0)
+	}
 
 	// main transfer object that will be handed to core
 	t := &core.Transfer{}
@@ -178,5 +184,6 @@ func printUsage() {
 	fmt.Println("\nTo receive files (specify folder last):")
 	fmt.Println("  (Mac)   $ ./flyingcarpet -receive -peer windows ~/Downloads")
 	fmt.Println("[Enter password into sending end.]\n")
+	fmt.Println("Use [ -about ] flag for info and license.\n")
 	return
 }
