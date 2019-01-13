@@ -1,6 +1,6 @@
-**Update January 10, 2019**
+**Update January 13, 2019**
 
-Flying Carpet 2.0 is ready to use on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page! (Binaries for CLI version coming soon.)
+Flying Carpet version 2 is ready to use on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page, both GUI and CLI versions!
 
 It includes a GUI rewritten with Qt, a refactor uniting the CLI and GUI branches, retry logic, better admin handling on Windows and Mac, clearer instructions, and better filesystem and transfer code. Please send feedback if you use it and thank you for your interest.
 
@@ -83,8 +83,6 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + Drag and drop for sending files.
 
 + Folder upload.
-
-+ Make CLI version easier to use.
 
 + Replace `netsh wlan` with Native WiFi API on Windows.
 
