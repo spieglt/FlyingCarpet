@@ -1,10 +1,8 @@
-**Update January 13, 2019**
-
 Flying Carpet version 2 is ready to use on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page, both GUI and CLI versions!
 
-It includes a GUI rewritten with Qt, a refactor uniting the CLI and GUI branches, retry logic, better admin handling on Windows and Mac, clearer instructions, and better filesystem and transfer code. Please send feedback if you use it and thank you for your interest.
+**Update June 21, 2019**
 
-Note for Windows users: I had tried to bundle the GUI version as a single `.exe` file, but it's not currently working. For now, please extract `Flying Carpet (Windows).zip` and run the `flyingcarpet.exe` inside.
+Please check out my new project [Cloaker](https://github.com/spieglt/cloaker): very simple password-based drag-and-drop file encryption. While building it, I finally figured out how to statically compile Qt on Windows, so I may be able to do a single-file version of Flying Carpet on Windows again in the future.
 
 # Flying Carpet
 
