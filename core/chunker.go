@@ -104,7 +104,7 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		// try to send, retrying if there's a timeout
 		for retry := 0; retry < NUMRETRIES; retry++ {
 			extendDeadline(conn)
-			err = encryptAndSendChunk(buffer[:bytesRead], t.Password, conn)
+			err = encryptAndSendChunk(buffer[:bytesRead], t.HashedPassword, conn)
 			if err != nil {
 				switch errType := err.(type) {
 				case net.Error:
@@ -143,7 +143,7 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	return err
 }
 
-func encryptAndSendChunk(chunk []byte, pw string, conn net.Conn) (err error) {
+func encryptAndSendChunk(chunk []byte, pw []byte, conn net.Conn) (err error) {
 	// encrypt
 	encryptedChunk, err := encrypt(chunk, pw)
 	if err != nil {
@@ -236,7 +236,7 @@ outer:
 		// try to receive, retrying if there's a timeout
 		for retry := 0; retry < NUMRETRIES; retry++ {
 			extendDeadline(conn)
-			bytesDecrypted, err := receiveAndDecryptChunk(outFile, t.Password, conn)
+			bytesDecrypted, err := receiveAndDecryptChunk(outFile, t.HashedPassword, conn)
 			if err != nil {
 				switch errType := err.(type) {
 				case net.Error:
@@ -283,7 +283,7 @@ outer:
 	return err
 }
 
-func receiveAndDecryptChunk(outFile *os.File, pw string, conn net.Conn) (bytesDecrypted int, err error) {
+func receiveAndDecryptChunk(outFile *os.File, pw []byte, conn net.Conn) (bytesDecrypted int, err error) {
 	// get chunk size
 	var chunkSize int64 = -1
 	err = binary.Read(conn, binary.BigEndian, &chunkSize)

@@ -10,27 +10,30 @@ import (
 	"runtime"
 	"strconv"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 const HostOS = runtime.GOOS
 
 // Transfer holds all information necessary to send or receive files
 type Transfer struct {
-	FileList     []string
-	ReceiveDir   string
-	Password     string
-	SSID         string
-	RecipientIP  string
-	Peer         string // "mac", "windows", or "linux"
-	Mode         string // "sending" or "receiving"
-	PreviousSSID string
-	DllLocation  string
-	Port         int
-	AdHocCapable bool
-	Ctx          context.Context
-	CancelCtx    context.CancelFunc
-	WfdSendChan  chan string
-	WfdRecvChan  chan string
+	FileList       []string
+	ReceiveDir     string
+	Password       string
+	HashedPassword []byte
+	SSID           string
+	RecipientIP    string
+	Peer           string // "mac", "windows", or "linux"
+	Mode           string // "sending" or "receiving"
+	PreviousSSID   string
+	DllLocation    string
+	Port           int
+	AdHocCapable   bool
+	Ctx            context.Context
+	CancelCtx      context.CancelFunc
+	WfdSendChan    chan string
+	WfdRecvChan    chan string
 }
 
 // UI interface provides methods to accept information
@@ -58,6 +61,11 @@ func StartTransfer(t *Transfer, ui UI) {
 	pwBytes := md5.Sum([]byte(t.Password))
 	prefix := pwBytes[:3]
 	t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
+	t.HashedPassword, err = bcrypt.GenerateFromPassword([]byte(t.Password), 31)
+	if err != nil {
+		ui.Output("Error hashing password.")
+		return
+	}
 
 	ui.Output("\nStarting Transfer\n=============================")
 	if t.Mode == "sending" {
