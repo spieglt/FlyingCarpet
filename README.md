@@ -1,9 +1,3 @@
-Flying Carpet version 2 is ready to use on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page, both GUI and CLI versions!
-
-**Update June 21, 2019**
-
-Please check out my new project [Cloaker](https://github.com/spieglt/cloaker): very simple password-based drag-and-drop file encryption. While building it, I finally figured out how to statically compile Qt on Windows, so I may be able to do a single-file version of Flying Carpet on Windows again in the future.
-
 # Flying Carpet
 
 To download, visit the [releases](https://github.com/spieglt/FlyingCarpet/releases) page!
@@ -85,8 +79,6 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 + Replace `netsh wlan` with Native WiFi API on Windows.
 
 + Mobile versions, integrating functionality from https://github.com/claudiodangelis/qr-filetransfer.
-
-Disclaimer: I am not a cryptography expert. Do not use for private files if you think a skilled attacker is less than 100 feet from you and trying to intercept them.
 
 Licenses for third-party tools and libraries used can be found in the "3rd_party_licenses" folder.
 
