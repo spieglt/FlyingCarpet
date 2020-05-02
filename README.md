@@ -28,6 +28,8 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + Interoperable GUI and CLI versions.
 
++ Uses bcrypt hash of the (short) passphrase as key for Go's [secretbox](https://godoc.org/golang.org/x/crypto/nacl/secretbox).
+
 # GUI Compilation instructions:
 
 + `go get -x github.com/spieglt/flyingcarpet`
