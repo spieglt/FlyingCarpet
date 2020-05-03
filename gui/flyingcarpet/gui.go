@@ -18,6 +18,14 @@ type Gui struct {
 	// for password prompt dialog on Mac
 	PromptAction *widgets.QAction
 	PromptChan   *chan bool
+
+	SendMode      *widgets.QRadioButton
+	ReceiveMode   *widgets.QRadioButton
+	LinuxPeer     *widgets.QRadioButton
+	MacPeer       *widgets.QRadioButton
+	WindowsPeer   *widgets.QRadioButton
+	SendButton    *widgets.QPushButton
+	ReceiveButton *widgets.QPushButton
 }
 
 // Output prints messages to outputBox.
@@ -38,13 +46,23 @@ func (gui *Gui) UpdateProgressBar(percentDone int) {
 // ToggleStartButton flips between the start and cancel buttons at the start
 // and end of a transfer.
 func (gui *Gui) ToggleStartButton() {
+	enabled := false
 	if gui.StartButton.IsHidden() {
 		gui.CancelButton.Hide()
 		gui.StartButton.Show()
+		enabled = true
 		return
 	}
 	gui.CancelButton.Show()
 	gui.StartButton.Hide()
+
+	gui.SendMode.SetEnabled(enabled)
+	gui.ReceiveMode.SetEnabled(enabled)
+	gui.LinuxPeer.SetEnabled(enabled)
+	gui.MacPeer.SetEnabled(enabled)
+	gui.WindowsPeer.SetEnabled(enabled)
+	gui.SendButton.SetEnabled(enabled)
+	gui.ReceiveButton.SetEnabled(enabled)
 }
 
 // ShowPwPrompt is only used on Mac after a transfer to prompt whether the user wants to enter
@@ -148,6 +166,14 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 		CancelButton: cancelButton,
 		PromptAction: promptAction,
 		PromptChan:   &promptChan,
+
+		SendMode:      sendMode,
+		ReceiveMode:   receiveMode,
+		LinuxPeer:     linuxPeer,
+		MacPeer:       macPeer,
+		WindowsPeer:   windowsPeer,
+		SendButton:    sendButton,
+		ReceiveButton: receiveButton,
 	}
 
 	//////////////////////////////

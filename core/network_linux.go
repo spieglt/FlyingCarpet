@@ -181,7 +181,6 @@ func findMac(t *Transfer, ui UI) (peerIP string, err error) {
 		select {
 		case <-t.Ctx.Done():
 			return "", errors.New("Exiting findMac, transfer canceled")
-		}
 		default:
 			ui.Output("Looking for interface...")
 			time.Sleep(time.Duration(1) * time.Second)
@@ -194,7 +193,6 @@ func findMac(t *Transfer, ui UI) (peerIP string, err error) {
 		select {
 		case <-t.Ctx.Done():
 			return "", errors.New("Exiting findMac, transfer canceled")
-		}
 		default:
 			ui.Output("Looking for address...")
 			time.Sleep(time.Duration(1) * time.Second)
@@ -214,7 +212,6 @@ func findMac(t *Transfer, ui UI) (peerIP string, err error) {
 		select {
 		case <-t.Ctx.Done():
 			return "", errors.New("Exiting findMac, transfer canceled")
-		}
 		default:
 			pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
 			if pingErr != nil {
@@ -234,8 +231,7 @@ func findWindows(t *Transfer, ui UI) string {
 	for err != nil || iface == nil {
 		select {
 		case <-t.Ctx.Done():
-			return "", errors.New("Exiting findWindows, transfer canceled")
-		}
+			return ""
 		default:
 			ui.Output("Looking for interface...")
 			time.Sleep(time.Duration(1) * time.Second)
@@ -247,8 +243,7 @@ func findWindows(t *Transfer, ui UI) string {
 	for err != nil || currentNetwork == nil {
 		select {
 		case <-t.Ctx.Done():
-			return "", errors.New("Exiting findWindows, transfer canceled")
-		}
+			return ""
 		default:
 			ui.Output("Looking for address...")
 			time.Sleep(time.Duration(1) * time.Second)
