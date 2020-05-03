@@ -24,7 +24,7 @@ func connectToPeer(t *Transfer, ui UI) (err error) {
 			if err = joinAdHoc(t, ui); err != nil {
 				return
 			}
-			t.RecipientIP = findWindows(t)
+			t.RecipientIP = findWindows(t, ui)
 		} else if t.Peer == "linux" {
 			if err = joinAdHoc(t, ui); err != nil {
 				return
@@ -212,17 +212,22 @@ func findMac(t *Transfer, ui UI) (peerIP string, err error) {
 	return
 }
 
-func findWindows(t *Transfer) string {
+func findWindows(t *Transfer, ui UI) string {
 	iface, err := getWifiInterface()
-	if err != nil {
-		return ""
+	for err != nil || iface == nil {
+		ui.Output("Looking for interface...")
+		time.Sleep(time.Duration(1) * time.Second)
+		iface, err = getWifiInterface()
 	}
-	addr, err := getIPAddress(iface)
-	if err != nil {
-		return ""
+
+	currentNetwork, err := getIPAddress(iface)
+	for err != nil || currentNetwork == nil {
+		ui.Output("Looking for address...")
+		time.Sleep(time.Duration(1) * time.Second)
+		currentNetwork, err = getIPAddress(iface)
 	}
-	currentNetwork := addr.String()
-	currentIP := strings.Split(currentNetwork, "/")[0]
+
+	currentIP := strings.Split(currentNetwork.String(), "/")[0]
 	if strings.Contains(currentIP, "192.168.137") {
 		return "192.168.137.1"
 	}
