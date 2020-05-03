@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/scrypt"
 )
 
 const HostOS = runtime.GOOS
@@ -61,9 +61,11 @@ func StartTransfer(t *Transfer, ui UI) {
 	pwBytes := md5.Sum([]byte(t.Password))
 	prefix := pwBytes[:3]
 	t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
-	t.HashedPassword, err = bcrypt.GenerateFromPassword([]byte(t.Password), 31)
+
+	salt := pwBytes[3:11]
+	t.HashedPassword, err = scrypt.Key([]byte(t.Password), salt, 1<<15, 8, 1, 32)
 	if err != nil {
-		ui.Output("Error hashing password.")
+		ui.Output("Error hashing password")
 		return
 	}
 
