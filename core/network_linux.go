@@ -175,24 +175,32 @@ func getBroadcast(n *net.IPNet) string {
 }
 
 func findMac(t *Transfer, ui UI) (peerIP string, err error) {
+
 	iface, err := getWifiInterface()
-	if err != nil {
-		return "", err
+	for err != nil || iface == nil {
+		ui.Output("Looking for interface...")
+		time.Sleep(time.Duration(1) * time.Second)
+		iface, err = getWifiInterface()
 	}
+
 	currentNetwork, err := getIPAddress(iface)
-	if err != nil {
-		return "", err
+	for err != nil || currentNetwork == nil {
+		ui.Output("Looking for address...")
+		time.Sleep(time.Duration(1) * time.Second)
+		currentNetwork, err = getIPAddress(iface)
 	}
+
 	currentIP := strings.Split(currentNetwork.String(), "/")[0] // strip CIDR subnet
 	broadcast := getBroadcast(currentNetwork)
-	pingString := "ping -b -c 5 " + broadcast + " 2>&1 | " + // ping broadcast address, include stderr
-		"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
-		"grep --line-buffered -vE " + broadcast + // exclude broadcast address
-		" | grep -vE '" + currentIP + "'" // exclude current IP
+	pingString := "ping -b -c 5 " + broadcast + " 2>&1" + // ping broadcast address, include stderr
+		" | grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}'" + // get all IPs
+		" | grep --line-buffered -vE " + broadcast + // exclude broadcast address
+		" | grep -vE '" + currentIP + "$'" // exclude current IP
 
 	ui.Output("Looking for peer IP.")
 	for peerIP == "" {
 		pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
+
 		if pingErr != nil {
 			time.Sleep(time.Second * time.Duration(2))
 			continue
