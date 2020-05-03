@@ -232,7 +232,6 @@ func findMac(t *Transfer, ui UI) (peerIP string, err error) {
 func findWindows(t *Transfer, ui UI) string {
 	iface, err := getWifiInterface()
 	for err != nil || iface == nil {
-<<<<<<< HEAD
 		select {
 		case <-t.Ctx.Done():
 			return "", errors.New("Exiting findWindows, transfer canceled")
@@ -242,16 +241,10 @@ func findWindows(t *Transfer, ui UI) string {
 			time.Sleep(time.Duration(1) * time.Second)
 			iface, err = getWifiInterface()
 		}
-=======
-		ui.Output("Looking for interface...")
-		time.Sleep(time.Duration(1) * time.Second)
-		iface, err = getWifiInterface()
->>>>>>> 95d18fc70edc7f5f955f96bc12d421c4fcba84fa
 	}
 
 	currentNetwork, err := getIPAddress(iface)
 	for err != nil || currentNetwork == nil {
-<<<<<<< HEAD
 		select {
 		case <-t.Ctx.Done():
 			return "", errors.New("Exiting findWindows, transfer canceled")
@@ -264,14 +257,6 @@ func findWindows(t *Transfer, ui UI) string {
 	}
 	addr := currentNetwork.String()
 	currentIP := strings.Split(addr, "/")[0]
-=======
-		ui.Output("Looking for address...")
-		time.Sleep(time.Duration(1) * time.Second)
-		currentNetwork, err = getIPAddress(iface)
-	}
-
-	currentIP := strings.Split(currentNetwork.String(), "/")[0]
->>>>>>> 95d18fc70edc7f5f955f96bc12d421c4fcba84fa
 	if strings.Contains(currentIP, "192.168.137") {
 		return "192.168.137.1"
 	}
