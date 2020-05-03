@@ -121,13 +121,13 @@ func getCurrentUUID() (uuid string) {
 }
 
 func getWifiInterface() (iface string) {
-	command := "ifconfig | awk '/^wl/{print $1}'"
+	command := "ifconfig -s | awk '/^wl/{print $1}'"
 	iface = runCommand(command)
 	return
 }
 
 func getIPAddress(t *Transfer) (ip string) {
-	command := "ifconfig wlp2s0 | awk '{print $2}' | grep -oP 'addr:\\K.*'"
+	command := "ifconfig " + getWifiInterface() + " | awk '{print $2}' | grep -oP 'addr:\\K.*'"
 	ip = runCommand(command)
 	return
 }
