@@ -1,8 +1,10 @@
 package core
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"net"
 	"os/exec"
 	"strings"
 	"time"
@@ -52,7 +54,11 @@ func startAdHoc(t *Transfer, ui UI) (err error) {
 	// or just:
 	// nmcli dev wifi hotspot ssid t.SSID band bg channel 11 password t.Password + t.Password
 	// ??
-	commands := []string{"nmcli con add type wifi ifname " + getWifiInterface() + " con-name " + t.SSID + " autoconnect yes ssid " + t.SSID,
+	iface, err := getWifiInterface()
+	if err != nil {
+		return err
+	}
+	commands := []string{"nmcli con add type wifi ifname " + iface.Name + " con-name " + t.SSID + " autoconnect yes ssid " + t.SSID,
 		"nmcli con modify " + t.SSID + " 802-11-wireless.mode ap 802-11-wireless.band bg ipv4.method shared",
 		"nmcli con modify " + t.SSID + " wifi-sec.key-mgmt wpa-psk",
 		"nmcli con modify " + t.SSID + " wifi-sec.psk \"" + t.Password + t.Password + "\"",
@@ -70,7 +76,11 @@ func startAdHoc(t *Transfer, ui UI) (err error) {
 func joinAdHoc(t *Transfer, ui UI) (err error) {
 	ui.Output("Looking for ad-hoc network " + t.SSID)
 	var outBytes []byte
-	commands := []string{"nmcli con add type wifi ifname " + getWifiInterface() + " con-name \"" + t.SSID + "\" autoconnect yes ssid \"" + t.SSID + "\"",
+	iface, err := getWifiInterface()
+	if err != nil {
+		return err
+	}
+	commands := []string{"nmcli con add type wifi ifname " + iface.Name + " con-name \"" + t.SSID + "\" autoconnect yes ssid \"" + t.SSID + "\"",
 		"nmcli con modify \"" + t.SSID + "\" wifi-sec.key-mgmt wpa-psk",
 		"nmcli con modify \"" + t.SSID + "\" wifi-sec.psk \"" + t.Password + t.Password + "\"",
 		"nmcli con up \"" + t.SSID + "\""}
@@ -120,24 +130,65 @@ func getCurrentUUID() (uuid string) {
 	return
 }
 
-func getWifiInterface() (iface string) {
-	command := "ifconfig -s | awk '/^wl/{print $1}'"
-	iface = runCommand(command)
-	return
+func getWifiInterface() (*net.Interface, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	for _, i := range ifaces {
+		if i.Name[:2] == "wl" {
+			return &i, nil
+		}
+	}
+	return nil, errors.New("could not find WiFi interface")
 }
 
-func getIPAddress(t *Transfer) (ip string) {
-	command := "ifconfig " + getWifiInterface() + " | awk '{print $2}' | grep -oP 'addr:\\K.*'"
-	ip = runCommand(command)
-	return
+func getIPAddress(iface *net.Interface) (*net.IPNet, error) {
+	if iface == nil {
+		return nil, errors.New("nil WiFi interface")
+	}
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return nil, errors.New("could not get address for WiFi interface")
+	}
+	var addr *net.IPNet
+	for _, a := range addrs {
+		if ipnet, ok := a.(*net.IPNet); ok {
+			if ip4 := ipnet.IP.To4(); ip4 != nil {
+				addr = &net.IPNet{
+					IP:   ip4,
+					Mask: ipnet.Mask[len(ipnet.Mask)-4:],
+				}
+				break
+			}
+		}
+	}
+	return addr, nil
+}
+
+func getBroadcast(n *net.IPNet) string {
+	num := binary.BigEndian.Uint32([]byte(n.IP))
+	mask := binary.BigEndian.Uint32([]byte(n.Mask))
+	num |= ^mask
+	addr := net.IPv4(byte(num>>24), byte((num>>16)&0xFF), byte((num>>8)&0xFF), byte(num&0xFF))
+	return addr.String()
 }
 
 func findMac(t *Transfer, ui UI) (peerIP string, err error) {
-	currentIP := getIPAddress(t)
-	pingString := "ping -b -c 5 $(ifconfig | awk '/Bcast/ {print substr($3,7)}') 2>&1 | " + // ping broadcast address, include stderr
+	iface, err := getWifiInterface()
+	if err != nil {
+		return "", err
+	}
+	currentNetwork, err := getIPAddress(iface)
+	if err != nil {
+		return "", err
+	}
+	currentIP := strings.Split(currentNetwork.String(), "/")[0] // strip CIDR subnet
+	broadcast := getBroadcast(currentNetwork)
+	pingString := "ping -b -c 5 " + broadcast + " 2>&1 | " + // ping broadcast address, include stderr
 		"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
-		"grep --line-buffered -vE $(ifconfig | awk '/Bcast/ {print substr($3,7)}') | " + // exclude broadcast address
-		"grep -vE '" + currentIP + "'" // exclude current IP
+		"grep --line-buffered -vE " + broadcast + // exclude broadcast address
+		" | grep -vE '" + currentIP + "'" // exclude current IP
 
 	ui.Output("Looking for peer IP.")
 	for peerIP == "" {
@@ -154,7 +205,16 @@ func findMac(t *Transfer, ui UI) (peerIP string, err error) {
 }
 
 func findWindows(t *Transfer) string {
-	currentIP := getIPAddress(t)
+	iface, err := getWifiInterface()
+	if err != nil {
+		return ""
+	}
+	addr, err := getIPAddress(iface)
+	if err != nil {
+		return ""
+	}
+	currentNetwork := addr.String()
+	currentIP := strings.Split(currentNetwork, "/")[0]
 	if strings.Contains(currentIP, "192.168.137") {
 		return "192.168.137.1"
 	}
