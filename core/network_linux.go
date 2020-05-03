@@ -178,16 +178,28 @@ func findMac(t *Transfer, ui UI) (peerIP string, err error) {
 
 	iface, err := getWifiInterface()
 	for err != nil || iface == nil {
-		ui.Output("Looking for interface...")
-		time.Sleep(time.Duration(1) * time.Second)
-		iface, err = getWifiInterface()
+		select {
+		case <-t.Ctx.Done():
+			return "", errors.New("Exiting findMac, transfer canceled")
+		}
+		default:
+			ui.Output("Looking for interface...")
+			time.Sleep(time.Duration(1) * time.Second)
+			iface, err = getWifiInterface()
+		}
 	}
 
 	currentNetwork, err := getIPAddress(iface)
 	for err != nil || currentNetwork == nil {
-		ui.Output("Looking for address...")
-		time.Sleep(time.Duration(1) * time.Second)
-		currentNetwork, err = getIPAddress(iface)
+		select {
+		case <-t.Ctx.Done():
+			return "", errors.New("Exiting findMac, transfer canceled")
+		}
+		default:
+			ui.Output("Looking for address...")
+			time.Sleep(time.Duration(1) * time.Second)
+			currentNetwork, err = getIPAddress(iface)
+		}
 	}
 
 	currentIP := strings.Split(currentNetwork.String(), "/")[0] // strip CIDR subnet
@@ -199,14 +211,19 @@ func findMac(t *Transfer, ui UI) (peerIP string, err error) {
 
 	ui.Output("Looking for peer IP.")
 	for peerIP == "" {
-		pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
-
-		if pingErr != nil {
-			time.Sleep(time.Second * time.Duration(2))
-			continue
+		select {
+		case <-t.Ctx.Done():
+			return "", errors.New("Exiting findMac, transfer canceled")
 		}
-		peerIPs := string(pingBytes)
-		peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
+		default:
+			pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
+			if pingErr != nil {
+				time.Sleep(time.Second * time.Duration(2))
+				continue
+			}
+			peerIPs := string(pingBytes)
+			peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
+		}
 	}
 	ui.Output(fmt.Sprintf("Peer IP found: %s", peerIP))
 	return
@@ -214,15 +231,32 @@ func findMac(t *Transfer, ui UI) (peerIP string, err error) {
 
 func findWindows(t *Transfer) string {
 	iface, err := getWifiInterface()
-	if err != nil {
-		return ""
+	for err != nil || iface == nil {
+		select {
+		case <-t.Ctx.Done():
+			return "", errors.New("Exiting findWindows, transfer canceled")
+		}
+		default:
+			ui.Output("Looking for interface...")
+			time.Sleep(time.Duration(1) * time.Second)
+			iface, err = getWifiInterface()
+		}
 	}
-	addr, err := getIPAddress(iface)
-	if err != nil {
-		return ""
+
+	currentNetwork, err := getIPAddress(iface)
+	for err != nil || currentNetwork == nil {
+		select {
+		case <-t.Ctx.Done():
+			return "", errors.New("Exiting findWindows, transfer canceled")
+		}
+		default:
+			ui.Output("Looking for address...")
+			time.Sleep(time.Duration(1) * time.Second)
+			currentNetwork, err = getIPAddress(iface)
+		}
 	}
-	currentNetwork := addr.String()
-	currentIP := strings.Split(currentNetwork, "/")[0]
+	addr := currentNetwork.String()
+	currentIP := strings.Split(addr, "/")[0]
 	if strings.Contains(currentIP, "192.168.137") {
 		return "192.168.137.1"
 	}
