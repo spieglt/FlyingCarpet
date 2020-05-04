@@ -51,10 +51,10 @@ func (gui *Gui) ToggleStartButton() {
 		gui.CancelButton.Hide()
 		gui.StartButton.Show()
 		enabled = true
+	} else {
+		gui.CancelButton.Show()
+		gui.StartButton.Hide()
 	}
-	gui.CancelButton.Show()
-	gui.StartButton.Hide()
-
 	gui.SendMode.SetEnabled(enabled)
 	gui.ReceiveMode.SetEnabled(enabled)
 	gui.LinuxPeer.SetEnabled(enabled)
