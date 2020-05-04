@@ -116,7 +116,7 @@ func connectToPeer(t *Transfer, ui UI) (err error) {
 		if err = joinAdHoc(t, ui); err != nil {
 			return
 		}
-		go stayOnAdHoc(t, ui)
+		// go stayOnAdHoc(t, ui)
 		if t.Peer == "mac" {
 			t.RecipientIP, err = findMac(t, ui)
 			if err != nil {
@@ -132,7 +132,7 @@ func connectToPeer(t *Transfer, ui UI) (err error) {
 			if err = joinAdHoc(t, ui); err != nil {
 				return
 			}
-			go stayOnAdHoc(t, ui)
+			// go stayOnAdHoc(t, ui)
 		} else if t.Peer == "mac" {
 			if err = startAdHoc(t, ui); err != nil {
 				return
@@ -304,10 +304,10 @@ func stayOnAdHoc(t *Transfer, ui UI) {
 			ui.Output("Stopping ad hoc connection.")
 			return
 		default:
+			time.Sleep(time.Second * 5)
 			if getCurrentWifi(ui) != t.SSID {
 				joinAdHoc(t, ui)
 			}
-			time.Sleep(time.Second * 1)
 		}
 	}
 }
