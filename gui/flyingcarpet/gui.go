@@ -51,7 +51,6 @@ func (gui *Gui) ToggleStartButton() {
 		gui.CancelButton.Hide()
 		gui.StartButton.Show()
 		enabled = true
-		return
 	}
 	gui.CancelButton.Show()
 	gui.StartButton.Hide()
