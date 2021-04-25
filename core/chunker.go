@@ -12,10 +12,8 @@ import (
 	"time"
 )
 
-// CHUNKSIZE is 16KB. From https://pkg.go.dev/golang.org/x/crypto/nacl/secretbox?tab=doc:
-// "Thus large amounts of data should be chunked so that each message is small.
-// (Each message still needs a unique nonce.) If in doubt, 16KB is a reasonable chunk size."
-const CHUNKSIZE = 1 << 14
+// CHUNKSIZE is 1MB
+const CHUNKSIZE = 1000000
 
 // TCPTIMEOUT is 10 seconds
 const TCPTIMEOUT = 10
