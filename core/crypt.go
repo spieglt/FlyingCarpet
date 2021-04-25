@@ -1,37 +1,50 @@
 package core
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
-	"errors"
 	"io"
-
-	"golang.org/x/crypto/nacl/secretbox"
 )
 
-func encrypt(chunk []byte, passphrase []byte) ([]byte, error) {
-	var err error
-	var key [32]byte
-	copy(key[:], passphrase)
-
-	var nonce [24]byte
-	_, err = io.ReadFull(rand.Reader, nonce[:])
+func encrypt(chunk []byte, key []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, err
+		panic(err.Error())
 	}
 
-	return secretbox.Seal(nonce[:], chunk, &nonce, &key), nil
+	nonce := make([]byte, 12)
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		panic(err.Error())
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	ciphertext := aesgcm.Seal(nil, nonce, chunk, nil)
+
+	return append(nonce, ciphertext...), nil
 }
 
-func decrypt(chunk []byte, passphrase []byte) ([]byte, error) {
-	var key [32]byte
-	copy(key[:], passphrase)
+func decrypt(chunk []byte, key []byte) ([]byte, error) {
+	nonce := chunk[:12]
 
-	var decryptNonce [24]byte
-	copy(decryptNonce[:], chunk[:24])
-
-	decrypted, ok := secretbox.Open(nil, chunk[24:], &decryptNonce, &key)
-	if !ok {
-		return []byte{}, errors.New("error decrypting")
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err.Error())
 	}
-	return decrypted, nil
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	plaintext, err := aesgcm.Open(nil, nonce, chunk[12:], nil)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return plaintext, nil
 }
