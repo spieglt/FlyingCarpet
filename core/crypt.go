@@ -1,25 +1,15 @@
 package core
 
 import (
-	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"io"
 )
 
-func encrypt(chunk []byte, key []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		panic(err.Error())
-	}
+func encrypt(chunk []byte, aesgcm cipher.AEAD) ([]byte, error) {
 
 	nonce := make([]byte, 12)
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		panic(err.Error())
-	}
-
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
 		panic(err.Error())
 	}
 
@@ -28,18 +18,8 @@ func encrypt(chunk []byte, key []byte) ([]byte, error) {
 	return append(nonce, ciphertext...), nil
 }
 
-func decrypt(chunk []byte, key []byte) ([]byte, error) {
+func decrypt(chunk []byte, aesgcm cipher.AEAD) ([]byte, error) {
 	nonce := chunk[:12]
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		panic(err.Error())
-	}
 
 	plaintext, err := aesgcm.Open(nil, nonce, chunk[12:], nil)
 	if err != nil {

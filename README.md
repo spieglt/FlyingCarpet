@@ -38,15 +38,13 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + Go through the entire setup guide for [therecipe/qt](https://github.com/therecipe/qt/wiki/Installation) and make sure `qtdeploy` is in your path.
 
-+ Install [go.rice](https://github.com/GeertJohan/go.rice) and make sure `rice` is in your path.
-
 + Run `.\wg_rebuild.ps1` from Powershell (for Windows), `./mg_rebuild` from Terminal (for Mac), or `./lg_rebuild` (for Linux).
 
 # CLI Compilation instructions
 
 + `go get -x github.com/spieglt/flyingcarpet`
 
-+ Windows only: Open `flyingcarpet\WFD_DLL\WFD_DLL.sln` with Visual Studio, and compile in Release mode for x64. Then install [go.rice](https://github.com/GeertJohan/go.rice) and make sure `rice` is in your path.
++ Windows only: Open `flyingcarpet\WFD_DLL\WFD_DLL.sln` with Visual Studio, and compile in Release mode for x64.
 
 + `cd $GOPATH/src/github.com/spieglt/flyingcarpet/cli`
 

@@ -1,6 +1,8 @@
 package core
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/md5"
 	"encoding/binary"
 	"errors"
@@ -81,6 +83,16 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		}
 	}()
 
+	// set up encryption
+	block, err := aes.NewCipher(t.Key)
+	if err != nil {
+		panic(err.Error())
+	}
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		panic(err.Error())
+	}
+
 	// send file
 	buffer := make([]byte, CHUNKSIZE)
 	for {
@@ -102,7 +114,7 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		// try to send, retrying if there's a timeout
 		for retry := 0; retry < NUMRETRIES; retry++ {
 			extendDeadline(conn)
-			err = encryptAndSendChunk(buffer[:bytesRead], t.HashedPassword, conn)
+			err = encryptAndSendChunk(buffer[:bytesRead], aesgcm, conn)
 			if err != nil {
 				switch errType := err.(type) {
 				case net.Error:
@@ -141,9 +153,9 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	return err
 }
 
-func encryptAndSendChunk(chunk []byte, pw []byte, conn net.Conn) (err error) {
+func encryptAndSendChunk(chunk []byte, aesgcm cipher.AEAD, conn net.Conn) (err error) {
 	// encrypt
-	encryptedChunk, err := encrypt(chunk, pw)
+	encryptedChunk, err := encrypt(chunk, aesgcm)
 	if err != nil {
 		return err
 	}
@@ -217,6 +229,17 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		}
 	}()
 
+	// set up decryptor
+	block, err := aes.NewCipher(t.Key)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		panic(err.Error())
+	}
+
 	// open output file
 	outFile, err := os.OpenFile(currentFilePath, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
@@ -234,7 +257,7 @@ outer:
 		// try to receive, retrying if there's a timeout
 		for retry := 0; retry < NUMRETRIES; retry++ {
 			extendDeadline(conn)
-			bytesDecrypted, err := receiveAndDecryptChunk(outFile, t.HashedPassword, conn)
+			bytesDecrypted, err := receiveAndDecryptChunk(outFile, aesgcm, conn)
 			if err != nil {
 				switch errType := err.(type) {
 				case net.Error:
@@ -281,7 +304,7 @@ outer:
 	return err
 }
 
-func receiveAndDecryptChunk(outFile *os.File, pw []byte, conn net.Conn) (bytesDecrypted int, err error) {
+func receiveAndDecryptChunk(outFile *os.File, aesgcm cipher.AEAD, conn net.Conn) (bytesDecrypted int, err error) {
 	// get chunk size
 	var chunkSize int64 = -1
 	err = binary.Read(conn, binary.BigEndian, &chunkSize)
@@ -301,7 +324,7 @@ func receiveAndDecryptChunk(outFile *os.File, pw []byte, conn net.Conn) (bytesDe
 		return 0, fmt.Errorf("bytesReceived: %d\ndetail.Size: %d", bytesReceived, chunkSize)
 	}
 	// decrypt
-	decryptedChunk, err := decrypt(chunk, pw)
+	decryptedChunk, err := decrypt(chunk, aesgcm)
 	if err != nil {
 		return
 	}
