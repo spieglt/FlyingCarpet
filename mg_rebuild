@@ -1,6 +1,6 @@
 #!/bin/bash
 
-qtdeploy build desktop ./gui/flyingcarpet
+~/go/bin/qtdeploy build desktop ./gui/flyingcarpet
 
 rm "./bin/Flying Carpet (Mac).zip"
 rm -rf "./Flying Carpet.app"
