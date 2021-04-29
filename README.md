@@ -8,7 +8,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Screenshots:
 
-<img src="pictures/winDemo.png" width=400> <img src="pictures/macDemo.png" width=400> <img src="pictures/linuxDemo.png" width=400> 
+<img src="pictures/winDemo.png" width=400> <img src="pictures/macDemo.png" width=400> <img src="pictures/linuxDemo.png" width=400>
 
 # Features:
 
@@ -28,6 +28,20 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + Interoperable GUI and CLI versions.
 
+# GUI Use:
+
+**Mac:** unzip `FlyingCarpetMac.zip` to find an `.app` bundle. You'll have to right-click and select `Open` to run because it's not code-signed or distributed through the App Store.
+
+**Linux:**
+```
+unzip FlyingCarpetLinux.zip
+cd Flying.Carpet.Linux
+chmod +x flyingcarpet.sh
+./flyingcarpet.sh
+```
+
+**Windows:** extract `FlyingCarpetWindows.zip`, open the resulting folder, and run `flyingcarpet.exe`. You may have to click `More Info` to get past the Windows SmartScreen filter.
+
 # GUI Compilation instructions:
 
 + `go get -x github.com/spieglt/flyingcarpet`
@@ -36,7 +50,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 + If compiling on Windows, get `mt.exe` (available in Windows SDKs) and make sure it's in your path.
 
-+ Go through the entire setup guide for [therecipe/qt](https://github.com/therecipe/qt/wiki/Installation) and make sure `qtdeploy` is in your path.
++ Go through the entire setup guide for [therecipe/qt](https://github.com/therecipe/qt/wiki/Installation) and make sure `qtdeploy` is in your path. (Use the sections of the installation guide with header `In Module (per project) mode`. Working commands can also be found in `gui/qtSetupCommands.txt` in this repo.)
 
 + Run `.\wg_rebuild.ps1` from Powershell (for Windows), `./mg_rebuild` from Terminal (for Mac), or `./lg_rebuild` (for Linux).
 
