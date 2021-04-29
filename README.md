@@ -58,11 +58,9 @@ chmod +x flyingcarpet.sh
 
 + `go get -x github.com/spieglt/flyingcarpet`
 
-+ Windows only: Open `flyingcarpet\WFD_DLL\WFD_DLL.sln` with Visual Studio, and compile in Release mode for x64.
++ Windows only: Open `flyingcarpet\WFD_DLL\WFD_DLL.sln` with Visual Studio, and compile in Release mode for x64. Then copy `flyingcarpet/WFD_DLL/x64/Release/WFD_DLL.dll` to `flyingcarpet/core/wfd.dll`.
 
 + `cd $GOPATH/src/github.com/spieglt/flyingcarpet/cli`
-
-+ Windows only: `.\embed_dll.ps1` from Powershell
 
 + `go build -o flyingcarpet.exe`
 

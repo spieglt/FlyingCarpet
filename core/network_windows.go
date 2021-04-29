@@ -301,7 +301,7 @@ func runCommand(cmdStr string) (output string) {
 
 func getCurrentUUID() (uuid string) { return "" }
 
-//go:embed WFD_DLL.dll
+//go:embed wfd.dll
 var dllFile []byte
 
 // used if running CLI version as the wifi direct
