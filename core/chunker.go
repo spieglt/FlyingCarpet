@@ -29,11 +29,6 @@ type fileDetail struct {
 	Hash     []byte
 }
 
-// needed?
-type chunkDetail struct {
-	Size int
-}
-
 func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	// setup
 	start := time.Now()
