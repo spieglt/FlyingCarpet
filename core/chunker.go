@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/md5"
+	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -81,11 +82,11 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	// set up encryption
 	block, err := aes.NewCipher(t.Key)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	// send file
@@ -150,10 +151,12 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 
 func encryptAndSendChunk(chunk []byte, aesgcm cipher.AEAD, conn net.Conn) (err error) {
 	// encrypt
-	encryptedChunk, err := encrypt(chunk, aesgcm)
-	if err != nil {
-		return err
+	nonce := make([]byte, 12)
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return
 	}
+	ciphertext := aesgcm.Seal(nil, nonce, chunk, nil)
+	encryptedChunk := append(nonce, ciphertext...)
 	// send size
 	chunkSize := int64(len(encryptedChunk))
 	err = binary.Write(conn, binary.BigEndian, chunkSize)
@@ -227,12 +230,12 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	// set up decryptor
 	block, err := aes.NewCipher(t.Key)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
-		panic(err.Error())
+		return err
 	}
 
 	// open output file
@@ -319,7 +322,8 @@ func receiveAndDecryptChunk(outFile *os.File, aesgcm cipher.AEAD, conn net.Conn)
 		return 0, fmt.Errorf("bytesReceived: %d\ndetail.Size: %d", bytesReceived, chunkSize)
 	}
 	// decrypt
-	decryptedChunk, err := decrypt(chunk, aesgcm)
+	nonce := chunk[:12]
+	decryptedChunk, err := aesgcm.Open(nil, nonce, chunk[12:], nil)
 	if err != nil {
 		return
 	}
