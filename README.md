@@ -40,7 +40,7 @@ chmod +x flyingcarpet.sh
 ./flyingcarpet.sh
 ```
 
-**Windows:** extract `FlyingCarpetWindows.zip`, open the resulting folder, and run `flyingcarpet.exe`. You may have to click `More Info` to get past the Windows SmartScreen filter.
+**Windows:** extract `FlyingCarpetWindows.zip`, open the resulting folder, and run `flyingcarpet.exe`. You may have to click `More Info` to get past the Windows SmartScreen filter. You may also need to disable WiFi Sense.
 
 # GUI Compilation instructions:
 
@@ -66,17 +66,9 @@ chmod +x flyingcarpet.sh
 
 # Restrictions:
 
-+ The Mac version is a standard `.app` bundle, the Linux version is an executable that writes dependencies to a temp location and runs from there, and the Windows version is a `.zip` with an `.exe` and other dependencies inside. I'm working on a better solution for Windows. It was a standalone `.exe` when I was using wxWidgets but this has not been possible since moving to Qt. PRs welcome.
-
-+ 64-bit only. Supported Operating Systems: macOS 10.12+, Windows 7+, and Linux Mint 18. I only have access to so many laptops, so if you've tried on other platforms please let me know whether it worked. 
++ 64-bit only.
 
 + Disables your wireless internet connection while in use (does not apply to Windows when receiving).
-
-+ On Mac: You may have to right-click and select "Open" if your settings don't allow running unsigned applications. 
-
-+ On Windows: Click "More info" and "Run anyway" if you receive a Windows SmartScreen prompt. You may also need to disable WiFi Sense.
-
-+ I need help testing on Linux and supporting non-Debian-based distributions! Currently only confirmed to work on Mint 18, and only on wireless cards/drivers that support ad hoc networking with `nmcli`.
 
 + Flying Carpet should rejoin you to your previous wireless network after a completed or canceled transfer. This will not happen if the program freezes, crashes, or if the windows is closed during operation.
 
@@ -86,10 +78,6 @@ chmod +x flyingcarpet.sh
 
 + Folder upload.
 
-+ Replace `netsh wlan` with Native WiFi API on Windows.
-
 + Mobile versions, integrating functionality from https://github.com/claudiodangelis/qr-filetransfer.
-
-Licenses for third-party tools and libraries used can be found in the "3rd_party_licenses" folder.
 
 If you've used Flying Carpet, please send me feedback! Thank you for your interest!
