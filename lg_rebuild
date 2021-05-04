@@ -1,8 +1,8 @@
 #!/bin/bash
-rm './bin/Flying Carpet (Linux).zip'
+rm './bin/FlyingCarpetLinux.zip'
 qtdeploy build desktop ./gui/flyingcarpet
 mkdir -p bin
 cd ./gui/flyingcarpet/deploy
 mv linux FlyingCarpet
-zip -r '../../../bin/Flying Carpet (Linux).zip' FlyingCarpet
+zip -r '../../../bin/FlyingCarpetLinux.zip' FlyingCarpet
 FlyingCarpet/flyingcarpet

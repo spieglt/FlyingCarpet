@@ -35,9 +35,8 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 **Linux:**
 ```
 unzip FlyingCarpetLinux.zip
-cd Flying.Carpet.Linux
-chmod +x flyingcarpet.sh
-./flyingcarpet.sh
+chmod +x ./FlyingCarpet/flyingcarpet
+./FlyingCarpet/flyingcarpet
 ```
 
 **Windows:** extract `FlyingCarpetWindows.zip`, open the resulting folder, and run `flyingcarpet.exe`. You may have to click `More Info` to get past the Windows SmartScreen filter. You may also need to disable WiFi Sense.
