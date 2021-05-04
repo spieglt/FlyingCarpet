@@ -1,14 +1,8 @@
 #!/bin/bash
-
-rm './bin/Flying Carpet (Linux).zip'
-
+rm './bin/FlyingCarpetLinux.zip'
 qtdeploy build desktop ./gui/flyingcarpet
-cd gui
-rice embed-go
-go build -o 'Flying Carpet.run'
-mv 'Flying Carpet.run' ..
-cd ..
-
-zip './bin/Flying Carpet (Linux).zip' './Flying Carpet.run'
-
-'./Flying Carpet.run'
+mkdir -p bin
+cd ./gui/flyingcarpet/deploy
+mv linux FlyingCarpet
+zip -r '../../../bin/FlyingCarpetLinux.zip' FlyingCarpet
+FlyingCarpet/flyingcarpet

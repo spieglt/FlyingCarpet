@@ -1,8 +1,11 @@
 package core
 
 import (
+	"bytes"
+	_ "embed"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -297,3 +300,35 @@ func runCommand(cmdStr string) (output string) {
 }
 
 func getCurrentUUID() (uuid string) { return "" }
+
+//go:embed wfd.dll
+var dllFile []byte
+
+// used if running CLI version as the wifi direct
+// dll won't have been bundled with the GUI
+func WriteDLL() (string, error) {
+	var err error
+	// find suitable location to write dll and complete filepath
+	tempLoc := os.TempDir()
+	if tempLoc == "" {
+		tempLoc, err = os.Executable()
+		if err != nil {
+			return "", errors.New("error finding suitable location to write dll: " + err.Error())
+		}
+	}
+	tempLoc = tempLoc + string(os.PathSeparator) + "wfd.dll"
+
+	// delete preexisting dll, create new one, and write it
+	os.Remove(tempLoc)
+	outputFile, err := os.Create(tempLoc)
+	if err != nil {
+		return "", errors.New("error creating dll: " + err.Error())
+	}
+	defer outputFile.Close()
+	dllReader := bytes.NewReader(dllFile)
+	_, err = io.Copy(outputFile, dllReader)
+	if err != nil {
+		return "", errors.New("error writing embedded data to output file: " + err.Error())
+	}
+	return tempLoc, err
+}

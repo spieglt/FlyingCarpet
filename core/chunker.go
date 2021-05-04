@@ -1,7 +1,10 @@
 package core
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/md5"
+	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -12,10 +15,8 @@ import (
 	"time"
 )
 
-// CHUNKSIZE is 16KB. From https://pkg.go.dev/golang.org/x/crypto/nacl/secretbox?tab=doc:
-// "Thus large amounts of data should be chunked so that each message is small.
-// (Each message still needs a unique nonce.) If in doubt, 16KB is a reasonable chunk size."
-const CHUNKSIZE = 1 << 14
+// CHUNKSIZE is 1MB
+const CHUNKSIZE = 1000000
 
 // TCPTIMEOUT is 10 seconds
 const TCPTIMEOUT = 10
@@ -27,11 +28,6 @@ type fileDetail struct {
 	FileName string
 	FileSize int
 	Hash     []byte
-}
-
-// needed?
-type chunkDetail struct {
-	Size int
 }
 
 func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
@@ -83,6 +79,16 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		}
 	}()
 
+	// set up encryption
+	block, err := aes.NewCipher(t.Key)
+	if err != nil {
+		return err
+	}
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return err
+	}
+
 	// send file
 	buffer := make([]byte, CHUNKSIZE)
 	for {
@@ -104,7 +110,7 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		// try to send, retrying if there's a timeout
 		for retry := 0; retry < NUMRETRIES; retry++ {
 			extendDeadline(conn)
-			err = encryptAndSendChunk(buffer[:bytesRead], t.HashedPassword, conn)
+			err = encryptAndSendChunk(buffer[:bytesRead], aesgcm, conn)
 			if err != nil {
 				switch errType := err.(type) {
 				case net.Error:
@@ -143,12 +149,14 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	return err
 }
 
-func encryptAndSendChunk(chunk []byte, pw []byte, conn net.Conn) (err error) {
+func encryptAndSendChunk(chunk []byte, aesgcm cipher.AEAD, conn net.Conn) (err error) {
 	// encrypt
-	encryptedChunk, err := encrypt(chunk, pw)
-	if err != nil {
-		return err
+	nonce := make([]byte, 12)
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return
 	}
+	ciphertext := aesgcm.Seal(nil, nonce, chunk, nil)
+	encryptedChunk := append(nonce, ciphertext...)
 	// send size
 	chunkSize := int64(len(encryptedChunk))
 	err = binary.Write(conn, binary.BigEndian, chunkSize)
@@ -219,6 +227,17 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		}
 	}()
 
+	// set up decryptor
+	block, err := aes.NewCipher(t.Key)
+	if err != nil {
+		return err
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return err
+	}
+
 	// open output file
 	outFile, err := os.OpenFile(currentFilePath, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
@@ -236,7 +255,7 @@ outer:
 		// try to receive, retrying if there's a timeout
 		for retry := 0; retry < NUMRETRIES; retry++ {
 			extendDeadline(conn)
-			bytesDecrypted, err := receiveAndDecryptChunk(outFile, t.HashedPassword, conn)
+			bytesDecrypted, err := receiveAndDecryptChunk(outFile, aesgcm, conn)
 			if err != nil {
 				switch errType := err.(type) {
 				case net.Error:
@@ -283,7 +302,7 @@ outer:
 	return err
 }
 
-func receiveAndDecryptChunk(outFile *os.File, pw []byte, conn net.Conn) (bytesDecrypted int, err error) {
+func receiveAndDecryptChunk(outFile *os.File, aesgcm cipher.AEAD, conn net.Conn) (bytesDecrypted int, err error) {
 	// get chunk size
 	var chunkSize int64 = -1
 	err = binary.Read(conn, binary.BigEndian, &chunkSize)
@@ -303,7 +322,8 @@ func receiveAndDecryptChunk(outFile *os.File, pw []byte, conn net.Conn) (bytesDe
 		return 0, fmt.Errorf("bytesReceived: %d\ndetail.Size: %d", bytesReceived, chunkSize)
 	}
 	// decrypt
-	decryptedChunk, err := decrypt(chunk, pw)
+	nonce := chunk[:12]
+	decryptedChunk, err := aesgcm.Open(nil, nonce, chunk[12:], nil)
 	if err != nil {
 		return
 	}

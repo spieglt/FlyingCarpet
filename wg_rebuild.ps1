@@ -7,6 +7,9 @@
 Copy-Item .\icons\Windows\fc.syso .\gui\flyingcarpet\
 Copy-Item .\icons\Windows\fc.syso .\gui\
 
+# copy WiFi Direct DLL to core directory for CLI
+Copy-Item .\WFD_DLL\x64\Release\WFD_DLL.dll .\core\wfd.dll
+
 # build with github.com/therecipe/qt
 qtdeploy.exe build desktop .\gui\flyingcarpet
 
@@ -18,19 +21,9 @@ mt.exe -manifest .\gui\flyingcarpet\flyingcarpet.exe.manifest -outputresource:.\
 # copy WiFi Direct DLL to Qt output directory
 Copy-Item .\WFD_DLL\x64\Release\WFD_DLL.dll .\gui\flyingcarpet\deploy\windows\wfd.dll
 
-# bundle
-# cd gui
-# rice.exe embed-go
-# extra flags prevent console window from showing while wrapper extracts files to temp directory
-# go build -ldflags -H=windowsgui -o "Flying Carpet.exe"
-# mv -Force "Flying Carpet.exe" ..
-# cd ..
-
-
-
 # zip to /bin
-Compress-Archive -Force -Path '.\gui\flyingcarpet\deploy\windows\*' -DestinationPath '.\bin\Flying Carpet (Windows).zip'
+New-Item -ItemType Directory -Force -Path .\bin
+Compress-Archive -Force -Path '.\gui\flyingcarpet\deploy\windows\*' -DestinationPath '.\bin\FlyingCarpetWindows.zip'
 
 # execute
-# cmd /C "./Flying Carpet.exe"
 cmd /C .\gui\flyingcarpet\deploy\windows\flyingcarpet.exe

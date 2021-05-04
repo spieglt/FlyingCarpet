@@ -18,22 +18,22 @@ const HostOS = runtime.GOOS
 
 // Transfer holds all information necessary to send or receive files
 type Transfer struct {
-	FileList       []string
-	ReceiveDir     string
-	Password       string
-	HashedPassword []byte
-	SSID           string
-	RecipientIP    string
-	Peer           string // "mac", "windows", or "linux"
-	Mode           string // "sending" or "receiving"
-	PreviousSSID   string
-	DllLocation    string
-	Port           int
-	AdHocCapable   bool
-	Ctx            context.Context
-	CancelCtx      context.CancelFunc
-	WfdSendChan    chan string
-	WfdRecvChan    chan string
+	FileList     []string
+	ReceiveDir   string
+	Password     string
+	Key          []byte
+	SSID         string
+	RecipientIP  string
+	Peer         string // "mac", "windows", or "linux"
+	Mode         string // "sending" or "receiving"
+	PreviousSSID string
+	DllLocation  string
+	Port         int
+	AdHocCapable bool
+	Ctx          context.Context
+	CancelCtx    context.CancelFunc
+	WfdSendChan  chan string
+	WfdRecvChan  chan string
 }
 
 // UI interface provides methods to accept information
@@ -63,7 +63,7 @@ func StartTransfer(t *Transfer, ui UI) {
 	t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
 	salt := pwBytes[3:11]
-	t.HashedPassword, err = scrypt.Key([]byte(t.Password), salt, 1<<15, 8, 1, 32)
+	t.Key, err = scrypt.Key([]byte(t.Password), salt, 1<<15, 8, 1, 32)
 	if err != nil {
 		ui.Output("Error hashing password")
 		return
@@ -249,9 +249,9 @@ func GeneratePassword() string {
 	return string(pwBytes)
 }
 
-const AboutMessage = `https://github.com/spieglt/flyingcarpet
-Version: 3.0
-Copyright (c) 2020, Theron Spiegl. All rights reserved.
+const AboutMessage = `https://flyingcarpet.spiegl.dev
+Version: 4.0
+Copyright (c) 2021, Theron Spiegl. All rights reserved.
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 
 * Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.

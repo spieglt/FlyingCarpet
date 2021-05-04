@@ -2,7 +2,7 @@ wfd.dll
 bin
 deploy
 static
-rice-box.go
+vendor
 
 .DS_Store
 xcuserdata

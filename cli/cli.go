@@ -138,7 +138,7 @@ func getInput(cli *Cli) *core.Transfer {
 	}
 
 	// make sure DLL is available
-	location, err := writeDLL()
+	location, err := core.WriteDLL()
 	if err != nil {
 		cli.Output("Error writing WiFi Direct dll to temp location: " + err.Error())
 		os.Exit(1)
