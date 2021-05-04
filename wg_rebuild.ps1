@@ -7,6 +7,9 @@
 Copy-Item .\icons\Windows\fc.syso .\gui\flyingcarpet\
 Copy-Item .\icons\Windows\fc.syso .\gui\
 
+# copy WiFi Direct DLL to core directory for CLI
+Copy-Item .\WFD_DLL\x64\Release\WFD_DLL.dll .\core\wfd.dll
+
 # build with github.com/therecipe/qt
 qtdeploy.exe build desktop .\gui\flyingcarpet
 
@@ -19,6 +22,7 @@ mt.exe -manifest .\gui\flyingcarpet\flyingcarpet.exe.manifest -outputresource:.\
 Copy-Item .\WFD_DLL\x64\Release\WFD_DLL.dll .\gui\flyingcarpet\deploy\windows\wfd.dll
 
 # zip to /bin
+New-Item -ItemType Directory -Force -Path .\bin
 Compress-Archive -Force -Path '.\gui\flyingcarpet\deploy\windows\*' -DestinationPath '.\bin\Flying Carpet (Windows).zip'
 
 # execute
