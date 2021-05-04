@@ -23,7 +23,7 @@ Copy-Item .\WFD_DLL\x64\Release\WFD_DLL.dll .\gui\flyingcarpet\deploy\windows\wf
 
 # zip to /bin
 New-Item -ItemType Directory -Force -Path .\bin
-Compress-Archive -Force -Path '.\gui\flyingcarpet\deploy\windows\*' -DestinationPath '.\bin\Flying Carpet (Windows).zip'
+Compress-Archive -Force -Path '.\gui\flyingcarpet\deploy\windows\*' -DestinationPath '.\bin\FlyingCarpetWindows.zip'
 
 # execute
 cmd /C .\gui\flyingcarpet\deploy\windows\flyingcarpet.exe
