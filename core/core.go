@@ -249,7 +249,7 @@ func GeneratePassword() string {
 	return string(pwBytes)
 }
 
-const AboutMessage = `https://github.com/spieglt/flyingcarpet
+const AboutMessage = `https://flyingcarpet.spiegl.dev
 Version: 4.0
 Copyright (c) 2021, Theron Spiegl. All rights reserved.
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
