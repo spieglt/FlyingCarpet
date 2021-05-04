@@ -269,3 +269,6 @@ func runCommand(cmd string) (output string) {
 	}
 	return strings.TrimSpace(string(cmdBytes))
 }
+
+// WriteDLL is a stub for a function only needed on Windows
+func WriteDLL() (string, error) { return "", nil }
