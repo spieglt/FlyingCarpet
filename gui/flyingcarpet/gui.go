@@ -180,6 +180,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	//////////////////////////////
 
 	t := &fcc.Transfer{}
+	
 	// Don't reset selection when clicking radio
 	sendMode.ConnectClicked(func(bool) {
 		sendButton.Show()
