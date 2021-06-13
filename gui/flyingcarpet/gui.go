@@ -206,10 +206,10 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			return
 		}
 		// open dialog
-		temp_fd := widgets.NewQFileDialog2(window, "Select Files", getHomePath(), "")
+		fd_tmp := widgets.NewQFileDialog2(window, "Select Files", getHomePath(), "")
 		//Don't change if they click cancel
-		if !(temp_fd in [nil,""]) {
-			fd:= temp_fd
+		if fd_tmp != nil {
+			fd:= fd_tmp
 		}
 		t.FileList = fd.GetOpenFileNames(window, "Select File(s)", "", "", "", 0)
 		if len(t.FileList) == 1 {
@@ -220,7 +220,10 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	})
 	receiveButton.ConnectClicked(func(bool) {
 		// open dialog
-		fd := widgets.NewQFileDialog2(window, "Select Files", getHomePath(), "")
+		fd_tmp := widgets.NewQFileDialog2(window, "Select Files", getHomePath(), "")
+		if fd_tmp != nil {
+			fd := fd_tmp
+		}
 		t.ReceiveDir = fd.GetExistingDirectory(window, "Select Folder", "", 0)
 		fileBox.SetText(t.ReceiveDir)
 	})
