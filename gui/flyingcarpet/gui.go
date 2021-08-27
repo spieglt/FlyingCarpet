@@ -6,6 +6,7 @@ import (
 
 	fcc "github.com/spieglt/flyingcarpet/core"
 	"github.com/therecipe/qt/core"
+	qgui "github.com/therecipe/qt/gui"
 	"github.com/therecipe/qt/widgets"
 )
 
@@ -19,13 +20,15 @@ type Gui struct {
 	PromptAction *widgets.QAction
 	PromptChan   *chan bool
 
-	SendMode      *widgets.QRadioButton
-	ReceiveMode   *widgets.QRadioButton
-	LinuxPeer     *widgets.QRadioButton
-	MacPeer       *widgets.QRadioButton
-	WindowsPeer   *widgets.QRadioButton
-	SendButton    *widgets.QPushButton
-	ReceiveButton *widgets.QPushButton
+	SendMode       *widgets.QRadioButton
+	ReceiveMode    *widgets.QRadioButton
+	LinuxPeer      *widgets.QRadioButton
+	MacPeer        *widgets.QRadioButton
+	WindowsPeer    *widgets.QRadioButton
+	SendButton     *widgets.QPushButton
+	ReceiveButton  *widgets.QPushButton
+	sendChecked    bool
+	receiveChecked bool
 }
 
 // Output prints messages to outputBox.
@@ -80,11 +83,16 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	widget.SetLayout(widgets.NewQVBoxLayout())
 	window.SetCentralWidget(widget)
 
+	// quit shortcut
+	quitAction := widgets.NewQAction2("&Quit", window.MenuBar())
+	quitAction.ConnectTriggered(func(bool) { window.Close() })
+	quitAction.SetShortcut(qgui.QKeySequence_FromString("Ctrl+Q", 0))
+
 	// about menu
-	fileMenu := window.MenuBar().AddMenu2("&About")
+	fileMenu := window.MenuBar().AddMenu2("&Menu")
 	aboutAction := widgets.NewQAction2("&About", window.MenuBar())
 	aboutAction.ConnectTriggered(func(bool) { aboutBox() })
-	fileMenu.AddActions([]*widgets.QAction{aboutAction})
+	fileMenu.AddActions([]*widgets.QAction{aboutAction, quitAction})
 
 	// radio buttons
 	radioWidget := widgets.NewQWidget(nil, 0)
@@ -95,7 +103,6 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	linuxPeer := widgets.NewQRadioButton2("Linux", nil)
 	macPeer := widgets.NewQRadioButton2("Mac", nil)
 	windowsPeer := widgets.NewQRadioButton2("Windows", nil)
-	// linuxPeer.SetChecked(true)
 	peerLayout.AddWidget(linuxPeer, 0, 0)
 	peerLayout.AddWidget(macPeer, 0, 0)
 	peerLayout.AddWidget(windowsPeer, 0, 0)
@@ -104,7 +111,6 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	modeLayout := widgets.NewQVBoxLayout2(modeWrapper)
 	sendMode := widgets.NewQRadioButton2("Send", nil)
 	receiveMode := widgets.NewQRadioButton2("Receive", nil)
-	// sendMode.SetChecked(true)
 	modeLayout.AddWidget(sendMode, 0, 0)
 	modeLayout.AddWidget(receiveMode, 0, 0)
 
@@ -184,16 +190,24 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	sendMode.ConnectClicked(func(bool) {
 		sendButton.Show()
 		receiveButton.Hide()
-		t.FileList = nil
-		t.ReceiveDir = ""
-		fileBox.SetText("")
+		if !gui.sendChecked {
+			t.FileList = nil
+			t.ReceiveDir = ""
+			fileBox.SetText("")
+		}
+		gui.sendChecked = true
+		gui.receiveChecked = false
 	})
 	receiveMode.ConnectClicked(func(bool) {
 		receiveButton.Show()
 		sendButton.Hide()
-		t.FileList = nil
-		t.ReceiveDir = getHomePath()
-		fileBox.SetText(getHomePath())
+		if !gui.receiveChecked {
+			t.FileList = nil
+			t.ReceiveDir = getHomePath()
+			fileBox.SetText(getHomePath())
+		}
+		gui.sendChecked = false
+		gui.receiveChecked = true
 	})
 
 	sendButton.ConnectClicked(func(bool) {
