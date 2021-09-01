@@ -15,7 +15,7 @@ go mod vendor
 git clone https://github.com/therecipe/env_windows_amd64_513.git vendor/github.com/therecipe/env_windows_amd64_513
 for /f %v in ('go env GOPATH') do %v\bin\qtsetup
 
-linux:
+linux (had to install 5.13.0 through QtCreator maintenance tool):
 export GO111MODULE=on
 go get -v github.com/therecipe/qt
 go install -v -tags=no_env github.com/therecipe/qt/cmd/...
