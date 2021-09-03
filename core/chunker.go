@@ -201,6 +201,13 @@ func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 		return errors.New("Error accessing destination folder: " + err.Error())
 	}
 
+	// make intermediate folders if required
+	folder := t.ReceiveDir + filepath.Dir(fileName)
+	err = os.MkdirAll(folder, 0755)
+	if err != nil {
+		return errors.New("Error making folders: " + err.Error())
+	}
+
 	// now check if file being received already exists. if so, find new filename.
 	var currentFilePath string
 	if _, err := os.Stat(t.ReceiveDir + fileName); err == nil {
@@ -450,19 +457,19 @@ func getHash(filePath string) (md5hash []byte, err error) {
 	return
 }
 
-func ceil(x, y int64) int64 {
-	if x%y != 0 {
-		return ((x / y) + 1)
-	}
-	return x / y
-}
+// func ceil(x, y int64) int64 {
+// 	if x%y != 0 {
+// 		return ((x / y) + 1)
+// 	}
+// 	return x / y
+// }
 
-func min(x, y int64) int64 {
-	if x < y {
-		return x
-	}
-	return y
-}
+// func min(x, y int64) int64 {
+// 	if x < y {
+// 		return x
+// 	}
+// 	return y
+// }
 
 func makeSizeReadable(size int64) string {
 	v := float64(size)
@@ -490,6 +497,14 @@ func chopPaths(paths ...string) ([]string, error) {
 			return nil, err
 		}
 		if len(rel) > 1 && rel[:2] == ".." { // no relative paths
+			continue
+		}
+		// also have to filter out directories so we don't try to send them?
+		relStat, err := os.Stat(rel)
+		if err != nil {
+			return nil, err
+		}
+		if relStat.IsDir() {
 			continue
 		}
 		choppedPaths = append(choppedPaths, rel)

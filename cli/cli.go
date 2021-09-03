@@ -179,10 +179,10 @@ func getPassword() (pw string) {
 
 func printUsage() {
 	fmt.Println("\nTo send files (list files last):")
-	fmt.Println("(Windows) $ .\\flyingcarpet.exe -send -peer mac pic1.jpg pic35.jpg \"filename with spaces.docx\" *.txt")
+	fmt.Println("(Windows) $ .\\flyingcarpet.exe -peer mac -send pic1.jpg pic35.jpg \"filename with spaces.docx\" *.txt")
 	fmt.Println("[Enter password from receiving end.]")
 	fmt.Println("\nTo receive files (specify folder last):")
-	fmt.Println("  (Mac)   $ ./flyingcarpet -receive -peer windows ~/Downloads")
+	fmt.Println("  (Mac)   $ ./flyingcarpet -peer windows -receive ~/Downloads")
 	fmt.Println("[Enter password into sending end.]\n")
 	fmt.Println("Use [ -about ] flag for info and license.\n")
 	return
