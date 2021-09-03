@@ -76,68 +76,6 @@ func (gui *Gui) ShowPwPrompt() bool {
 	return <-*(gui.PromptChan)
 }
 
-func setUpDragAndDrop(widget *widgets.QWidget, gui *Gui, t *fcc.Transfer) {
-	widget.SetAcceptDrops(true)
-	widget.ConnectDropEvent(func(event *qgui.QDropEvent) {
-		md := event.MimeData()
-		if md.HasText() {
-			fmt.Printf("event text: %s\n", md.Text())
-		}
-		if md.HasUrls() {
-			urls := md.Urls()
-			// for _, url := range urls {
-			// 	fmt.Printf("path: %s\n", url.Path(0))
-			// 	fmt.Printf("host: %s\n", url.Host(0))
-			// 	fmt.Printf("full: %s\n", url.ToDisplayString(0))
-			// }
-			switch {
-			case gui.SendMode.IsChecked():
-				fileList := make([]string, 0)
-				for _, url := range urls {
-					p := url.Path(0)
-					file, err := os.Stat(p)
-					if err != nil {
-						gui.OutputBox.Append(fmt.Sprintf("Invalid file selected: %s. Error: %s.", p, err.Error()))
-						return
-					} else if file.IsDir() {
-						gui.OutputBox.Append(fmt.Sprintf("Error: must select files only when sending. Directory: %s.", p))
-						return
-					} else {
-						fileList = append(fileList, p)
-					}
-				}
-				if len(fileList) == 1 {
-					gui.FileBox.SetText(fileList[0])
-				} else if len(fileList) > 1 {
-					gui.FileBox.SetText("(Multiple files selected)")
-				}
-				t.FileList = fileList
-			case gui.ReceiveMode.IsChecked():
-				if len(urls) > 1 {
-					gui.OutputBox.Append("Must select only one folder when receiving.")
-					return
-				}
-				p := urls[0].Path(0)
-				file, err := os.Stat(p)
-				if err != nil {
-					gui.OutputBox.Append(fmt.Sprintf("Invalid folder selected: %s. Error: %s.", p, err.Error()))
-					return
-				} else if !file.IsDir() {
-					gui.OutputBox.Append(fmt.Sprintf("Error: must select folder when receiving: File: %s.", p))
-					return
-				}
-			default:
-				gui.OutputBox.Append("Please select Send or Receive first.")
-			}
-
-		}
-		event.AcceptProposedAction()
-	})
-	widget.ConnectDragEnterEvent(func(e *qgui.QDragEnterEvent) { e.AcceptProposedAction() })
-	widget.ConnectDragMoveEvent(func(e *qgui.QDragMoveEvent) { e.AcceptProposedAction() })
-	widget.ConnectDragLeaveEvent(func(e *qgui.QDragLeaveEvent) { e.Accept() })
-}
-
 func newWindow(gui *Gui) *widgets.QMainWindow {
 	// frame
 	window := widgets.NewQMainWindow(nil, 0)
@@ -419,4 +357,68 @@ func getHomePath() (homePath string) {
 		homePath = os.Getenv("HOME")
 	}
 	return
+}
+
+func setUpDragAndDrop(widget *widgets.QWidget, gui *Gui, t *fcc.Transfer) {
+	widget.SetAcceptDrops(true)
+	widget.ConnectDropEvent(func(event *qgui.QDropEvent) {
+		md := event.MimeData()
+		// if md.HasText() {
+		// 	fmt.Printf("event text: %s\n", md.Text())
+		// }
+		if md.HasUrls() {
+			urls := md.Urls()
+			// for _, url := range urls {
+			// 	fmt.Printf("path: %s\n", url.Path(0))
+			// 	fmt.Printf("host: %s\n", url.Host(0))
+			// 	fmt.Printf("full: %s\n", url.ToDisplayString(0))
+			// }
+			switch {
+			case gui.SendMode.IsChecked():
+				fileList := make([]string, 0)
+				for _, url := range urls {
+					p := url.Path(0)
+					file, err := os.Stat(p)
+					if err != nil {
+						gui.OutputBox.Append(fmt.Sprintf("Invalid file selected: %s. Error: %s.", p, err.Error()))
+						return
+						// } else if file.IsDir() {
+						// 	gui.OutputBox.Append(fmt.Sprintf("Error: must select files only when sending. Directory: %s.", p))
+						// 	return
+					} else {
+						fileList = append(fileList, p)
+					}
+				}
+				if len(fileList) == 1 {
+					gui.FileBox.SetText(fileList[0])
+				} else if len(fileList) > 1 {
+					gui.FileBox.SetText("(Multiple files selected)")
+				}
+				t.FileList = fileList
+			case gui.ReceiveMode.IsChecked():
+				if len(urls) > 1 {
+					gui.OutputBox.Append("Must select only one folder when receiving.")
+					return
+				}
+				p := urls[0].Path(0)
+				file, err := os.Stat(p)
+				if err != nil {
+					gui.OutputBox.Append(fmt.Sprintf("Invalid folder selected: %s. Error: %s.", p, err.Error()))
+					return
+				} else if !file.IsDir() {
+					gui.OutputBox.Append(fmt.Sprintf("Error: must select folder when receiving: File: %s.", p))
+					return
+				}
+				t.ReceiveDir = p
+				gui.FileBox.SetText(p)
+			default:
+				gui.OutputBox.Append("Please select Send or Receive first.")
+			}
+
+		}
+		event.AcceptProposedAction()
+	})
+	widget.ConnectDragEnterEvent(func(e *qgui.QDragEnterEvent) { e.AcceptProposedAction() })
+	widget.ConnectDragMoveEvent(func(e *qgui.QDragMoveEvent) { e.AcceptProposedAction() })
+	widget.ConnectDragLeaveEvent(func(e *qgui.QDragLeaveEvent) { e.Accept() })
 }
