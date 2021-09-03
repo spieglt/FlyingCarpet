@@ -378,7 +378,7 @@ func setUpDragAndDrop(widget *widgets.QWidget, gui *Gui, t *fcc.Transfer) {
 				fileList := make([]string, 0)
 				for _, url := range urls {
 					p := url.Path(0)
-					file, err := os.Stat(p)
+					_, err := os.Stat(p)
 					if err != nil {
 						gui.OutputBox.Append(fmt.Sprintf("Invalid file selected: %s. Error: %s.", p, err.Error()))
 						return
