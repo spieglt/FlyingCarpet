@@ -499,14 +499,6 @@ func chopPaths(paths ...string) ([]string, error) {
 		if len(rel) > 1 && rel[:2] == ".." { // no relative paths
 			continue
 		}
-		// also have to filter out directories so we don't try to send them?
-		relStat, err := os.Stat(rel)
-		if err != nil {
-			return nil, err
-		}
-		if relStat.IsDir() {
-			continue
-		}
 		choppedPaths = append(choppedPaths, rel)
 	}
 	return choppedPaths, nil

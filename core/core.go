@@ -5,8 +5,11 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"io/fs"
 	"math/rand"
 	"net"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"time"
@@ -109,6 +112,10 @@ func StartTransfer(t *Transfer, ui UI) {
 		}
 
 		// send files
+		t.FileList, err = getFiles(t.FileList)
+		if err != nil {
+			ui.Output(fmt.Sprintf("Error building file list: %s", err.Error()))
+		}
 		for i, v := range t.FileList {
 			if len(t.FileList) > 1 {
 				ui.Output("=============================")
@@ -247,6 +254,31 @@ func GeneratePassword() string {
 		pwBytes[i] = chars[rand.Intn(len(chars))]
 	}
 	return string(pwBytes)
+}
+
+// walks folders, returning list of only files
+func getFiles(paths []string) ([]string, error) {
+	allFiles := make([]string, 0)
+	for _, v := range paths {
+		info, err := os.Stat(v)
+		if err != nil {
+			return nil, err
+		}
+		if info.IsDir() {
+			filepath.WalkDir(v, func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if !d.IsDir() {
+					allFiles = append(allFiles, path)
+				}
+				return nil
+			})
+		} else {
+			allFiles = append(allFiles, v)
+		}
+	}
+	return allFiles, nil
 }
 
 const AboutMessage = `https://flyingcarpet.spiegl.dev

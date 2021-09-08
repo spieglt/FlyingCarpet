@@ -395,6 +395,12 @@ func setUpDragAndDrop(widget *widgets.QWidget, gui *Gui, t *fcc.Transfer) {
 					gui.FileBox.SetText("(Multiple files selected)")
 				}
 				t.FileList = fileList
+				// fmt.Printf("%s\n", t.FileList)
+				// newList, err := fcc.GetFiles(t.FileList)
+				// if err != nil {
+				// 	fmt.Println(err)
+				// }
+				// fmt.Printf("%s\n", newList)
 			case gui.ReceiveMode.IsChecked():
 				if len(urls) > 1 {
 					gui.OutputBox.Append("Must select only one folder when receiving.")
@@ -414,7 +420,6 @@ func setUpDragAndDrop(widget *widgets.QWidget, gui *Gui, t *fcc.Transfer) {
 			default:
 				gui.OutputBox.Append("Please select Send or Receive first.")
 			}
-
 		}
 		event.AcceptProposedAction()
 	})
