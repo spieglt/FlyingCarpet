@@ -370,7 +370,13 @@ func adminCheck(gui *Gui) {
 }
 
 func aboutBox() {
-	widgets.QMessageBox_About(nil, "About Flying Carpet", fcc.AboutMessage)
+	// widgets.QMessageBox_About(nil, "About Flying Carpet", fcc.AboutMessage)
+	mb := widgets.NewQMessageBox(nil)
+	mb.SetIcon(widgets.QMessageBox__Information)
+	mb.SetWindowTitle("About Flying Carpet")
+	mb.SetText(fcc.AboutMessage)
+	mb.SetStandardButtons(widgets.QMessageBox__Ok)
+	mb.Exec()
 }
 
 func getHomePath() (homePath string) {

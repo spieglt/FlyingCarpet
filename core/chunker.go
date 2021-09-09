@@ -30,7 +30,7 @@ type fileDetail struct {
 	Hash     []byte
 }
 
-func sendFile(conn net.Conn, t *Transfer, fileNum int, prefix string, ui UI) error {
+func sendFile(conn net.Conn, t *Transfer, fileNum int, relPath string, ui UI) error {
 	// setup
 	start := time.Now()
 
@@ -57,11 +57,6 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, prefix string, ui UI) err
 	extendDeadline(conn)
 
 	// send file details
-	relPath, err := filepath.Rel(prefix, t.FileList[fileNum])
-	if err != nil {
-		return fmt.Errorf("Error getting relative filepath: %s", err.Error())
-	}
-	relPath = filepath.ToSlash(relPath)
 	sendFileDetails(
 		conn,
 		relPath,
