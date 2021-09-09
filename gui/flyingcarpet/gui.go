@@ -88,16 +88,17 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	// folder send toggle
 	folderSendAction := widgets.NewQAction2("&Send Folder", window.MenuBar())
 	folderSendAction.SetCheckable(true)
-
-	// quit shortcut
-	quitAction := widgets.NewQAction2("&Quit", window.MenuBar())
-	quitAction.ConnectTriggered(func(bool) { window.Close() })
-	quitAction.SetShortcut(qgui.QKeySequence_FromString("Ctrl+Q", 0))
+	folderSendAction.SetShortcut(qgui.QKeySequence_FromString("Ctrl+S", 0))
 
 	// about menu
 	fileMenu := window.MenuBar().AddMenu2("&Menu")
 	aboutAction := widgets.NewQAction2("&About", window.MenuBar())
 	aboutAction.ConnectTriggered(func(bool) { aboutBox() })
+
+	// quit shortcut
+	quitAction := widgets.NewQAction2("&Quit", window.MenuBar())
+	quitAction.ConnectTriggered(func(bool) { window.Close() })
+	quitAction.SetShortcut(qgui.QKeySequence_FromString("Ctrl+Q", 0))
 
 	fileMenu.AddActions([]*widgets.QAction{
 		folderSendAction,

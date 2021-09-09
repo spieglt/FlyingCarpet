@@ -105,6 +105,10 @@ func StartTransfer(t *Transfer, ui UI) {
 		}
 		ui.Output("Connected")
 
+		// expand any folders into list of files
+		t.FileList, err = getFiles(t.FileList)
+		prefix := filepath.Dir(t.FileList[0])
+
 		// tell receiving end how many files we're sending
 		if err = sendCount(conn, len(t.FileList)); err != nil {
 			ui.Output("Could not send number of files: " + err.Error())
@@ -112,7 +116,6 @@ func StartTransfer(t *Transfer, ui UI) {
 		}
 
 		// send files
-		t.FileList, err = getFiles(t.FileList)
 		if err != nil {
 			ui.Output(fmt.Sprintf("Error building file list: %s", err.Error()))
 		}
@@ -121,7 +124,7 @@ func StartTransfer(t *Transfer, ui UI) {
 				ui.Output("=============================")
 				ui.Output(fmt.Sprintf("Beginning transfer %d of %d. Filename: %s", i+1, len(t.FileList), v))
 			}
-			if err = sendFile(conn, t, i, ui); err != nil {
+			if err = sendFile(conn, t, i, prefix, ui); err != nil {
 				ui.Output(err.Error())
 				ui.Output("Aborting transfer.")
 				return

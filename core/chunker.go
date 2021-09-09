@@ -30,16 +30,9 @@ type fileDetail struct {
 	Hash     []byte
 }
 
-func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
+func sendFile(conn net.Conn, t *Transfer, fileNum int, prefix string, ui UI) error {
 	// setup
 	start := time.Now()
-
-	// make paths relative
-	var err error
-	t.FileList, err = chopPaths(t.FileList...)
-	if err != nil {
-		return err
-	}
 
 	// open outgoing file
 	file, err := os.Open(t.FileList[fileNum])
@@ -64,11 +57,17 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
 	extendDeadline(conn)
 
 	// send file details
+	relPath, err := filepath.Rel(prefix, t.FileList[fileNum])
+	if err != nil {
+		return fmt.Errorf("Error getting relative filepath: %s", err.Error())
+	}
+	relPath = filepath.ToSlash(relPath)
 	sendFileDetails(
 		conn,
-		t.FileList[fileNum],
+		relPath,
 		fileSize,
-		fmt.Sprintf("%x", hash))
+		fmt.Sprintf("%x", hash),
+	)
 
 	// show progress bar and start updating it
 	ui.ShowProgressBar()
@@ -484,7 +483,6 @@ func makeSizeReadable(size int64) string {
 		return fmt.Sprintf("%.2fGB", v/1000000000)
 	}
 }
-
 func chopPaths(paths ...string) ([]string, error) {
 	choppedPaths := make([]string, 0)
 	if len(paths) < 1 {
