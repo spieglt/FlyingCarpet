@@ -69,11 +69,11 @@ chmod +x ./FlyingCarpet/flyingcarpet
 
 + Disables your wireless internet connection while in use (does not apply to Windows when receiving).
 
++ Drag-and-drop does not work on Windows because Flying Carpet requires administrator privileges on Windows and files cannot be dragged between processes of different privilege level. [See more.](https://social.msdn.microsoft.com/Forums/en-US/2fa935cf-be57-4bcc-9b96-7ee5a6b2b7a5/drag-n-drop-files-in-vista-rc1?forum=windowsuidevelopment)
+
 + Flying Carpet should rejoin you to your previous wireless network after a completed or canceled transfer. This will not happen if the program freezes, crashes, or if the windows is closed during operation.
 
 # Planned features:
-
-+ Drag and drop for sending files.
 
 + Folder upload.
 

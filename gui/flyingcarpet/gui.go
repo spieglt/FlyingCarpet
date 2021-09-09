@@ -225,7 +225,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 		t.FileList = fd.GetOpenFileNames(window, "Select File(s)", "", "", "", 0)
 		if len(t.FileList) == 1 {
 			fileBox.SetText(t.FileList[0])
-		} else {
+		} else if len(t.FileList) > 1 {
 			fileBox.SetText("(Multiple files selected)")
 		}
 	})
