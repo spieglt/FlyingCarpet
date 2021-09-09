@@ -85,6 +85,10 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	widget.SetLayout(widgets.NewQVBoxLayout())
 	window.SetCentralWidget(widget)
 
+	// folder send toggle
+	folderSendAction := widgets.NewQAction2("&Send Folder", window.MenuBar())
+	folderSendAction.SetCheckable(true)
+
 	// quit shortcut
 	quitAction := widgets.NewQAction2("&Quit", window.MenuBar())
 	quitAction.ConnectTriggered(func(bool) { window.Close() })
@@ -94,7 +98,12 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	fileMenu := window.MenuBar().AddMenu2("&Menu")
 	aboutAction := widgets.NewQAction2("&About", window.MenuBar())
 	aboutAction.ConnectTriggered(func(bool) { aboutBox() })
-	fileMenu.AddActions([]*widgets.QAction{aboutAction, quitAction})
+
+	fileMenu.AddActions([]*widgets.QAction{
+		folderSendAction,
+		aboutAction,
+		quitAction,
+	})
 
 	// radio buttons
 	radioWidget := widgets.NewQWidget(nil, 0)
@@ -192,6 +201,14 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 
 	setUpDragAndDrop(widget, gui, t)
 
+	folderSendAction.ConnectToggled(func(checked bool) {
+		if checked {
+			sendButton.SetText("Select folder")
+		} else {
+			sendButton.SetText("Select file(s)")
+		}
+	})
+
 	sendMode.ConnectClicked(func(bool) {
 		sendButton.Show()
 		receiveButton.Hide()
@@ -222,7 +239,12 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 		}
 		// open dialog
 		fd := widgets.NewQFileDialog2(window, "Select Files", getHomePath(), "")
-		t.FileList = fd.GetOpenFileNames(window, "Select File(s)", "", "", "", 0)
+		if !folderSendAction.IsChecked() {
+			t.FileList = fd.GetOpenFileNames(window, "Select File(s)", "", "", "", 0)
+		} else {
+			directory := fd.GetExistingDirectory(window, "Select Folder", "", 0)
+			t.FileList = []string{directory}
+		}
 		if len(t.FileList) == 1 {
 			fileBox.SetText(t.FileList[0])
 		} else if len(t.FileList) > 1 {
@@ -231,7 +253,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	})
 	receiveButton.ConnectClicked(func(bool) {
 		// open dialog
-		fd := widgets.NewQFileDialog2(window, "Select Files", getHomePath(), "")
+		fd := widgets.NewQFileDialog2(window, "Select Folder", getHomePath(), "")
 		t.ReceiveDir = fd.GetExistingDirectory(window, "Select Folder", "", 0)
 		fileBox.SetText(t.ReceiveDir)
 	})
