@@ -306,7 +306,7 @@ func sameDir(paths []string) (sameDir bool) {
 	sameDir = true
 	firstPath := filepath.Dir(paths[0])
 	for _, v := range paths[1:] {
-		if len(v) < len(firstPath) || v[:len(firstPath)] != firstPath {
+		if filepath.Dir(v) != firstPath {
 			sameDir = false
 		}
 	}
