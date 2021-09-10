@@ -105,12 +105,15 @@ func StartTransfer(t *Transfer, ui UI) {
 		}
 		ui.Output("Connected")
 
+		// determine if all files/folders are in the same directory
+		usePrefix := sameDir(t.FileList)
+		prefix := filepath.Dir(t.FileList[0])
+
 		// expand any folders into list of files
 		t.FileList, err = getFiles(t.FileList)
 		if err != nil {
 			ui.Output(fmt.Sprintf("Could not access file: %s", err.Error()))
 		}
-		prefix := filepath.Dir(t.FileList[0])
 
 		// tell receiving end how many files we're sending
 		if err = sendCount(conn, len(t.FileList)); err != nil {
@@ -127,11 +130,16 @@ func StartTransfer(t *Transfer, ui UI) {
 				ui.Output("=============================")
 				ui.Output(fmt.Sprintf("Beginning transfer %d of %d. Filename: %s", i+1, len(t.FileList), v))
 			}
-			relPath, err := filepath.Rel(prefix, t.FileList[i])
-			if err != nil {
-				ui.Output(fmt.Sprintf("Error getting relative filepath: %s", err.Error()))
+			var relPath string
+			if usePrefix {
+				relPath, err = filepath.Rel(prefix, t.FileList[i])
+				if err != nil {
+					ui.Output(fmt.Sprintf("Error getting relative filepath: %s", err.Error()))
+				}
+				relPath = filepath.ToSlash(relPath)
+			} else {
+				relPath = filepath.Base(t.FileList[i])
 			}
-			relPath = filepath.ToSlash(relPath)
 			if err = sendFile(conn, t, i, relPath, ui); err != nil {
 				ui.Output(err.Error())
 				ui.Output("Aborting transfer.")
@@ -290,6 +298,19 @@ func getFiles(paths []string) ([]string, error) {
 		}
 	}
 	return allFiles, nil
+}
+
+func sameDir(paths []string) (sameDir bool) {
+	// if everything is in the same Dir(), include directory info and replicate on other side
+	// if this returns true, use prefix. if not, don't.
+	sameDir = true
+	firstPath := filepath.Dir(paths[0])
+	for _, v := range paths[1:] {
+		if len(v) < len(firstPath) || v[:len(firstPath)] != firstPath {
+			sameDir = false
+		}
+	}
+	return
 }
 
 const AboutMessage = `https://flyingcarpet.spiegl.dev
