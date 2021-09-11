@@ -273,12 +273,13 @@ func GeneratePassword() (string, error) {
 	// no l, I, 0, or O, because they look too similar
 	const chars = "23456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
 	upperBound := big.NewInt(int64(len(chars)))
-	idx, err := rand.Int(rand.Reader, upperBound)
-	if err != nil {
-		return "", err
-	}
+
 	pwBytes := make([]byte, 4)
 	for i := range pwBytes {
+		idx, err := rand.Int(rand.Reader, upperBound)
+		if err != nil {
+			return "", err
+		}
 		pwBytes[i] = chars[idx.Int64()]
 	}
 	return string(pwBytes), nil
