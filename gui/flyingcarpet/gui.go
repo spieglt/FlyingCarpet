@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 
 	fcc "github.com/spieglt/flyingcarpet/core"
 	"github.com/therecipe/qt/core"
@@ -151,6 +152,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	outputBox.SetReadOnly(true)
 	outputBox.SetSizePolicy2(widgets.QSizePolicy__Expanding, widgets.QSizePolicy__Expanding)
 	outputBox.SetText("Welcome to Flying Carpet!")
+	outputBox.Append(instructions())
 
 	// progress bar
 	progressBar := widgets.NewQProgressBar(nil)
@@ -388,16 +390,8 @@ func setUpDragAndDrop(widget *widgets.QWidget, gui *Gui, t *fcc.Transfer) {
 	widget.SetAcceptDrops(true)
 	widget.ConnectDropEvent(func(event *qgui.QDropEvent) {
 		md := event.MimeData()
-		// if md.HasText() {
-		// 	fmt.Printf("event text: %s\n", md.Text())
-		// }
 		if md.HasUrls() {
 			urls := md.Urls()
-			// for _, url := range urls {
-			// 	fmt.Printf("path: %s\n", url.Path(0))
-			// 	fmt.Printf("host: %s\n", url.Host(0))
-			// 	fmt.Printf("full: %s\n", url.ToDisplayString(0))
-			// }
 			switch {
 			case gui.SendMode.IsChecked():
 				fileList := make([]string, 0)
@@ -407,9 +401,6 @@ func setUpDragAndDrop(widget *widgets.QWidget, gui *Gui, t *fcc.Transfer) {
 					if err != nil {
 						gui.OutputBox.Append(fmt.Sprintf("Invalid file selected: %s. Error: %s.", p, err.Error()))
 						return
-						// } else if file.IsDir() {
-						// 	gui.OutputBox.Append(fmt.Sprintf("Error: must select files only when sending. Directory: %s.", p))
-						// 	return
 					} else {
 						fileList = append(fileList, p)
 					}
@@ -449,4 +440,18 @@ func setUpDragAndDrop(widget *widgets.QWidget, gui *Gui, t *fcc.Transfer) {
 	widget.ConnectDragEnterEvent(func(e *qgui.QDragEnterEvent) { e.AcceptProposedAction() })
 	widget.ConnectDragMoveEvent(func(e *qgui.QDragMoveEvent) { e.AcceptProposedAction() })
 	widget.ConnectDragLeaveEvent(func(e *qgui.QDragLeaveEvent) { e.Accept() })
+}
+
+func instructions() (s string) {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+		s += "After selecting Send or Receive mode above, you may drag and drop file(s)/folder(s) to send or the receiving folder onto this window.\n"
+	}
+	var button string
+	if runtime.GOOS == "darwin" {
+		button = "Cmd"
+	} else {
+		button = "Ctrl"
+	}
+	s += fmt.Sprintf("To send a folder rather than files, use the \"Send Folder\" option in the Menu above, or press %s+S.", button)
+	return
 }
