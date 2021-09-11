@@ -3,10 +3,11 @@ package core
 import (
 	"context"
 	"crypto/md5"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io/fs"
-	"math/rand"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
@@ -268,15 +269,19 @@ func dialPeer(t *Transfer, ui UI) (conn net.Conn, err error) {
 }
 
 // GeneratePassword returns a 4 char password to display on the receiving end and enter into the sending end
-func GeneratePassword() string {
+func GeneratePassword() (string, error) {
 	// no l, I, 0, or O, because they look too similar
 	const chars = "23456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
-	rand.Seed(time.Now().UTC().UnixNano())
+	upperBound := big.NewInt(int64(len(chars)))
+	idx, err := rand.Int(rand.Reader, upperBound)
+	if err != nil {
+		return "", err
+	}
 	pwBytes := make([]byte, 4)
 	for i := range pwBytes {
-		pwBytes[i] = chars[rand.Intn(len(chars))]
+		pwBytes[i] = chars[idx.Int64()]
 	}
-	return string(pwBytes)
+	return string(pwBytes), nil
 }
 
 // walks folders, returning list of only files

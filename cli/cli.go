@@ -149,7 +149,10 @@ func getInput(cli *Cli) *core.Transfer {
 	if t.Mode == "sending" {
 		t.Password = getPassword()
 	} else if t.Mode == "receiving" {
-		t.Password = core.GeneratePassword()
+		t.Password, err = core.GeneratePassword()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	return t

@@ -321,7 +321,11 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 				t.ReceiveDir += string(os.PathSeparator)
 			}
 			// show password
-			t.Password = fcc.GeneratePassword()
+			t.Password, err = fcc.GeneratePassword()
+			if err != nil {
+				gui.Output("Error generating password: " + err.Error())
+				return
+			}
 			pwBox := widgets.NewQMessageBox(nil)
 			pwBox.SetText("On sending end, after selecting options, press Start and enter this password:\n\n" + t.Password)
 			pwBox.Show()
