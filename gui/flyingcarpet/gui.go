@@ -250,6 +250,10 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			fileBox.SetText(t.FileList[0])
 		} else if len(t.FileList) > 1 {
 			fileBox.SetText("(Multiple files selected)")
+			gui.Output("Files selected:")
+			for _, file := range t.FileList {
+				gui.Output(file)
+			}
 		}
 	})
 	receiveButton.ConnectClicked(func(bool) {
@@ -303,12 +307,6 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			if !ok || t.Password == "" {
 				gui.Output("Transfer was canceled")
 				return
-			}
-			if len(t.FileList) > 1 {
-				gui.Output("Files selected:")
-				for _, file := range t.FileList {
-					gui.Output(file)
-				}
 			}
 			gui.Output("Entered password: " + t.Password)
 		} else if t.Mode == "receiving" {
@@ -416,14 +414,12 @@ func setUpDragAndDrop(widget *widgets.QWidget, gui *Gui, t *fcc.Transfer) {
 					gui.FileBox.SetText(fileList[0])
 				} else if len(fileList) > 1 {
 					gui.FileBox.SetText("(Multiple files selected)")
+					gui.Output("Files selected:")
+					for _, file := range t.FileList {
+						gui.Output(file)
+					}
 				}
 				t.FileList = fileList
-				// fmt.Printf("%s\n", t.FileList)
-				// newList, err := fcc.GetFiles(t.FileList)
-				// if err != nil {
-				// 	fmt.Println(err)
-				// }
-				// fmt.Printf("%s\n", newList)
 			case gui.ReceiveMode.IsChecked():
 				if len(urls) > 1 {
 					gui.OutputBox.Append("Must select only one folder when receiving.")

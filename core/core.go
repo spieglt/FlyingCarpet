@@ -106,6 +106,10 @@ func StartTransfer(t *Transfer, ui UI) {
 		ui.Output("Connected")
 
 		// determine if all files/folders are in the same directory
+		for i := range t.FileList {
+			// remove any trailing slashes
+			t.FileList[i] = filepath.Clean(t.FileList[i])
+		}
 		usePrefix := sameDir(t.FileList)
 		prefix := filepath.Dir(t.FileList[0])
 
