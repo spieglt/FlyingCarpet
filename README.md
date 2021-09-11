@@ -79,8 +79,6 @@ chmod +x ./FlyingCarpet/flyingcarpet
 
 # Planned features:
 
-+ Folder upload.
-
 + Mobile versions, integrating functionality from https://github.com/claudiodangelis/qr-filetransfer.
 
 If you've used Flying Carpet, please send me feedback! Thank you for your interest!
