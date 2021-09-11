@@ -30,12 +30,12 @@ type fileDetail struct {
 	Hash     []byte
 }
 
-func sendFile(conn net.Conn, t *Transfer, fileNum int, relPath string, ui UI) error {
+func sendFile(conn net.Conn, t *Transfer, expandedList []string, fileNum int, relPath string, ui UI) error {
 	// setup
 	start := time.Now()
 
 	// open outgoing file
-	file, err := os.Open(t.FileList[fileNum])
+	file, err := os.Open(expandedList[fileNum])
 	if err != nil {
 		return errors.New("Error opening output file")
 	}
@@ -46,7 +46,7 @@ func sendFile(conn net.Conn, t *Transfer, fileNum int, relPath string, ui UI) er
 	if err != nil {
 		return errors.New("Could not read file size")
 	}
-	hash, err := getHash(t.FileList[fileNum])
+	hash, err := getHash(expandedList[fileNum])
 	if err != nil {
 		return err
 	}
@@ -175,7 +175,7 @@ func encryptAndSendChunk(chunk []byte, aesgcm cipher.AEAD, conn net.Conn) (err e
 	return
 }
 
-func receiveFile(conn net.Conn, t *Transfer, fileNum int, ui UI) error {
+func receiveFile(conn net.Conn, t *Transfer, ui UI) error {
 	// setup
 	start := time.Now()
 

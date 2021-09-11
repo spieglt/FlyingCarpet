@@ -110,13 +110,13 @@ func StartTransfer(t *Transfer, ui UI) {
 		prefix := filepath.Dir(t.FileList[0])
 
 		// expand any folders into list of files
-		t.FileList, err = getFiles(t.FileList)
+		expandedList, err := getFiles(t.FileList)
 		if err != nil {
 			ui.Output(fmt.Sprintf("Could not access file: %s", err.Error()))
 		}
 
 		// tell receiving end how many files we're sending
-		if err = sendCount(conn, len(t.FileList)); err != nil {
+		if err = sendCount(conn, len(expandedList)); err != nil {
 			ui.Output("Could not send number of files: " + err.Error())
 			return
 		}
@@ -125,22 +125,22 @@ func StartTransfer(t *Transfer, ui UI) {
 		if err != nil {
 			ui.Output(fmt.Sprintf("Error building file list: %s", err.Error()))
 		}
-		for i, v := range t.FileList {
-			if len(t.FileList) > 1 {
+		for i, v := range expandedList {
+			if len(expandedList) > 1 {
 				ui.Output("=============================")
-				ui.Output(fmt.Sprintf("Beginning transfer %d of %d. Filename: %s", i+1, len(t.FileList), v))
+				ui.Output(fmt.Sprintf("Beginning transfer %d of %d. Filename: %s", i+1, len(expandedList), v))
 			}
 			var relPath string
 			if usePrefix {
-				relPath, err = filepath.Rel(prefix, t.FileList[i])
+				relPath, err = filepath.Rel(prefix, expandedList[i])
 				if err != nil {
 					ui.Output(fmt.Sprintf("Error getting relative filepath: %s", err.Error()))
 				}
 				relPath = filepath.ToSlash(relPath)
 			} else {
-				relPath = filepath.Base(t.FileList[i])
+				relPath = filepath.Base(expandedList[i])
 			}
-			if err = sendFile(conn, t, i, relPath, ui); err != nil {
+			if err = sendFile(conn, t, expandedList, i, relPath, ui); err != nil {
 				ui.Output(err.Error())
 				ui.Output("Aborting transfer.")
 				return
@@ -206,7 +206,7 @@ func StartTransfer(t *Transfer, ui UI) {
 				ui.Output("=============================")
 				ui.Output(fmt.Sprintf("Receiving file %d of %d.", i+1, numFiles))
 			}
-			if err = receiveFile(conn, t, i, ui); err != nil {
+			if err = receiveFile(conn, t, ui); err != nil {
 				ui.Output(err.Error())
 				ui.Output("Aborting transfer.")
 				return
