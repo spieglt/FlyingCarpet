@@ -206,13 +206,17 @@ func receiveFile(conn net.Conn, t *Transfer, ui UI) error {
 	var currentFilePath string
 	if _, err := os.Stat(t.ReceiveDir + fileName); err == nil {
 		i := 1
+		// need to split into dir and base, attach number to base, and reassemble
+		totalDir := filepath.Dir(t.ReceiveDir + fileName)
+		base := filepath.Base(t.ReceiveDir + fileName)
 		for err == nil {
-			_, err = os.Stat(t.ReceiveDir + fmt.Sprintf("%d_", i) + fileName)
+			reassembled := totalDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + base
+			_, err = os.Stat(reassembled)
 			if err == nil {
 				i++
 			}
 		}
-		currentFilePath = t.ReceiveDir + fmt.Sprintf("%d_", i) + fileName
+		currentFilePath = totalDir + string(os.PathSeparator) + fmt.Sprintf("%d_", i) + base
 	} else {
 		currentFilePath = t.ReceiveDir + fileName
 	}
