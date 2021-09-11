@@ -482,24 +482,6 @@ func makeSizeReadable(size int64) string {
 		return fmt.Sprintf("%.2fGB", v/1000000000)
 	}
 }
-func chopPaths(paths ...string) ([]string, error) {
-	choppedPaths := make([]string, 0)
-	if len(paths) < 1 {
-		return nil, fmt.Errorf("no paths provided")
-	}
-	toChop := filepath.Dir(paths[0])
-	for _, v := range paths {
-		rel, err := filepath.Rel(toChop, v)
-		if err != nil {
-			return nil, err
-		}
-		if len(rel) > 1 && rel[:2] == ".." { // no relative paths
-			continue
-		}
-		choppedPaths = append(choppedPaths, rel)
-	}
-	return choppedPaths, nil
-}
 
 func extendDeadline(conn net.Conn) {
 	conn.SetDeadline(time.Now().Add(time.Second * TCPTIMEOUT))
