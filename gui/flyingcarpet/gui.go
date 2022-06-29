@@ -116,9 +116,13 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	linuxPeer := widgets.NewQRadioButton2("Linux", nil)
 	macPeer := widgets.NewQRadioButton2("Mac", nil)
 	windowsPeer := widgets.NewQRadioButton2("Windows", nil)
+	iosPeer := widgets.NewQRadioButton2("iOS", nil)
 	peerLayout.AddWidget(linuxPeer, 0, 0)
-	peerLayout.AddWidget(macPeer, 0, 0)
+	if runtime.GOOS != "darwin" {
+		peerLayout.AddWidget(macPeer, 0, 0)
+	}
 	peerLayout.AddWidget(windowsPeer, 0, 0)
+	peerLayout.AddWidget(iosPeer, 0, 0)
 
 	modeWrapper := widgets.NewQGroupBox2("Step 2: Select Mode", nil)
 	modeLayout := widgets.NewQVBoxLayout2(modeWrapper)
@@ -273,6 +277,8 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			t.Peer = "mac"
 		case windowsPeer.IsChecked():
 			t.Peer = "windows"
+		case iosPeer.IsChecked():
+			t.Peer = "ios"
 		default:
 			gui.Output("Error: please select the operating system of the other device.")
 			return

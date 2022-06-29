@@ -117,12 +117,7 @@ func connectToPeer(t *Transfer, ui UI) (err error) {
 			return
 		}
 		// go stayOnAdHoc(t, ui)
-		if t.Peer == "mac" {
-			t.RecipientIP, err = findMac(t, ui)
-			if err != nil {
-				return
-			}
-		} else if t.Peer == "windows" {
+		if t.Peer == "windows" {
 			t.RecipientIP = findWindows(t, ui)
 		} else if t.Peer == "linux" {
 			t.RecipientIP = findLinux(t)
@@ -133,10 +128,6 @@ func connectToPeer(t *Transfer, ui UI) (err error) {
 				return
 			}
 			// go stayOnAdHoc(t, ui)
-		} else if t.Peer == "mac" {
-			if err = startAdHoc(t, ui); err != nil {
-				return
-			}
 		}
 	}
 	return

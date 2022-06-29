@@ -28,7 +28,7 @@ type Transfer struct {
 	Key          []byte
 	SSID         string
 	RecipientIP  string
-	Peer         string // "mac", "windows", or "linux"
+	Peer         string // "mac", "windows", "linux", or "ios"
 	Mode         string // "sending" or "receiving"
 	PreviousSSID string
 	DllLocation  string

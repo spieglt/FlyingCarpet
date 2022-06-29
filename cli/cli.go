@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/spieglt/flyingcarpet/core"
@@ -80,13 +81,25 @@ func getInput(cli *Cli) *core.Transfer {
 	switch peer {
 	case "linux":
 		t.Peer = peer
-	case "mac":
-		t.Peer = peer
 	case "windows":
 		t.Peer = peer
+	case "ios":
+		if runtime.GOOS == "darwin" {
+			printUsage()
+			log.Fatal("Must choose a [ -peer linux|windows ]. For iOS or MacOS, use AirDrop.")
+		} else {
+			t.Peer = peer
+		}
+	case "mac":
+		if runtime.GOOS == "darwin" {
+			printUsage()
+			log.Fatal("Must choose a [ -peer linux|windows ]. For iOS or MacOS, use AirDrop.")
+		} else {
+			t.Peer = peer
+		}
 	default:
 		printUsage()
-		log.Fatal("Must choose a [ -peer linux|mac|windows ].")
+		log.Fatal("Must choose a [ -peer linux|mac|windows|ios ].")
 	}
 
 	// fill out transfer struct

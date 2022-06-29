@@ -12,7 +12,7 @@ import (
 
 func connectToPeer(t *Transfer, ui UI) (err error) {
 	if t.Mode == "sending" {
-		if t.Peer == "mac" {
+		if t.Peer == "mac" || t.Peer == "ios" {
 			if err = startAdHoc(t, ui); err != nil {
 				return
 			}
@@ -36,7 +36,7 @@ func connectToPeer(t *Transfer, ui UI) (err error) {
 			if err = joinAdHoc(t, ui); err != nil {
 				return
 			}
-		} else if t.Peer == "mac" {
+		} else if t.Peer == "mac" || t.Peer == "ios" {
 			if err = startAdHoc(t, ui); err != nil {
 				return
 			}

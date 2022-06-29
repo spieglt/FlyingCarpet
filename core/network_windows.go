@@ -32,7 +32,7 @@ func connectToPeer(t *Transfer, ui UI) (err error) {
 			if err != nil {
 				return
 			}
-		} else if t.Peer == "mac" || t.Peer == "linux" {
+		} else if t.Peer == "mac" || t.Peer == "linux" || t.Peer == "ios" {
 			if err = addFirewallRule(t); err != nil {
 				return
 			}
@@ -240,7 +240,7 @@ func getWifiInterface() string {
 }
 
 func resetWifi(t *Transfer, ui UI) {
-	if t.Mode == "receiving" || t.Peer == "mac" || t.Peer == "linux" {
+	if t.Mode == "receiving" || t.Peer == "mac" || t.Peer == "linux" || t.Peer == "ios" {
 		deleteFirewallRule(ui)
 		stopAdHoc(t, ui)
 	} else { // if Mode == "sending" && t.Peer == "windows"
