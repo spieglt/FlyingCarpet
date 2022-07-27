@@ -268,7 +268,7 @@ func dialPeer(t *Transfer, ui UI) (conn net.Conn, err error) {
 	return nil, fmt.Errorf("Could not dial peer")
 }
 
-// GeneratePassword returns a 4 char password to display on the receiving end and enter into the sending end
+// GeneratePassword returns a 6 char password to display on the receiving end and enter into the sending end
 func GeneratePassword() (string, error) {
 	// no l, I, 0, or O, because they look too similar
 	const chars = "23456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
@@ -324,7 +324,7 @@ func sameDir(paths []string) (sameDir bool) {
 }
 
 const AboutMessage = `https://flyingcarpet.spiegl.dev
-Version: 5.0
+Version: 6.0
 theron@spiegl.dev
 Copyright (c) 2022, Theron Spiegl. All rights reserved.
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:

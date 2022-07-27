@@ -56,7 +56,7 @@ func getInput(cli *Cli) *core.Transfer {
 	var pSend = flag.Bool("send", false, "Use this flag to send files. List files last. Globs accepted. Put filenames with spaces in quotes.")
 	var pReceive = flag.Bool("receive", false, "Use this flag to receive files. Provide the path of a destination folder as the last argument.")
 	var pPort = flag.Int("port", 3290, "TCP port to use (must match on both ends).")
-	var pPeer = flag.String("peer", "", "Use \"-peer linux\", \"-peer mac\", or \"-peer windows\" to match the other computer.")
+	var pPeer = flag.String("peer", "", "Use \"-peer ios\", \"-peer linux\", \"-peer mac\", or \"-peer windows\" to match the other computer.")
 	flag.Parse()
 	about := *pAbout
 	send := *pSend
@@ -166,6 +166,7 @@ func getInput(cli *Cli) *core.Transfer {
 		if err != nil {
 			log.Fatal(err)
 		}
+		// t.Password = "aaaaaa"
 	}
 
 	return t
