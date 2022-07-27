@@ -41,7 +41,7 @@ chmod +x ./FlyingCarpet/flyingcarpet
 
 **Windows:** extract `FlyingCarpetWindows.zip`, open the resulting folder, and run `flyingcarpet.exe`. You may have to click `More Info` to get past the Windows SmartScreen filter. You may also need to disable WiFi Sense.
 
-# GUI Compilation instructions:
+# GUI Compilation Instructions:
 
 + `go get -x github.com/spieglt/flyingcarpet`
 
@@ -53,7 +53,7 @@ chmod +x ./FlyingCarpet/flyingcarpet
 
 + Run `.\wg_rebuild.ps1` from Powershell (for Windows), `./mg_rebuild` from Terminal (for Mac), or `./lg_rebuild` (for Linux).
 
-# CLI Compilation instructions
+# CLI Compilation Instructions
 
 + `go get -x github.com/spieglt/flyingcarpet`
 

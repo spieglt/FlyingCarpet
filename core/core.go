@@ -2,8 +2,8 @@ package core
 
 import (
 	"context"
-	"crypto/md5"
 	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -62,7 +62,7 @@ func StartTransfer(t *Transfer, ui UI) {
 	}()
 
 	// get ssid
-	pwBytes := md5.Sum([]byte(t.Password))
+	pwBytes := sha256.Sum256([]byte(t.Password))
 	prefix := pwBytes[:2]
 	t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
@@ -136,7 +136,7 @@ func StartTransfer(t *Transfer, ui UI) {
 				ui.Output(fmt.Sprintf("Beginning transfer %d of %d. Filename: %s", i+1, len(expandedList), v))
 			}
 			var relPath string
-			if usePrefix {
+			if usePrefix && t.Peer != "ios" && t.Peer != "android" {
 				relPath, err = filepath.Rel(prefix, expandedList[i])
 				if err != nil {
 					ui.Output(fmt.Sprintf("Error getting relative filepath: %s", err.Error()))

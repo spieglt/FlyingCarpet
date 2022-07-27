@@ -49,7 +49,6 @@ func connectToPeer(t *Transfer, ui UI) (err error) {
 }
 
 func startAdHoc(t *Transfer, ui UI) (err error) {
-
 	runCommand("netsh winsock reset")
 	runCommand("netsh wlan stop hostednetwork")
 	ui.Output("SSID: " + t.SSID)
