@@ -27,6 +27,7 @@ type Gui struct {
 	ReceiveMode    *widgets.QRadioButton
 	LinuxPeer      *widgets.QRadioButton
 	MacPeer        *widgets.QRadioButton
+	IOSPeer        *widgets.QRadioButton
 	WindowsPeer    *widgets.QRadioButton
 	SendButton     *widgets.QPushButton
 	ReceiveButton  *widgets.QPushButton
@@ -65,6 +66,7 @@ func (gui *Gui) ToggleStartButton() {
 	gui.ReceiveMode.SetEnabled(enabled)
 	gui.LinuxPeer.SetEnabled(enabled)
 	gui.MacPeer.SetEnabled(enabled)
+	gui.IOSPeer.SetEnabled(enabled)
 	gui.WindowsPeer.SetEnabled(enabled)
 	gui.SendButton.SetEnabled(enabled)
 	gui.ReceiveButton.SetEnabled(enabled)
@@ -195,6 +197,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 		ReceiveMode:   receiveMode,
 		LinuxPeer:     linuxPeer,
 		MacPeer:       macPeer,
+		IOSPeer:       iosPeer,
 		WindowsPeer:   windowsPeer,
 		SendButton:    sendButton,
 		ReceiveButton: receiveButton,

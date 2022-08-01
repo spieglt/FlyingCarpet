@@ -18,6 +18,8 @@ func (t *Transfer) IsListening() {
 
 func connectToPeer(t *Transfer, ui UI) (err error) {
 	if t.Listening { // hosting ad hoc, listening for connection, showing password
+		ui.Output(fmt.Sprintf("Transfer password: %s\nPlease use this password on the other end when prompted to start transfer.\n"+
+			"=============================\n", t.Password))
 		if err = startAdHoc(t, ui); err != nil {
 			return
 		}
