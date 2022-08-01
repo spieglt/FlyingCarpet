@@ -11,9 +11,9 @@ import (
 )
 
 func (t *Transfer) IsListening() {
-	t.Listening = t.Peer == "mac"
-		|| t.Peer == "ios"
-		|| (t.Peer == "linux" && t.Mode == "receiving")
+	t.Listening = t.Peer == "mac" ||
+		t.Peer == "ios" ||
+		(t.Peer == "linux" && t.Mode == "receiving")
 }
 
 func connectToPeer(t *Transfer, ui UI) (err error) {
