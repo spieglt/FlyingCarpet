@@ -307,16 +307,6 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 					return
 				}
 			}
-			// get password
-			ok := false
-			t.Password = widgets.QInputDialog_GetText(nil,
-				"Enter Password", "Please start the transfer on the receiving end and enter the password that is displayed.",
-				widgets.QLineEdit__Normal, "", &ok, core.Qt__Popup, core.Qt__ImhNone)
-			if !ok || t.Password == "" {
-				gui.Output("Transfer was canceled")
-				return
-			}
-			gui.Output("Entered password: " + t.Password)
 		} else if t.Mode == "receiving" {
 			// make sure folder exists. necessary since fileBox is read-only?
 			fpStat, err := os.Stat(t.ReceiveDir)
@@ -328,7 +318,11 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			if t.ReceiveDir[len(t.ReceiveDir)-1] != os.PathSeparator {
 				t.ReceiveDir += string(os.PathSeparator)
 			}
+		}
+		t.IsListening()
+		if t.Listening {
 			// show password
+			var err error
 			t.Password, err = fcc.GeneratePassword()
 			if err != nil {
 				gui.Output("Error generating password: " + err.Error())
@@ -338,6 +332,17 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			pwBox := widgets.NewQMessageBox(nil)
 			pwBox.SetText("On sending end, after selecting options, press Start and enter this password:\n\n" + t.Password)
 			pwBox.Show()
+		} else {
+			// get password
+			ok := false
+			t.Password = widgets.QInputDialog_GetText(nil,
+				"Enter Password", "Please start the transfer on the receiving end and enter the password that is displayed.",
+				widgets.QLineEdit__Normal, "", &ok, core.Qt__Popup, core.Qt__ImhNone)
+			if !ok || t.Password == "" {
+				gui.Output("Transfer was canceled")
+				return
+			}
+			gui.Output("Entered password: " + t.Password)
 		}
 		gui.ToggleStartButton()
 		t.WfdSendChan, t.WfdRecvChan = make(chan string), make(chan string)

@@ -30,6 +30,7 @@ type Transfer struct {
 	RecipientIP  string
 	Peer         string // "mac", "windows", "linux", or "ios"
 	Mode         string // "sending" or "receiving"
+	Listening    bool   // if true, this end is hosting the ad hoc network, the tcp server, and generating the password
 	PreviousSSID string
 	DllLocation  string
 	Port         int
@@ -74,27 +75,49 @@ func StartTransfer(t *Transfer, ui UI) {
 	}
 
 	ui.Output("\nStarting Transfer\n=============================")
-	if t.Mode == "sending" {
-		// to stop searching for ad hoc network (if Mac jumps off)
-		if HostOS == "darwin" {
-			defer func() { t.CancelCtx() }()
-		}
 
-		// not necessary for mac as it reaches for its most preferred network automatically
-		if HostOS == "windows" {
-			t.PreviousSSID = getCurrentWifi(ui)
-		} else if HostOS == "linux" {
-			t.PreviousSSID = getCurrentUUID()
-		}
+	// not necessary for mac as it reaches for its most preferred network automatically
+	if HostOS == "windows" {
+		t.PreviousSSID = getCurrentWifi(ui)
+	} else if HostOS == "linux" {
+		t.PreviousSSID = getCurrentUUID()
+	}
 
-		// make ip connection
-		if err = connectToPeer(t, ui); err != nil {
+	// make ip connection
+	err = connectToPeer(t, ui)
+	if err != nil {
+		ui.Output(err.Error())
+		ui.Output("Aborting transfer.")
+		return
+	}
+
+	var conn net.Conn
+	// make tcp connection
+	if t.Listening {
+		listener, connection, err := listenForPeer(t, ui)
+		conn = connection
+		defer func() {
+			if conn != nil {
+				if err := conn.Close(); err != nil {
+					ui.Output("Error closing TCP connection: " + err.Error())
+				} else {
+					ui.Output("Closed TCP connection")
+				}
+			}
+			if listener != nil {
+				if err := (*listener).Close(); err != nil {
+					ui.Output("Error closing TCP listener: " + err.Error())
+				} else {
+					ui.Output("Closed TCP listener")
+				}
+			}
+		}()
+		if err != nil {
 			ui.Output(err.Error())
 			ui.Output("Aborting transfer.")
 			return
 		}
-
-		// make tcp connection
+	} else {
 		conn, err := dialPeer(t, ui)
 		if conn != nil {
 			defer conn.Close()
@@ -105,6 +128,9 @@ func StartTransfer(t *Transfer, ui UI) {
 			return
 		}
 		ui.Output("Connected")
+	}
+
+	if t.Mode == "sending" {
 
 		// determine if all files/folders are in the same directory
 		for i := range t.FileList {
@@ -155,47 +181,13 @@ func StartTransfer(t *Transfer, ui UI) {
 		ui.Output("Send complete, resetting WiFi and exiting.")
 
 	} else if t.Mode == "receiving" {
+
 		// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
 		// and thus don't need to shut down the goroutine trying to stay on it. does this need to happen when peer is linux? yes.
 		if HostOS == "darwin" && (t.Peer == "windows" || t.Peer == "linux") {
 			defer func() {
 				t.CancelCtx()
 			}()
-		}
-
-		ui.Output(fmt.Sprintf("Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
-			"=============================\n", t.Password))
-
-		// make ip connection
-		if err = connectToPeer(t, ui); err != nil {
-			ui.Output(err.Error())
-			ui.Output("Aborting transfer.")
-			return
-		}
-
-		// make tcp connection
-		listener, conn, err := listenForPeer(t, ui)
-		defer func() {
-			if conn != nil {
-				if err := conn.Close(); err != nil {
-					ui.Output("Error closing TCP connection: " + err.Error())
-				} else {
-					ui.Output("Closed TCP connection")
-				}
-			}
-			if listener != nil {
-				if err := (*listener).Close(); err != nil {
-					ui.Output("Error closing TCP listener: " + err.Error())
-				} else {
-					ui.Output("Closed TCP listener")
-				}
-			}
-		}()
-
-		if err != nil {
-			ui.Output(err.Error())
-			ui.Output("Aborting transfer.")
-			return
 		}
 
 		// find out how many files we're receiving

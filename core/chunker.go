@@ -294,12 +294,12 @@ outer:
 	if err != nil {
 		return errors.New("Could not read file size")
 	}
-	hash, err := getHash(currentFilePath)
-	if err != nil {
-		return err
-	}
+	// hash, err := getHash(currentFilePath)
+	// if err != nil {
+	// 	return err
+	// }
 	ui.Output(fmt.Sprintf("Received file size: %s", makeSizeReadable(outFileSize)))
-	ui.Output(fmt.Sprintf("Received file hash: %x", hash))
+	// ui.Output(fmt.Sprintf("Received file hash: %x", hash))
 	ui.Output(fmt.Sprintf("Receiving took %s", time.Since(start)))
 
 	speed := (float64(outFileSize*8) / 1000000) / (float64(time.Since(start)) / 1000000000)

@@ -10,40 +10,25 @@ import (
 	"time"
 )
 
+func (t *Transfer) IsListening() {
+	t.Listening = t.Peer == "mac"
+		|| t.Peer == "ios"
+		|| (t.Peer == "linux" && t.Mode == "receiving")
+}
+
 func connectToPeer(t *Transfer, ui UI) (err error) {
-	if t.Mode == "sending" {
-		if t.Peer == "mac" || t.Peer == "ios" {
-			if err = startAdHoc(t, ui); err != nil {
-				return
-			}
-			t.RecipientIP, err = findMac(t, ui)
-			if err != nil {
-				return
-			}
-		} else if t.Peer == "windows" {
-			if err = joinAdHoc(t, ui); err != nil {
-				return
-			}
-			t.RecipientIP = findWindows(t, ui)
-		} else if t.Peer == "linux" {
-			if err = joinAdHoc(t, ui); err != nil {
-				return
-			}
-			t.RecipientIP = findLinux(t)
+	if t.Listening { // hosting ad hoc, listening for connection, showing password
+		if err = startAdHoc(t, ui); err != nil {
+			return
 		}
-	} else if t.Mode == "receiving" {
-		if t.Peer == "windows" {
-			if err = joinAdHoc(t, ui); err != nil {
-				return
-			}
-		} else if t.Peer == "mac" || t.Peer == "ios" {
-			if err = startAdHoc(t, ui); err != nil {
-				return
-			}
-		} else if t.Peer == "linux" {
-			if err = startAdHoc(t, ui); err != nil {
-				return
-			}
+	} else {
+		if err = joinAdHoc(t, ui); err != nil {
+			return
+		}
+		if t.Peer == "linux" {
+			t.RecipientIP = findLinux(t)
+		} else if t.Peer == "windows" {
+			t.RecipientIP = findWindows(t, ui)
 		}
 	}
 	return

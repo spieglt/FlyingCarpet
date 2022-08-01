@@ -1,5 +1,12 @@
 package core
 
+// finding peer:
+// when connecting to linux or mac, they'll respond to pings - but we don't use this
+// when connecting to windows, it won't respond to ping, so we grep for what subnet we're in,
+// and grep arp for the address that isn't ours. not bad, better would be to just get the gateway, but that can be done later?
+// getting gateway would allow us to eliminate arp, but not needing admin. but actually, just having hotspot host run receiving end
+// means we can just look at 192.168.(137|173).1
+
 import (
 	"bytes"
 	_ "embed"
@@ -15,63 +22,52 @@ import (
 	"time"
 )
 
+func (t *Transfer) IsListening() {
+	t.Listening = t.Peer != "windows" || t.Mode == "receiving"
+}
+
 func connectToPeer(t *Transfer, ui UI) (err error) {
-	if t.Mode == "receiving" {
+	if t.Listening {
+		ui.Output(fmt.Sprintf("Transfer password: %s\nPlease use this password on the other end when prompted to start transfer.\n"+
+			"=============================\n", t.Password))
 		if err = addFirewallRule(t); err != nil {
 			return
 		}
 		if err = startAdHoc(t, ui); err != nil {
 			return
 		}
-	} else if t.Mode == "sending" {
-		if t.Peer == "windows" {
-			if err = joinAdHoc(t, ui); err != nil {
-				return
-			}
-			t.RecipientIP, err = findPeer(t, ui)
-			if err != nil {
-				return
-			}
-		} else if t.Peer == "mac" || t.Peer == "linux" || t.Peer == "ios" {
-			if err = addFirewallRule(t); err != nil {
-				return
-			}
-			if err = startAdHoc(t, ui); err != nil {
-				return
-			}
-			t.RecipientIP, err = findPeer(t, ui)
-			if err != nil {
-				return
-			}
+		ui.Output("SSID started: " + t.SSID)
+	} else {
+		if err = joinAdHoc(t, ui); err != nil {
+			return
+		}
+		t.RecipientIP, err = findPeer(t, ui)
+		if err != nil {
+			return
 		}
 	}
 	return
 }
 
 func startAdHoc(t *Transfer, ui UI) (err error) {
-	runCommand("netsh winsock reset")
-	runCommand("netsh wlan stop hostednetwork")
-	ui.Output("SSID: " + t.SSID)
-	runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Password + t.Password)
-	cmd := exec.Command("netsh", "wlan", "start", "hostednetwork")
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	_, err = cmd.CombinedOutput()
-	if err == nil {
-		t.AdHocCapable = true
-		return
-		// TODO: replace with "echo %errorlevel%" == "1"
-	} else if err.Error() == "exit status 1" {
-		ui.Output("Could not start hosted network, trying Wi-Fi Direct.")
-		t.AdHocCapable = false
-
-		go startLegacyAP(t, ui)
-		if msg := <-t.WfdRecvChan; msg != "started" {
-			return errors.New("Could not start Wi-Fi Direct: " + msg)
+	t.AdHocCapable = false
+	go startLegacyAP(t, ui)
+	// TODO: test netsh method
+	if msg := <-t.WfdRecvChan; msg != "started" {
+		ui.Output("Could not start Wi-Fi Direct: " + msg)
+		runCommand("netsh winsock reset")
+		runCommand("netsh wlan stop hostednetwork")
+		ui.Output("SSID: " + t.SSID)
+		runCommand("netsh wlan set hostednetwork mode=allow ssid=" + t.SSID + " key=" + t.Password + t.Password)
+		cmd := exec.Command("netsh", "wlan", "start", "hostednetwork")
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		_, err = cmd.CombinedOutput()
+		if err != nil {
+			return errors.New("Could not start hosted network: " + err.Error())
 		}
-		return nil
-	} else {
-		return errors.New("Could not start hosted network: " + err.Error())
+		t.AdHocCapable = true
 	}
+	return
 }
 
 func stopAdHoc(t *Transfer, ui UI) {
@@ -226,10 +222,10 @@ func getCurrentWifi(ui UI) (SSID string) {
 	cmdStr := "$(netsh wlan show interfaces | Select-String -Pattern 'Profile *: (?<profile>.*)').Matches.Groups[1].Value.Trim()"
 	cmd := exec.Command("powershell", "-c", cmdStr)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	cmdBytes, err := cmd.CombinedOutput()
-	if err != nil {
-		ui.Output("Error getting current SSID: " + err.Error())
-	}
+	cmdBytes, _ := cmd.CombinedOutput()
+	// if err != nil {
+	// 	ui.Output("Error getting current SSID: " + err.Error())
+	// }
 	SSID = strings.TrimSpace(string(cmdBytes))
 	return
 }

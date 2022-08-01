@@ -159,14 +159,15 @@ func getInput(cli *Cli) *core.Transfer {
 	t.DllLocation = location
 
 	// deal with password
-	if t.Mode == "sending" {
-		t.Password = getPassword()
-	} else if t.Mode == "receiving" {
+	t.IsListening()
+	if t.Listening {
 		t.Password, err = core.GeneratePassword()
 		if err != nil {
 			log.Fatal(err)
 		}
 		// t.Password = "aaaaaa"
+	} else {
+		t.Password = getPassword()
 	}
 
 	return t
@@ -197,10 +198,10 @@ func getPassword() (pw string) {
 func printUsage() {
 	fmt.Println("\nTo send files (list files last):")
 	fmt.Println("(Windows) $ .\\flyingcarpet.exe -peer mac -send pic1.jpg pic35.jpg \"filename with spaces.docx\" *.txt")
-	fmt.Println("[Enter password from receiving end.]")
+	fmt.Println("[Enter password from other end, or note password to use on other end.]")
 	fmt.Println("\nTo receive files (specify folder last):")
 	fmt.Println("  (Mac)   $ ./flyingcarpet -peer windows -receive ~/Downloads")
-	fmt.Println("[Enter password into sending end.]\n")
+	fmt.Println("[Enter password from other end, or note password to use on other end.]\n")
 	fmt.Println("Use [ -about ] flag for info and license.\n")
 	return
 }
