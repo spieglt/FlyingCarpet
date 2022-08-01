@@ -120,9 +120,9 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	peerLayout.AddWidget(linuxPeer, 0, 0)
 	if runtime.GOOS != "darwin" {
 		peerLayout.AddWidget(macPeer, 0, 0)
+		peerLayout.AddWidget(iosPeer, 0, 0)
 	}
 	peerLayout.AddWidget(windowsPeer, 0, 0)
-	peerLayout.AddWidget(iosPeer, 0, 0)
 
 	modeWrapper := widgets.NewQGroupBox2("Step 2: Select Mode", nil)
 	modeLayout := widgets.NewQVBoxLayout2(modeWrapper)
@@ -336,7 +336,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			// get password
 			ok := false
 			t.Password = widgets.QInputDialog_GetText(nil,
-				"Enter Password", "Please start the transfer on the receiving end and enter the password that is displayed.",
+				"Enter Password", "Please start the transfer on the other end and enter the password that is displayed.",
 				widgets.QLineEdit__Normal, "", &ok, core.Qt__Popup, core.Qt__ImhNone)
 			if !ok || t.Password == "" {
 				gui.Output("Transfer was canceled")

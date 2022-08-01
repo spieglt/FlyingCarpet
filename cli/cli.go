@@ -86,14 +86,14 @@ func getInput(cli *Cli) *core.Transfer {
 	case "ios":
 		if runtime.GOOS == "darwin" {
 			printUsage()
-			log.Fatal("Must choose a [ -peer linux|windows ]. For iOS or MacOS, use AirDrop.")
+			log.Fatal("Must choose a [ -peer linux|windows ]. For iOS or macOS, use AirDrop.")
 		} else {
 			t.Peer = peer
 		}
 	case "mac":
 		if runtime.GOOS == "darwin" {
 			printUsage()
-			log.Fatal("Must choose a [ -peer linux|windows ]. For iOS or MacOS, use AirDrop.")
+			log.Fatal("Must choose a [ -peer linux|windows ]. For iOS or macOS, use AirDrop.")
 		} else {
 			t.Peer = peer
 		}

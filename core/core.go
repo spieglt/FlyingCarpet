@@ -118,7 +118,7 @@ func StartTransfer(t *Transfer, ui UI) {
 			return
 		}
 	} else {
-		conn, err := dialPeer(t, ui)
+		conn, err = dialPeer(t, ui)
 		if conn != nil {
 			defer conn.Close()
 		}

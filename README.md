@@ -12,7 +12,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Features:
 
-+ Cross-platform: Linux, Mac, and Windows.
++ Cross-platform: Linux, iOS, macOS, and Windows.
 
 + Transfer multiple files or entire folders at once, without losing progress if the transfer is interrupted or canceled.
 
@@ -65,18 +65,18 @@ chmod +x ./FlyingCarpet/flyingcarpet
 
 # Restrictions:
 
++ Apple devices can only transfer to/from Windows and Linux as they can no longer programmatically run hotspots. Use AirDrop instead.
+
 + 64-bit only.
 
 + Disables your wireless internet connection while in use (does not apply to Windows when receiving).
 
 + Drag-and-drop does not work on Windows because Flying Carpet requires administrator privileges on Windows and files cannot be dragged between processes of different privilege level. [See more.](https://social.msdn.microsoft.com/Forums/en-US/2fa935cf-be57-4bcc-9b96-7ee5a6b2b7a5/drag-n-drop-files-in-vista-rc1?forum=windowsuidevelopment)
 
-+ Flying Carpet no longer works between two Macs if the receiving end is running Big Sur or newer because Apple [deprecated the necessary ad hoc WiFi functions](https://developer.apple.com/documentation/corewlan/cwinterface/1426417-startibssmode). Use AirDrop instead. Mac-to-Windows and Mac-to-Linux still work as the Linux or Windows side will always host the network.
-
 + Flying Carpet should rejoin you to your previous wireless network after a completed or canceled transfer. This will not happen if the program freezes, crashes, or if the windows is closed during operation.
 
 # Planned features:
 
-+ Mobile versions, integrating functionality from https://github.com/claudiodangelis/qr-filetransfer.
++ Android version.
 
 If you've used Flying Carpet, please send me feedback! Thank you for your interest!
