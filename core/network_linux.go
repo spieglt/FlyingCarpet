@@ -123,7 +123,7 @@ func getWifiInterface() (*net.Interface, error) {
 		return nil, err
 	}
 	for _, i := range ifaces {
-		if i.Name[:2] == "wl" {
+		if (len(i.Name) > 1 && i.Name[:2] == "wl") || (len(i.Name) > 2 && i.Name[:3] == "enx") {
 			return &i, nil
 		}
 	}
