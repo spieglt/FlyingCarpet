@@ -8,7 +8,7 @@ Don't have a flash drive? Don't have access to a wireless network or don't trust
 
 # Screenshots:
 
-<img src="pictures/iosDemo.png" height=726> <img src="pictures/winDemo.png" height=726> <img src="pictures/macDemo.png" height=726> <img src="pictures/linuxDemo.png" height=726>
+<img src="pictures/iosDemo.png" height=600> <img src="pictures/winDemo.png" height=600> <br> <img src="pictures/macDemo.png" height=600> <img src="pictures/linuxDemo.png" height=600>
 
 # Features:
 
