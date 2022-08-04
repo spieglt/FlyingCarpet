@@ -331,9 +331,8 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 				gui.Output("Error generating password: " + err.Error())
 				return
 			}
-			// t.Password = "aaaaaa"
 			pwBox := widgets.NewQMessageBox(nil)
-			pwBox.SetText("On sending end, after selecting options, press Start and enter this password:\n\n" + t.Password)
+			pwBox.SetText("On the other device, after selecting options, press Start and enter this password:\n\n" + t.Password)
 			pwBox.Show()
 		} else {
 			// get password

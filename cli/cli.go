@@ -165,7 +165,6 @@ func getInput(cli *Cli) *core.Transfer {
 		if err != nil {
 			log.Fatal(err)
 		}
-		// t.Password = "aaaaaa"
 	} else {
 		t.Password = getPassword()
 	}
@@ -186,7 +185,7 @@ func adminCheck(cli *Cli) {
 
 func getPassword() (pw string) {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter password from receiving end: ")
+	fmt.Print("Enter password from the other device: ")
 	pw, err := reader.ReadString('\n')
 	if err != nil {
 		fmt.Println("Error getting password:", err)

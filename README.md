@@ -78,7 +78,7 @@ chmod +x ./FlyingCarpet/flyingcarpet
 
 + Flying Carpet should rejoin you to your previous wireless network after a completed or canceled transfer. This may not happen if the program freezes, crashes, or if the windows is closed during operation.
 
-# Planned features:
+# Planned Features:
 
 + Android version, but I have to learn Kotlin and Android development first so it may be a while.
 

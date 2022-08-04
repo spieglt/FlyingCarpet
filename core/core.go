@@ -260,7 +260,7 @@ func dialPeer(t *Transfer, ui UI) (conn net.Conn, err error) {
 	return nil, fmt.Errorf("Could not dial peer")
 }
 
-// GeneratePassword returns a 6 char password to display on the receiving end and enter into the sending end
+// GeneratePassword returns a 6 char password to display on the host and enter into the client
 func GeneratePassword() (string, error) {
 	// no l, I, 0, or O, because they look too similar
 	const chars = "23456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
