@@ -1,8 +1,11 @@
+## Version 6.0 now supports iOS!
+Download [here](https://apps.apple.com/us/app/flying-carpet-file-transfer/id1637377410) or search the App Store for "Flying Carpet File Transfer." I only have so many devices to test with so if you experience bugs please submit an [issue](https://github.com/spieglt/FlyingCarpet/issues) with screenshots or output and let me know what happened.
+
 # Flying Carpet
 
-To download, visit the [releases](https://github.com/spieglt/FlyingCarpet/releases) page!
+To download, visit the [releases](https://github.com/spieglt/FlyingCarpet/releases) page.
 
-Wireless, encrypted file transfer over automatically configured ad hoc networking. No network infrastructure required (access point, router, switch). Just two laptops (Mac, Linux, and Windows supported) with WiFi chips in close range.
+Wireless, encrypted file transfer over automatically configured ad hoc networking. No network infrastructure required (access point, router, switch). Just two computers or phones (iOS, Mac, Linux, and Windows supported) with WiFi chips in close range.
 
 Don't have a flash drive? Don't have access to a wireless network or don't trust one? Need to move a file larger than 2GB between different filesystems but don't want to set up a file share? Try it out!
 
@@ -73,10 +76,12 @@ chmod +x ./FlyingCarpet/flyingcarpet
 
 + Drag-and-drop does not work on Windows because Flying Carpet requires administrator privileges on Windows and files cannot be dragged between processes of different privilege level. [See more.](https://social.msdn.microsoft.com/Forums/en-US/2fa935cf-be57-4bcc-9b96-7ee5a6b2b7a5/drag-n-drop-files-in-vista-rc1?forum=windowsuidevelopment)
 
-+ Flying Carpet should rejoin you to your previous wireless network after a completed or canceled transfer. This will not happen if the program freezes, crashes, or if the windows is closed during operation.
++ Flying Carpet should rejoin you to your previous wireless network after a completed or canceled transfer. This may not happen if the program freezes, crashes, or if the windows is closed during operation.
 
 # Planned features:
 
-+ Android version.
++ Android version, but I have to learn Kotlin and Android development first so it may be a while.
 
-If you've used Flying Carpet, please send me feedback! Thank you for your interest!
++ Use QR codes instead of passwords on mobile?
+
+If you've used Flying Carpet, please send feedback to theron@spiegl.dev. Thanks for your interest!
