@@ -110,34 +110,20 @@ import (
 	"unsafe"
 )
 
-func connectToPeer(t *Transfer, ui UI) (err error) {
+// sending or receiving, we're always going to join the network, which means we're also dialing the network and entering the password
+func (t *Transfer) IsListening() {
+	t.Listening = false
+}
 
-	if t.Mode == "sending" {
-		if err = joinAdHoc(t, ui); err != nil {
-			return
-		}
-		// go stayOnAdHoc(t, ui)
-		if t.Peer == "mac" {
-			t.RecipientIP, err = findMac(t, ui)
-			if err != nil {
-				return
-			}
-		} else if t.Peer == "windows" {
-			t.RecipientIP = findWindows(t, ui)
-		} else if t.Peer == "linux" {
-			t.RecipientIP = findLinux(t)
-		}
-	} else if t.Mode == "receiving" {
-		if t.Peer == "windows" || t.Peer == "linux" {
-			if err = joinAdHoc(t, ui); err != nil {
-				return
-			}
-			// go stayOnAdHoc(t, ui)
-		} else if t.Peer == "mac" {
-			if err = startAdHoc(t, ui); err != nil {
-				return
-			}
-		}
+func connectToPeer(t *Transfer, ui UI) (err error) {
+	if err = joinAdHoc(t, ui); err != nil {
+		return
+	}
+	// go stayOnAdHoc(t, ui)
+	if t.Peer == "windows" {
+		t.RecipientIP = findWindows(t, ui)
+	} else if t.Peer == "linux" {
+		t.RecipientIP = findLinux(t)
 	}
 	return
 }
@@ -213,32 +199,7 @@ func getIPAddress(ui UI) string {
 	return currentIP
 }
 
-func findMac(t *Transfer, ui UI) (peerIP string, err error) {
-	currentIP := getIPAddress(ui)
-	pingString := "ping -c 5 169.254.255.255 | " + // ping broadcast address
-		"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
-		"grep --line-buffered -vE '169.254.255.255' | " + // exclude broadcast address
-		"grep -vE '" + currentIP + "'" // exclude current IP
-
-	ui.Output("Looking for peer IP")
-	for peerIP == "" {
-		select {
-		case <-t.Ctx.Done():
-			return "", errors.New("exiting dialPeer, transfer was canceled")
-		default:
-			pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
-			if pingErr != nil {
-				// ui.Output(fmt.Sprintf("Could not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
-				time.Sleep(time.Second * time.Duration(2))
-				continue
-			}
-			peerIPs := string(pingBytes)
-			peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
-		}
-	}
-	ui.Output(fmt.Sprintf("Peer IP found: %s", peerIP))
-	return
-}
+// TODO: find gateway function
 
 func findWindows(t *Transfer, ui UI) (peerIP string) {
 	currentIP := getIPAddress(ui)
@@ -249,33 +210,6 @@ func findWindows(t *Transfer, ui UI) (peerIP string) {
 }
 
 func findLinux(t *Transfer) (peerIP string) {
-	// timeout := findMacTimeout
-	// currentIP := getIPAddress(t)
-	// pingString := "ping -b -c 5 $(ifconfig | awk '/" + getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') 2>&1 | " + // ping broadcast address
-	// 	"grep --line-buffered -oE '[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}' | " + // get all IPs
-	// 	"grep --line-buffered -vE $(ifconfig | awk '/" + getWifiInterface() + "/ {for(i=1; i<=3; i++) {getline;}; print $6}') | " + // exclude broadcast address
-	// 	"grep -vE '" + currentIP + "'" // exclude current IP
-
-	// ui.Output("Looking for peer IP for " + strconv.Itoa(findMacTimeout) + " seconds.")
-	// for peerIP == "" {
-	// 	if timeout <= 0 {
-	// 		ui.Output("Could not find the peer computer within " + strconv.Itoa(findMacTimeout) + " seconds.")
-	// 		return "", false
-	// 	}
-	// 	pingBytes, pingErr := exec.Command("sh", "-c", pingString).CombinedOutput()
-	// 	if pingErr != nil {
-	// 		ui.Output(fmt.Sprintf("Could not find peer. Waiting %2d more seconds. %s", timeout, pingErr))
-	// 		ui.Output(fmt.Sprintf("peer IP: %s",string(pingBytes)))
-	// 		timeout -= 2
-	// 		time.Sleep(time.Second * time.Duration(2))
-	// 		continue
-	// 	}
-	// 	peerIPs := string(pingBytes)
-	// 	peerIP = peerIPs[:strings.Index(peerIPs, "\n")]
-	// }
-	// ui.Output(fmt.Sprintf("Peer IP found: %s", peerIP))
-	// success = true
-	// return
 	return "10.42.0.1"
 }
 

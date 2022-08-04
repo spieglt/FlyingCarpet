@@ -27,6 +27,7 @@ type Gui struct {
 	ReceiveMode    *widgets.QRadioButton
 	LinuxPeer      *widgets.QRadioButton
 	MacPeer        *widgets.QRadioButton
+	IOSPeer        *widgets.QRadioButton
 	WindowsPeer    *widgets.QRadioButton
 	SendButton     *widgets.QPushButton
 	ReceiveButton  *widgets.QPushButton
@@ -65,6 +66,7 @@ func (gui *Gui) ToggleStartButton() {
 	gui.ReceiveMode.SetEnabled(enabled)
 	gui.LinuxPeer.SetEnabled(enabled)
 	gui.MacPeer.SetEnabled(enabled)
+	gui.IOSPeer.SetEnabled(enabled)
 	gui.WindowsPeer.SetEnabled(enabled)
 	gui.SendButton.SetEnabled(enabled)
 	gui.ReceiveButton.SetEnabled(enabled)
@@ -116,8 +118,12 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 	linuxPeer := widgets.NewQRadioButton2("Linux", nil)
 	macPeer := widgets.NewQRadioButton2("Mac", nil)
 	windowsPeer := widgets.NewQRadioButton2("Windows", nil)
+	iosPeer := widgets.NewQRadioButton2("iOS", nil)
 	peerLayout.AddWidget(linuxPeer, 0, 0)
-	peerLayout.AddWidget(macPeer, 0, 0)
+	if runtime.GOOS != "darwin" {
+		peerLayout.AddWidget(macPeer, 0, 0)
+		peerLayout.AddWidget(iosPeer, 0, 0)
+	}
 	peerLayout.AddWidget(windowsPeer, 0, 0)
 
 	modeWrapper := widgets.NewQGroupBox2("Step 2: Select Mode", nil)
@@ -191,6 +197,7 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 		ReceiveMode:   receiveMode,
 		LinuxPeer:     linuxPeer,
 		MacPeer:       macPeer,
+		IOSPeer:       iosPeer,
 		WindowsPeer:   windowsPeer,
 		SendButton:    sendButton,
 		ReceiveButton: receiveButton,
@@ -273,6 +280,8 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			t.Peer = "mac"
 		case windowsPeer.IsChecked():
 			t.Peer = "windows"
+		case iosPeer.IsChecked():
+			t.Peer = "ios"
 		default:
 			gui.Output("Error: please select the operating system of the other device.")
 			return
@@ -301,16 +310,6 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 					return
 				}
 			}
-			// get password
-			ok := false
-			t.Password = widgets.QInputDialog_GetText(nil,
-				"Enter Password", "Please start the transfer on the receiving end and enter the password that is displayed.",
-				widgets.QLineEdit__Normal, "", &ok, core.Qt__Popup, core.Qt__ImhNone)
-			if !ok || t.Password == "" {
-				gui.Output("Transfer was canceled")
-				return
-			}
-			gui.Output("Entered password: " + t.Password)
 		} else if t.Mode == "receiving" {
 			// make sure folder exists. necessary since fileBox is read-only?
 			fpStat, err := os.Stat(t.ReceiveDir)
@@ -322,15 +321,30 @@ func newWindow(gui *Gui) *widgets.QMainWindow {
 			if t.ReceiveDir[len(t.ReceiveDir)-1] != os.PathSeparator {
 				t.ReceiveDir += string(os.PathSeparator)
 			}
+		}
+		t.IsListening()
+		if t.Listening {
 			// show password
+			var err error
 			t.Password, err = fcc.GeneratePassword()
 			if err != nil {
 				gui.Output("Error generating password: " + err.Error())
 				return
 			}
 			pwBox := widgets.NewQMessageBox(nil)
-			pwBox.SetText("On sending end, after selecting options, press Start and enter this password:\n\n" + t.Password)
+			pwBox.SetText("On the other device, after selecting options, press Start and enter this password:\n\n" + t.Password)
 			pwBox.Show()
+		} else {
+			// get password
+			ok := false
+			t.Password = widgets.QInputDialog_GetText(nil,
+				"Enter Password", "Please start the transfer on the other end and enter the password that is displayed.",
+				widgets.QLineEdit__Normal, "", &ok, core.Qt__Popup, core.Qt__ImhNone)
+			if !ok || t.Password == "" {
+				gui.Output("Transfer was canceled")
+				return
+			}
+			gui.Output("Entered password: " + t.Password)
 		}
 		gui.ToggleStartButton()
 		t.WfdSendChan, t.WfdRecvChan = make(chan string), make(chan string)

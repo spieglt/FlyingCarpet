@@ -2,8 +2,8 @@ package core
 
 import (
 	"context"
-	"crypto/md5"
 	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -28,8 +28,9 @@ type Transfer struct {
 	Key          []byte
 	SSID         string
 	RecipientIP  string
-	Peer         string // "mac", "windows", or "linux"
+	Peer         string // "mac", "windows", "linux", or "ios"
 	Mode         string // "sending" or "receiving"
+	Listening    bool   // if true, this end is hosting the ad hoc network, the tcp server, and generating the password
 	PreviousSSID string
 	DllLocation  string
 	Port         int
@@ -62,7 +63,7 @@ func StartTransfer(t *Transfer, ui UI) {
 	}()
 
 	// get ssid
-	pwBytes := md5.Sum([]byte(t.Password))
+	pwBytes := sha256.Sum256([]byte(t.Password))
 	prefix := pwBytes[:2]
 	t.SSID = fmt.Sprintf("flyingCarpet_%x", prefix)
 
@@ -74,28 +75,50 @@ func StartTransfer(t *Transfer, ui UI) {
 	}
 
 	ui.Output("\nStarting Transfer\n=============================")
-	if t.Mode == "sending" {
-		// to stop searching for ad hoc network (if Mac jumps off)
-		if HostOS == "darwin" {
-			defer func() { t.CancelCtx() }()
-		}
 
-		// not necessary for mac as it reaches for its most preferred network automatically
-		if HostOS == "windows" {
-			t.PreviousSSID = getCurrentWifi(ui)
-		} else if HostOS == "linux" {
-			t.PreviousSSID = getCurrentUUID()
-		}
+	// not necessary for mac as it reaches for its most preferred network automatically
+	if HostOS == "windows" {
+		t.PreviousSSID = getCurrentWifi(ui)
+	} else if HostOS == "linux" {
+		t.PreviousSSID = getCurrentUUID()
+	}
 
-		// make ip connection
-		if err = connectToPeer(t, ui); err != nil {
+	// make ip connection
+	err = connectToPeer(t, ui)
+	if err != nil {
+		ui.Output(err.Error())
+		ui.Output("Aborting transfer.")
+		return
+	}
+
+	var conn net.Conn
+	// make tcp connection
+	if t.Listening {
+		listener, connection, err := listenForPeer(t, ui)
+		conn = connection
+		defer func() {
+			if conn != nil {
+				if err := conn.Close(); err != nil {
+					ui.Output("Error closing TCP connection: " + err.Error())
+				} else {
+					ui.Output("Closed TCP connection")
+				}
+			}
+			if listener != nil {
+				if err := (*listener).Close(); err != nil {
+					ui.Output("Error closing TCP listener: " + err.Error())
+				} else {
+					ui.Output("Closed TCP listener")
+				}
+			}
+		}()
+		if err != nil {
 			ui.Output(err.Error())
 			ui.Output("Aborting transfer.")
 			return
 		}
-
-		// make tcp connection
-		conn, err := dialPeer(t, ui)
+	} else {
+		conn, err = dialPeer(t, ui)
 		if conn != nil {
 			defer conn.Close()
 		}
@@ -105,6 +128,9 @@ func StartTransfer(t *Transfer, ui UI) {
 			return
 		}
 		ui.Output("Connected")
+	}
+
+	if t.Mode == "sending" {
 
 		// determine if all files/folders are in the same directory
 		for i := range t.FileList {
@@ -136,7 +162,7 @@ func StartTransfer(t *Transfer, ui UI) {
 				ui.Output(fmt.Sprintf("Beginning transfer %d of %d. Filename: %s", i+1, len(expandedList), v))
 			}
 			var relPath string
-			if usePrefix {
+			if usePrefix && t.Peer != "ios" && t.Peer != "android" {
 				relPath, err = filepath.Rel(prefix, expandedList[i])
 				if err != nil {
 					ui.Output(fmt.Sprintf("Error getting relative filepath: %s", err.Error()))
@@ -155,47 +181,13 @@ func StartTransfer(t *Transfer, ui UI) {
 		ui.Output("Send complete, resetting WiFi and exiting.")
 
 	} else if t.Mode == "receiving" {
+
 		// why the && here? because if we're on darwin and receiving from darwin, we'll be hosting the adhoc and thus haven't joined it,
 		// and thus don't need to shut down the goroutine trying to stay on it. does this need to happen when peer is linux? yes.
 		if HostOS == "darwin" && (t.Peer == "windows" || t.Peer == "linux") {
 			defer func() {
 				t.CancelCtx()
 			}()
-		}
-
-		ui.Output(fmt.Sprintf("Transfer password: %s\nPlease use this password on sending end when prompted to start transfer.\n"+
-			"=============================\n", t.Password))
-
-		// make ip connection
-		if err = connectToPeer(t, ui); err != nil {
-			ui.Output(err.Error())
-			ui.Output("Aborting transfer.")
-			return
-		}
-
-		// make tcp connection
-		listener, conn, err := listenForPeer(t, ui)
-		defer func() {
-			if conn != nil {
-				if err := conn.Close(); err != nil {
-					ui.Output("Error closing TCP connection: " + err.Error())
-				} else {
-					ui.Output("Closed TCP connection")
-				}
-			}
-			if listener != nil {
-				if err := (*listener).Close(); err != nil {
-					ui.Output("Error closing TCP listener: " + err.Error())
-				} else {
-					ui.Output("Closed TCP listener")
-				}
-			}
-		}()
-
-		if err != nil {
-			ui.Output(err.Error())
-			ui.Output("Aborting transfer.")
-			return
 		}
 
 		// find out how many files we're receiving
@@ -268,7 +260,7 @@ func dialPeer(t *Transfer, ui UI) (conn net.Conn, err error) {
 	return nil, fmt.Errorf("Could not dial peer")
 }
 
-// GeneratePassword returns a 4 char password to display on the receiving end and enter into the sending end
+// GeneratePassword returns a 6 char password to display on the host and enter into the client
 func GeneratePassword() (string, error) {
 	// no l, I, 0, or O, because they look too similar
 	const chars = "23456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
@@ -324,7 +316,7 @@ func sameDir(paths []string) (sameDir bool) {
 }
 
 const AboutMessage = `https://flyingcarpet.spiegl.dev
-Version: 5.0
+Version: 6.0
 theron@spiegl.dev
 Copyright (c) 2022, Theron Spiegl. All rights reserved.
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:

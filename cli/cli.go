@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/spieglt/flyingcarpet/core"
@@ -55,7 +56,7 @@ func getInput(cli *Cli) *core.Transfer {
 	var pSend = flag.Bool("send", false, "Use this flag to send files. List files last. Globs accepted. Put filenames with spaces in quotes.")
 	var pReceive = flag.Bool("receive", false, "Use this flag to receive files. Provide the path of a destination folder as the last argument.")
 	var pPort = flag.Int("port", 3290, "TCP port to use (must match on both ends).")
-	var pPeer = flag.String("peer", "", "Use \"-peer linux\", \"-peer mac\", or \"-peer windows\" to match the other computer.")
+	var pPeer = flag.String("peer", "", "Use \"-peer ios\", \"-peer linux\", \"-peer mac\", or \"-peer windows\" to match the other computer.")
 	flag.Parse()
 	about := *pAbout
 	send := *pSend
@@ -80,13 +81,25 @@ func getInput(cli *Cli) *core.Transfer {
 	switch peer {
 	case "linux":
 		t.Peer = peer
-	case "mac":
-		t.Peer = peer
 	case "windows":
 		t.Peer = peer
+	case "ios":
+		if runtime.GOOS == "darwin" {
+			printUsage()
+			log.Fatal("Must choose a [ -peer linux|windows ]. For iOS or macOS, use AirDrop.")
+		} else {
+			t.Peer = peer
+		}
+	case "mac":
+		if runtime.GOOS == "darwin" {
+			printUsage()
+			log.Fatal("Must choose a [ -peer linux|windows ]. For iOS or macOS, use AirDrop.")
+		} else {
+			t.Peer = peer
+		}
 	default:
 		printUsage()
-		log.Fatal("Must choose a [ -peer linux|mac|windows ].")
+		log.Fatal("Must choose a [ -peer linux|mac|windows|ios ].")
 	}
 
 	// fill out transfer struct
@@ -146,13 +159,14 @@ func getInput(cli *Cli) *core.Transfer {
 	t.DllLocation = location
 
 	// deal with password
-	if t.Mode == "sending" {
-		t.Password = getPassword()
-	} else if t.Mode == "receiving" {
+	t.IsListening()
+	if t.Listening {
 		t.Password, err = core.GeneratePassword()
 		if err != nil {
 			log.Fatal(err)
 		}
+	} else {
+		t.Password = getPassword()
 	}
 
 	return t
@@ -171,7 +185,7 @@ func adminCheck(cli *Cli) {
 
 func getPassword() (pw string) {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter password from receiving end: ")
+	fmt.Print("Enter password from the other device: ")
 	pw, err := reader.ReadString('\n')
 	if err != nil {
 		fmt.Println("Error getting password:", err)
@@ -183,10 +197,10 @@ func getPassword() (pw string) {
 func printUsage() {
 	fmt.Println("\nTo send files (list files last):")
 	fmt.Println("(Windows) $ .\\flyingcarpet.exe -peer mac -send pic1.jpg pic35.jpg \"filename with spaces.docx\" *.txt")
-	fmt.Println("[Enter password from receiving end.]")
+	fmt.Println("[Enter password from other end, or note password to use on other end.]")
 	fmt.Println("\nTo receive files (specify folder last):")
 	fmt.Println("  (Mac)   $ ./flyingcarpet -peer windows -receive ~/Downloads")
-	fmt.Println("[Enter password into sending end.]\n")
+	fmt.Println("[Enter password from other end, or note password to use on other end.]\n")
 	fmt.Println("Use [ -about ] flag for info and license.\n")
 	return
 }

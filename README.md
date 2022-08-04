@@ -1,18 +1,21 @@
+## Version 6.0 now supports iOS!
+Download [here](https://apps.apple.com/us/app/flying-carpet-file-transfer/id1637377410) or search the App Store for "Flying Carpet File Transfer." I only have so many devices to test with so if you experience bugs please submit an [issue](https://github.com/spieglt/FlyingCarpet/issues) with screenshots or output and let me know what happened.
+
 # Flying Carpet
 
-To download, visit the [releases](https://github.com/spieglt/FlyingCarpet/releases) page!
+To download, visit the [releases](https://github.com/spieglt/FlyingCarpet/releases) page.
 
-Wireless, encrypted file transfer over automatically configured ad hoc networking. No network infrastructure required (access point, router, switch). Just two laptops (Mac, Linux, and Windows supported) with WiFi chips in close range.
+Wireless, encrypted file transfer over automatically configured ad hoc networking. No network infrastructure required (access point, router, switch). Just two computers or phones (iOS, Mac, Linux, and Windows supported) with WiFi chips in close range.
 
 Don't have a flash drive? Don't have access to a wireless network or don't trust one? Need to move a file larger than 2GB between different filesystems but don't want to set up a file share? Try it out!
 
 # Screenshots:
 
-<img src="pictures/winDemo.png" width=400> <img src="pictures/macDemo.png" width=400> <img src="pictures/linuxDemo.png" width=400>
+<img src="pictures/iosDemo.png" height=600> <img src="pictures/winDemo.png" height=600> <br> <img src="pictures/macDemo.png" height=600> <img src="pictures/linuxDemo.png" height=600>
 
 # Features:
 
-+ Cross-platform: Linux, Mac, and Windows.
++ Cross-platform: Linux, iOS, macOS, and Windows.
 
 + Transfer multiple files or entire folders at once, without losing progress if the transfer is interrupted or canceled.
 
@@ -41,7 +44,7 @@ chmod +x ./FlyingCarpet/flyingcarpet
 
 **Windows:** extract `FlyingCarpetWindows.zip`, open the resulting folder, and run `flyingcarpet.exe`. You may have to click `More Info` to get past the Windows SmartScreen filter. You may also need to disable WiFi Sense.
 
-# GUI Compilation instructions:
+# GUI Compilation Instructions:
 
 + `go get -x github.com/spieglt/flyingcarpet`
 
@@ -53,7 +56,7 @@ chmod +x ./FlyingCarpet/flyingcarpet
 
 + Run `.\wg_rebuild.ps1` from Powershell (for Windows), `./mg_rebuild` from Terminal (for Mac), or `./lg_rebuild` (for Linux).
 
-# CLI Compilation instructions
+# CLI Compilation Instructions
 
 + `go get -x github.com/spieglt/flyingcarpet`
 
@@ -65,18 +68,20 @@ chmod +x ./FlyingCarpet/flyingcarpet
 
 # Restrictions:
 
++ Apple devices can only transfer to/from Windows and Linux as they can no longer programmatically run hotspots. Use AirDrop instead.
+
 + 64-bit only.
 
 + Disables your wireless internet connection while in use (does not apply to Windows when receiving).
 
 + Drag-and-drop does not work on Windows because Flying Carpet requires administrator privileges on Windows and files cannot be dragged between processes of different privilege level. [See more.](https://social.msdn.microsoft.com/Forums/en-US/2fa935cf-be57-4bcc-9b96-7ee5a6b2b7a5/drag-n-drop-files-in-vista-rc1?forum=windowsuidevelopment)
 
-+ Flying Carpet no longer works between two Macs if the receiving end is running Big Sur or newer because Apple [deprecated the necessary ad hoc WiFi functions](https://developer.apple.com/documentation/corewlan/cwinterface/1426417-startibssmode). Use AirDrop instead. Mac-to-Windows and Mac-to-Linux still work as the Linux or Windows side will always host the network.
++ Flying Carpet should rejoin you to your previous wireless network after a completed or canceled transfer. This may not happen if the program freezes, crashes, or if the windows is closed during operation.
 
-+ Flying Carpet should rejoin you to your previous wireless network after a completed or canceled transfer. This will not happen if the program freezes, crashes, or if the windows is closed during operation.
+# Planned Features:
 
-# Planned features:
++ Android version, but I have to learn Kotlin and Android development first so it may be a while.
 
-+ Mobile versions, integrating functionality from https://github.com/claudiodangelis/qr-filetransfer.
++ Use QR codes instead of passwords on mobile?
 
-If you've used Flying Carpet, please send me feedback! Thank you for your interest!
+If you've used Flying Carpet, please send feedback to theron@spiegl.dev. Thanks for your interest!

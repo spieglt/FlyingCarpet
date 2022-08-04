@@ -3,8 +3,8 @@ package core
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/md5"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -46,11 +46,7 @@ func sendFile(conn net.Conn, t *Transfer, expandedList []string, fileNum int, re
 	if err != nil {
 		return errors.New("Could not read file size")
 	}
-	hash, err := getHash(expandedList[fileNum])
-	if err != nil {
-		return err
-	}
-	ui.Output(fmt.Sprintf("File size: %s\nMD5 hash: %x", makeSizeReadable(fileSize), hash))
+	ui.Output(fmt.Sprintf("File size: %s", makeSizeReadable(fileSize)))
 	bytesLeft := fileSize
 
 	// set deadline for write
@@ -61,7 +57,6 @@ func sendFile(conn net.Conn, t *Transfer, expandedList []string, fileNum int, re
 		conn,
 		relPath,
 		fileSize,
-		fmt.Sprintf("%x", hash),
 	)
 
 	// show progress bar and start updating it
@@ -89,6 +84,8 @@ func sendFile(conn net.Conn, t *Transfer, expandedList []string, fileNum int, re
 	if err != nil {
 		return err
 	}
+
+	// TODO: set up hasher
 
 	// send file
 	buffer := make([]byte, CHUNKSIZE)
@@ -183,7 +180,7 @@ func receiveFile(conn net.Conn, t *Transfer, ui UI) error {
 	extendDeadline(conn)
 
 	// get file details
-	fileName, fileSize, fileHash, err := receiveFileDetails(conn)
+	fileName, fileSize, err := receiveFileDetails(conn)
 	if err != nil {
 		return err
 	}
@@ -297,16 +294,12 @@ outer:
 	if err != nil {
 		return errors.New("Could not read file size")
 	}
-	hash, err := getHash(currentFilePath)
-	if err != nil {
-		return err
-	}
-	if fmt.Sprintf("%x", hash) != fileHash {
-		return fmt.Errorf("Mismatched file hashes!\nHash sent at start of transfer: %x\nHash of received file: %x\nOutput size: %d",
-			fileHash, hash, outFileSize)
-	}
+	// hash, err := getHash(currentFilePath)
+	// if err != nil {
+	// 	return err
+	// }
 	ui.Output(fmt.Sprintf("Received file size: %s", makeSizeReadable(outFileSize)))
-	ui.Output(fmt.Sprintf("Received file hash: %x", hash))
+	// ui.Output(fmt.Sprintf("Received file hash: %x", hash))
 	ui.Output(fmt.Sprintf("Receiving took %s", time.Since(start)))
 
 	speed := (float64(outFileSize*8) / 1000000) / (float64(time.Since(start)) / 1000000000)
@@ -349,7 +342,7 @@ func receiveAndDecryptChunk(outFile *os.File, aesgcm cipher.AEAD, conn net.Conn)
 	return
 }
 
-func sendFileDetails(conn net.Conn, name string, size int64, hash string) (err error) {
+func sendFileDetails(conn net.Conn, name string, size int64) (err error) {
 	// send size of filename
 	filenameLen := int64(len(name))
 	err = binary.Write(conn, binary.BigEndian, filenameLen)
@@ -366,52 +359,28 @@ func sendFileDetails(conn net.Conn, name string, size int64, hash string) (err e
 	if err != nil {
 		return fmt.Errorf("Error sending file size: %s", err)
 	}
-	// send size of file hash
-	hashSize := int64(len(hash))
-	err = binary.Write(conn, binary.BigEndian, hashSize)
-	if err != nil {
-		return fmt.Errorf("Error sending size of file hash: %s", err)
-	}
-	// send file hash
-	_, err = conn.Write([]byte(hash))
-	if err != nil {
-		return fmt.Errorf("Error sending file hash: %s", err)
-	}
 	return
 }
 
-func receiveFileDetails(conn net.Conn) (name string, size int64, hash string, err error) {
+func receiveFileDetails(conn net.Conn) (name string, size int64, err error) {
 	// receive size of filename
 	var filenameLen int64
 	err = binary.Read(conn, binary.BigEndian, &filenameLen)
 	if err != nil {
-		return "", 0, "", fmt.Errorf("Error receiving filename length: %s", err)
+		return "", 0, fmt.Errorf("Error receiving filename length: %s", err)
 	}
 	// receive filename
 	filenameBytes := make([]byte, filenameLen)
 	_, err = io.ReadFull(conn, filenameBytes)
 	if err != nil {
-		return "", 0, "", fmt.Errorf("Error receiving filename: %s", err)
+		return "", 0, fmt.Errorf("Error receiving filename: %s", err)
 	}
 	name = string(filenameBytes)
 	// receive file size
 	err = binary.Read(conn, binary.BigEndian, &size)
 	if err != nil {
-		return "", 0, "", fmt.Errorf("Error receiving file size: %s", err)
+		return "", 0, fmt.Errorf("Error receiving file size: %s", err)
 	}
-	// receive size of file hash
-	var hashSize int64
-	err = binary.Read(conn, binary.BigEndian, &hashSize)
-	if err != nil {
-		return "", 0, "", fmt.Errorf("Error receiving size of file hash: %s", err)
-	}
-	// receive file hash
-	hashBytes := make([]byte, hashSize)
-	_, err = io.ReadFull(conn, hashBytes)
-	if err != nil {
-		return "", 0, "", fmt.Errorf("Error receiving file hash: %s", err)
-	}
-	hash = string(hashBytes)
 	return
 }
 
@@ -442,16 +411,16 @@ func getSize(file *os.File) (size int64, err error) {
 	return
 }
 
-func getHash(filePath string) (md5hash []byte, err error) {
+func getHash(filePath string) (sha256Hash []byte, err error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
 	}
-	hash := md5.New()
+	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {
 		return nil, err
 	}
-	md5hash = hash.Sum(nil)
+	sha256Hash = hash.Sum(nil)
 	return
 }
 
