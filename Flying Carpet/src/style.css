@@ -1,0 +1,18 @@
+body {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+#outputBox {
+  border: solid;
+}
+
+.verticalContainer {
+  display: flex;
+  flex-direction: column;
+}
+
+.horizontalContainer {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}

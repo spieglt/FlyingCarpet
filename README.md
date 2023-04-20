@@ -1,87 +1,69 @@
-## Version 6.0 now supports iOS!
-Download [here](https://apps.apple.com/us/app/flying-carpet-file-transfer/id1637377410) or search the App Store for "Flying Carpet File Transfer." I only have so many devices to test with so if you experience bugs please submit an [issue](https://github.com/spieglt/FlyingCarpet/issues) with screenshots or output and let me know what happened.
+## Version 7.0 supports Android and iOS!
+
+New Android version and updated iOS versions 7.0 are pending app store approvals.
+
+~~Android download [here](TODO) or search the Google Play Store for "Flying Carpet File Transfer".~~
+
+~~iOS download [here](https://apps.apple.com/us/app/flying-carpet-file-transfer/id1637377410) or search the App Store for "Flying Carpet File Transfer".~~
+
+Linux, macOS, and Windows versions available on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page. Installers and standalone executable versions available.
 
 # Flying Carpet
 
-To download, visit the [releases](https://github.com/spieglt/FlyingCarpet/releases) page.
+Send and receive files between Android, iOS, Linux, macOS, and Windows over ad hoc WiFi. No shared network or cell connection required, just two devices with WiFi chips in close range.
 
-Wireless, encrypted file transfer over automatically configured ad hoc networking. No network infrastructure required (access point, router, switch). Just two computers or phones (iOS, Mac, Linux, and Windows supported) with WiFi chips in close range.
+Don't have a flash drive? Don't have access to a wireless network? Need to move a file larger than 2GB between different filesystems but don't want to set up a network share? Try it out!
 
-Don't have a flash drive? Don't have access to a wireless network or don't trust one? Need to move a file larger than 2GB between different filesystems but don't want to set up a file share? Try it out!
+## Screenshots:
 
-# Screenshots:
+<img src="screenshots/android.png" height=500> <img src="screenshots/ios.png" height=500> <img src="screenshots/linux.png" height=500> <br> <img src="screenshots/mac.png" height=500> <img src="screenshots/windows.png" height=500>
 
-<img src="pictures/iosDemo.png" height=600> <img src="pictures/winDemo.png" height=600> <br> <img src="pictures/macDemo.png" height=600> <img src="pictures/linuxDemo.png" height=600>
+## Use:
 
-# Features:
+**Linux:** Download the `.AppImage` file from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page for a standalone version, or if you're on a Debian-based distribution, download the `.deb` file and install it with `apk` or `dpkg`.
 
-+ Cross-platform: Linux, iOS, macOS, and Windows.
+**macOS:** Download the `.dmg` disk image file from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page. Double-click to mount it and drag the `.app` bundle inside to your Applications folder.
 
-+ Transfer multiple files or entire folders at once, without losing progress if the transfer is interrupted or canceled.
+**Windows:** Download the `.msi` installer from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page, or `FlyingCarpet.exe` for a standalone version.
 
-+ Drag and drop onto the window to select (except on Windows).
+## Compilation Instructions:
 
-+ Does not use Bluetooth or your local network, just WiFi chip to WiFi chip.
++ Install [Rust](https://www.rust-lang.org/tools/install).
 
-+ Files encrypted in transit.
++ Run `cargo install tauri-cli` to install Tauri.
 
-+ Large files supported (<10MB RAM usage while transferring a 4.5GB file).
++ Mac only: Install XCode. Open `FlyingCarpetMac/FlyingCarpetMac/FlyingCarpetMac.xcodeproj` and build it.
 
-+ No installation required and no dependencies needed.
++ Run `cargo tauri dev` to run a development version or `cargo tauri build` to create release artifacts.
 
-+ Interoperable GUI and CLI versions.
+## Restrictions:
 
-# GUI Use:
++ Apple devices can only transfer to/from Android, Linux, and Windows as they can no longer programmatically run hotspots. Use AirDrop instead for Apple-to-Apple transfers.
 
-**Mac:** unzip `FlyingCarpetMac.zip` to find an `.app` bundle. You'll have to right-click and select `Open` to run because it's not code-signed or distributed through the App Store.
++ Google's official QR code scanner is currently broken on some devices, which prevents affected Android devices from sending to Android, and from sending and receiving to Linux and Windows. [More information.](https://issuetracker.google.com/issues/261579118) Use Android's built-in Nearby Share as an alternative for Android-to-Android. The proper fix may be to use a different QR code scanning library, but that will make Flying Carpet require camera permissions, which I'd rather avoid if possible. Still researching this one.
 
-**Linux:**
-```
-unzip FlyingCarpetLinux.zip
-chmod +x ./FlyingCarpet/flyingcarpet
-./FlyingCarpet/flyingcarpet
-```
++ Disables your wireless internet connection while in use. (Does not apply to Windows or Android when hosting the hotspot.)
 
-**Windows:** extract `FlyingCarpetWindows.zip`, open the resulting folder, and run `flyingcarpet.exe`. You may have to click `More Info` to get past the Windows SmartScreen filter. You may also need to disable WiFi Sense.
-
-# GUI Compilation Instructions:
-
-+ `go get -x github.com/spieglt/flyingcarpet`
-
-+ Windows only: Open `flyingcarpet\WFD_DLL\WFD_DLL.sln` with Visual Studio, and compile in Release mode for x64.
-
-+ If compiling on Windows, get `mt.exe` (available in Windows SDKs) and make sure it's in your path.
-
-+ Go through the entire setup guide for [therecipe/qt](https://github.com/therecipe/qt/wiki/Installation) and make sure `qtdeploy` is in your path. (Use the sections of the installation guide with header `In Module (per project) mode`. Working commands can also be found in `gui/qtSetupCommands.txt` in this repo.)
-
-+ Run `.\wg_rebuild.ps1` from Powershell (for Windows), `./mg_rebuild` from Terminal (for Mac), or `./lg_rebuild` (for Linux).
-
-# CLI Compilation Instructions
-
-+ `go get -x github.com/spieglt/flyingcarpet`
-
-+ Windows only: Open `flyingcarpet\WFD_DLL\WFD_DLL.sln` with Visual Studio, and compile in Release mode for x64. Then copy `flyingcarpet/WFD_DLL/x64/Release/WFD_DLL.dll` to `flyingcarpet/core/wfd.dll`.
-
-+ `cd $GOPATH/src/github.com/spieglt/flyingcarpet/cli`
-
-+ `go build -o flyingcarpet.exe`
-
-# Restrictions:
-
-+ Apple devices can only transfer to/from Windows and Linux as they can no longer programmatically run hotspots. Use AirDrop instead.
-
-+ 64-bit only.
-
-+ Disables your wireless internet connection while in use (does not apply to Windows when receiving).
-
-+ Drag-and-drop does not work on Windows because Flying Carpet requires administrator privileges on Windows and files cannot be dragged between processes of different privilege level. [See more.](https://social.msdn.microsoft.com/Forums/en-US/2fa935cf-be57-4bcc-9b96-7ee5a6b2b7a5/drag-n-drop-files-in-vista-rc1?forum=windowsuidevelopment)
++ macOS sometimes switches back to a wireless network with internet connectivity during particularly long transfers. I haven't been able to replicate this reliably and am not sure if a fix is possible. Please file an issue if you experience this.
 
 + Flying Carpet should rejoin you to your previous wireless network after a completed or canceled transfer. This may not happen if the program freezes, crashes, or if the windows is closed during operation.
 
-# Planned Features:
++ Flying Carpet no longer preserves directory structure when sending a folder. This became too complicated once the mobile versions entered the picture. If this feature is desired, please email me at theron@spiegl.dev or file an issue. Or, as a workaround, just zip the directory before sending and unzip on the other device.
 
-+ Android version, but I have to learn Kotlin and Android development first so it may be a while.
+## Planned Features
 
-+ Use QR codes instead of passwords on mobile?
++ Add Flying Carpet shortcut to iOS Share menu.
 
-If you've used Flying Carpet, please send feedback to theron@spiegl.dev. Thanks for your interest!
+## Questions That Could Be Asked at Some Point:
+
++ **Wasn't this a Go repo?** Yes, carcinization has come for the gopher. There were several issues I didn't know how to solve in the Go/Qt paradigm, especially with Windows: not being able to make a single-file executable, needing to Run as Administrator, and having to write the WiFi Direct DLL to a temp folder and link to it at runtime because Go doesn't work with MSVC. Plus it was fun to use `tokio`/`async` and `windows-rs`, with which the Windows networking portions are written. The GUI framework is now Tauri which gives a native experience on all platforms with a very small footprint. The Android version is written in Kotlin and the iOS version in Swift. Neither mobile codebase is in this repository.
+
++ **You're using SHA-256 to derive the key from a password. Isn't that bad? Shouldn't you be using a Password-Based Key Derivation Function like Scrypt or Argon2?** I was doing this before, but it wasn't strictly necessary because these keys are only used during the file transfer. For an attacker to intercept the data in transit, they'd need to be on the hotspot network, which is protected by WPA2, so they'd need to shoulder-surf the password or QR code. The change was made because I couldn't find a good Scrypt or Argon2 implementation on all platforms.
+
++ **Why are you using AES-GCM at all if there's already WPA2 then?** When I started working on this project in 2017, I was trying to allow for IBSS WiFi networks on macOS that didn't use authentication. I was using the wrong encryption (and incorrectly) then, and later I added AES-GCM because it's the only good and official-ish AEAD implementation I could find in all of Go, Swift, Kotlin, and now Rust. If any cryptographers read this and find that I'm still being dumb, please let me know.
+
+## Questions for Hypothetical Users:
+
++ Did anyone use the CLI version? Is there need for one now? With the original Go version, I wrote the CLI first and then learned how to make a GUI. For this version, with Tauri requiring Tokio, the async stuff is pretty deeply hooked in, so it didn't make sense to do the CLI first. It may be relatively straightforward to make a CLI version, but I might not do so unless people will use it. Please let me know: theron@spiegl.dev.
+
+If you've used Flying Carpet, please send feedback to theron@spiegl.dev. Thanks for your interest! Please also check out https://github.com/spieglt/cloaker, https://cloaker.mobi, and https://github.com/spieglt/whatfiles.

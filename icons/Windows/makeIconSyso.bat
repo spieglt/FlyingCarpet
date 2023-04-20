@@ -1,1 +1,0 @@
-windres -i fc.rc -O coff -o .\fc.syso

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="style.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flying Carpet</title>
+    <script type="module" src="/main.js" defer></script>
+  </head>
+
+  <body style="height: 98%;">
+    <div class="verticalContainer" style="height: 100%;">
+
+      <!-- top bar -->
+      <div class="horizontalContainer" style="flex-grow: 0;">
+        <div>
+          <h1 style="margin-bottom: 0px; padding-bottom: 0px;">Flying Carpet</h1>
+          <small style="margin-top: 0px; padding-top: 0px;">Version 7</small>
+          <small style="margin-top: 0px; padding-top: 0px; color: blue; float: right; cursor: pointer;" id="aboutButton">
+            About
+          </small>
+        </div>
+        <div id="qrcode" style="width: 150px; height: 150px;">
+          <img src="assets/icon1024.png" style="width: 150px; height: 150px;">
+        </div>
+      </div>
+
+      <!-- radio boxes -->
+      <div class="horizontalContainer" style="flex-grow: 0;">
+        <fieldset id="modeBox" class="verticalContainer" style="border: solid black; flex-grow: 1; justify-content: space-evenly; padding: 5px;">
+          <legend>Step 1: Select Mode</legend>
+          <div class="radio">
+            <input type="radio" id="sendButton" name="mode" onchange="modeChange('send')">
+            <label for="sendButton">Send</label>
+          </div>
+          <div class="radio">
+            <input type="radio" id="receiveButton" name="mode" onchange="modeChange('receive')">
+            <label for="receiveButton">Receive</label>
+          </div>
+        </fieldset>
+        <fieldset id="peerBox" class="verticalContainer" style="border: solid black; flex-grow: 1; justify-content: space-evenly; padding: 5px;">
+          <legend>Step 2: Select Peer's OS</legend>
+          <div class="radio">
+            <input type="radio" id="androidButton" name="peer" onchange="peerChange('android')">
+            <label for="androidButton">Android</label>
+          </div>
+          <div id="iosSelector" class="radio">
+            <input type="radio" id="iosButton" name="peer" onchange="peerChange('ios')">
+            <label for="iosButton">iOS</label>
+          </div>
+          <div class="radio">
+            <input type="radio" id="linuxButton" name="peer" onchange="peerChange('linux')">
+            <label for="linuxButton">Linux</label>
+          </div>
+          <div id="macSelector" class="radio">
+            <input type="radio" id="macButton" name="peer" onchange="peerChange('mac')">
+            <label for="macButton">macOS</label>
+          </div>
+          <div class="radio">
+            <input type="radio" id="windowsButton" name="peer" onchange="peerChange('windows')">
+            <label for="windowsButton">Windows</label>
+          </div>
+        </fieldset>
+      </div>
+
+      <!-- file/folder selection -->
+      <div id="fileFolderBox" style="display: flex; overflow-y: auto; resize: vertical; height: 80px; min-height: 80px; padding: 5px;">
+        <fieldset class="horizontalContainer" style="flex-grow: 1; border: solid black;">
+          <legend>Step 3: Select Files to Send or Destination Folder</legend>
+          <button type="button" id="filesButton" onclick="selectFiles()">Select Files</button>
+          <button type="button" id="folderButton" onclick="selectFolder()" style="display: none;">Select Folder</button>
+          <div id="selectionBox" style="flex-grow: 1; overflow-y: auto; padding: 5px;"></div>
+        </fieldset>
+      </div>
+
+      <!-- password/ssid boxes -->
+      <input type="text" placeholder="SSID from Android:" id="ssidBox" style="display: none; padding: 5px;" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <input type="text" placeholder="Password (start transfer on other end):" id="passwordBox" style="display: none; padding: 5px;" autocapitalize="off" autocorrect="off" spellcheck="false">
+
+      <!-- start/cancel buttons -->
+      <button type="button" id="startButton" onclick="startTransfer()" style="padding: 5px; min-height: 25px;" disabled>Start Transfer</button>
+      <button type="button" id="cancelButton" onclick="cancelTransfer()" style="display: none; padding: 5px; min-height: 25px;">Cancel Transfer</button>
+
+      <!-- output box -->
+      <div id="outputBox" class="horizontalContainer" style="flex-grow: 9; flex-shrink: 9; overflow-y: auto; padding: 5px; margin-top: 5px;">
+        Welcome to Flying Carpet!
+      </div>
+
+      <!-- progress bar -->
+      <progress id="progressBar" value="0" max="100" style="display: none; width: 100%; margin-top: 5px; -webkit-appearance: none; appearance: none; height: 15px; min-height: 15px;"></progress>
+    </div>
+  </body>
+</html>

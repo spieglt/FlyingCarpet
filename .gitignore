@@ -1,16 +1,7 @@
-wfd.dll
-bin
-deploy
-static
-vendor
-
+target
+Debug
+Release
+.vs
 .DS_Store
-xcuserdata
-*.xcworkspace
-.vscode
-
-Flying Carpet
-Flying Carpet.exe
-Flying Carpet.app
-Flying Carpet.run
-flyingcarpet.exe
+UserInterfaceState.xcuserstate
+Build

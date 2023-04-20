@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "core",
+    "Flying Carpet/src-tauri",
+]

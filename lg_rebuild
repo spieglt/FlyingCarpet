@@ -1,9 +1,0 @@
-#!/bin/bash
-rm './bin/FlyingCarpetLinux.zip'
-$(go env GOPATH)/bin/qtdeploy build desktop ./gui/flyingcarpet
-mkdir -p bin
-cd ./gui/flyingcarpet/deploy
-rm -rf FlyingCarpet
-mv linux FlyingCarpet
-zip -r '../../../bin/FlyingCarpetLinux.zip' FlyingCarpet
-FlyingCarpet/flyingcarpet

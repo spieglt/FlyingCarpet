@@ -1,0 +1,30 @@
+[package]
+name = "flying-carpet-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aes-gcm = "0.10"
+rand = "0.8"
+regex = "1"
+sha2 = { version = "0.10" }
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1.2.1", features = ["v4"] }
+wifidirect-legacy-ap = "0.4.0"
+
+[dependencies.windows]
+version = "0.42.0"
+features = [
+    "Data_Xml_Dom",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Networking_WinSock",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_NetworkManagement_WiFi",
+]
