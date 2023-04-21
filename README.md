@@ -1,10 +1,10 @@
 ## Version 7.0 supports Android and iOS!
 
-New Android version and updated iOS versions 7.0 are pending app store approvals.
+Android version pending app store approval.
 
 ~~Android download [here](TODO) or search the Google Play Store for "Flying Carpet File Transfer".~~
 
-~~iOS download [here](https://apps.apple.com/us/app/flying-carpet-file-transfer/id1637377410) or search the App Store for "Flying Carpet File Transfer".~~
+iOS download [here](https://apps.apple.com/us/app/flying-carpet-file-transfer/id1637377410) or search the App Store for "Flying Carpet File Transfer".
 
 Linux, macOS, and Windows versions available on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page. Installers and standalone executable versions available.
 
