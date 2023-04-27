@@ -383,8 +383,8 @@ async fn confirm_version(
 }
 
 // TODO:
+// update screenshots?
 // show qr code after refresh
-// build for intel and m1 mac
 // test pulling wifi card, quitting program, etc.
 
 // LATER MAYBE:

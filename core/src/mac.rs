@@ -68,6 +68,7 @@ pub async fn connect_to_peer<T: UI>(
 }
 
 unsafe fn join_hotspot(ssid: &str, password: &str) -> Result<(), Box<dyn Error>> {
+    // TODO: these are never reclaimed
     let ssid = utils::rust_to_c_string(ssid);
     let password = utils::rust_to_c_string(&password);
     if joinAdHoc(ssid, password) == 0 {
