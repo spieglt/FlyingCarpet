@@ -52,10 +52,6 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 
 ## Planned Features
 
-+ Code signing for macOS and Windows?
-
-+ Add Bluetooth functionality to allow Apple-to-Apple transfers?
-
 + Add Flying Carpet shortcut to iOS Share menu.
 
 ## Questions That Could Be Asked at Some Point:

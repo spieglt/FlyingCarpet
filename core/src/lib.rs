@@ -383,6 +383,8 @@ async fn confirm_version(
 }
 
 // TODO:
+// code signing?
+// bluetooth?
 // update screenshots?
 // show qr code after refresh
 // test pulling wifi card, quitting program, etc.
