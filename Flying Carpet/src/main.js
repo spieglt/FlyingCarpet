@@ -179,6 +179,31 @@ async function startTransfer() {
     return;
   }
 
+  // make sure we have a wifi interface and prompt for which if more than one
+  let wifiInterface;
+  let interfaces = await tauri.invoke('get_wifi_interfaces');
+  console.log('interfaces:', interfaces);
+  switch (interfaces.length) {
+    case 0:
+      output('No WiFi interfaces found. Flying Carpet only works over WiFi.');
+      return;
+    // case 1:
+    //   wifiInterface = interfaces[0];
+    //   break;
+    default:
+      let alertString = 'Enter the number for which WiFi interface to use (e.g. "1" or "2"):\n'
+      for (let i = 0; i < interfaces.length; i++) {
+        alertString += `${i+1}: ${interfaces[i][0]}\n`
+      }
+      let choice = parseInt(prompt(alertString));
+      if (choice && choice > 0) {
+        wifiInterface = interfaces[choice - 1];
+      } else {
+        output('Invalid interface selected. Please enter just the number of the WiFi interface you would like to use, e.g. "1" or "3".');
+        return;
+      }
+  }
+
   // disable UI
   disableUi();
 
@@ -188,6 +213,7 @@ async function startTransfer() {
     peer: selectedPeer,
     password: password,
     ssid: ssid,
+    interface: wifiInterface,
     fileList: selectedFiles,
     receiveDir: selectedFolder,
     window: appWindow,
@@ -351,7 +377,7 @@ window.modeChange = modeChange;
 window.peerChange = peerChange;
 
 const aboutMessage = `https://flyingcarpet.spiegl.dev
-Version: 7.0
+Version: 7.1
 theron@spiegl.dev
 Copyright (c) 2023, Theron Spiegl
 All rights reserved.

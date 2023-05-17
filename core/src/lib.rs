@@ -62,6 +62,10 @@ pub enum PeerResource {
     LinuxHotspot(String), // ssid of network, used to tear down later
 }
 
+// first String is the interface's name, second String is a base-10 representation of the u128 representation of the GUID of the interface. GUID is only used on Windows.
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct WiFiInterface(pub String, pub String);
+
 pub struct Transfer {
     pub cancel_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     // this is insane. we need the outer mutex for Tauri state: it's immutable, so mutex gives us thread-safe interior mutability.
@@ -85,6 +89,7 @@ pub async fn start_transfer<T: UI>(
     peer: String,
     password: String,
     ssid: Option<String>, // only used if mac talking to android, getting android ssid from ui. otherwise compute.
+    interface: WiFiInterface,
     file_list: Option<Vec<String>>,
     receive_dir: Option<String>,
     ui: &T,
@@ -113,7 +118,7 @@ pub async fn start_transfer<T: UI>(
     let ssid = ssid.or(Some(_ssid)).unwrap();
 
     // start hotspot or connect to peer's
-    let peer_resource = match network::connect_to_peer(peer, mode.clone(), ssid, password, ui).await
+    let peer_resource = match network::connect_to_peer(peer, mode.clone(), ssid, password, interface, ui).await
     {
         Ok(p) => p,
         Err(e) => {

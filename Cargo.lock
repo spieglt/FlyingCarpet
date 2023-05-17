@@ -951,6 +951,7 @@ dependencies = [
  "aes-gcm",
  "rand 0.8.5",
  "regex",
+ "serde",
  "sha2",
  "tokio",
  "wifidirect-legacy-ap",

@@ -7,6 +7,7 @@ edition = "2021"
 aes-gcm = "0.10"
 rand = "0.8"
 regex = "1"
+serde = { version = "1.0", features = ["derive"] }
 sha2 = { version = "0.10" }
 tokio = { version = "1", features = ["full"] }
 wifidirect-legacy-ap = "0.4.0"

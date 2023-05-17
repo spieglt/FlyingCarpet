@@ -4,7 +4,7 @@
 )]
 
 use flying_carpet_core::{
-    clean_up_transfer, network, start_transfer, utils, PeerResource, Transfer, UI,
+    clean_up_transfer, network, start_transfer, utils, PeerResource, Transfer, UI, WiFiInterface,
 };
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -110,6 +110,7 @@ fn start_async(
     peer: String,
     password: String,
     ssid: Option<String>,
+    interface: WiFiInterface,
     file_list: Option<Vec<String>>,
     receive_dir: Option<String>,
     window: Window,
@@ -135,6 +136,7 @@ fn start_async(
             peer,
             password,
             ssid,
+            interface,
             file_list,
             receive_dir,
             &gui,
@@ -158,6 +160,7 @@ async fn main() {
             is_dir,
             expand_files,
             generate_password,
+            get_wifi_interfaces,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -204,4 +207,12 @@ fn expand_files(paths: Vec<&str>) -> Vec<String> {
 #[tauri::command]
 fn generate_password() -> String {
     utils::generate_password()
+}
+
+#[tauri::command]
+fn get_wifi_interfaces() -> Vec<WiFiInterface> {
+    match network::get_wifi_interfaces() {
+        Ok(interfaces) => interfaces,
+        Err(_e) => vec![], // if there was an error, just return empty list of interfaces and let javascript detect "no wifi card found"
+    }
 }

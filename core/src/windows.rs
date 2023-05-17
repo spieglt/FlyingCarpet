@@ -1,5 +1,5 @@
 use crate::utils::{run_command, rust_to_pcstr};
-use crate::{Mode, Peer, PeerResource, UI};
+use crate::{Mode, Peer, PeerResource, UI, WiFiInterface};
 use regex::Regex;
 use std::env::current_exe;
 use std::error::Error;
@@ -29,6 +29,7 @@ pub async fn connect_to_peer<T: UI>(
     mode: Mode,
     ssid: String,
     password: String,
+    interface: WiFiInterface,
     ui: &T,
 ) -> Result<PeerResource, Box<dyn Error>> {
     let hosting = is_hosting(peer, mode);
@@ -61,10 +62,12 @@ pub async fn connect_to_peer<T: UI>(
         };
         Ok(PeerResource::WindowsHotspot(hosted_network))
     } else {
+        let guid = u128::from_str_radix(&interface.1, 10).expect("couldn't get u128 guid from string");
+        let guid = GUID::from_u128(guid);
         loop {
             tokio::task::yield_now().await;
             ui.output("Trying to join hotspot...");
-            if join_hotspot(&ssid, &password)? {
+            if join_hotspot(&ssid, &password, &guid)? {
                 ui.output(&format!("Connected to {}", ssid));
                 break;
             }
@@ -202,31 +205,44 @@ fn find_gateway() -> Result<Option<String>, Box<dyn Error>> {
     Ok(None)
 }
 
-fn get_wifi_interface(client_handle: &mut HANDLE) -> Result<(GUID, bool), Box<dyn Error>> {
+pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, Box<dyn Error>> {
     unsafe {
+        // get client handle
+        let mut client_handle = HANDLE::default();
+        let mut negotiated_version = 0;
+        let res = WiFi::WlanOpenHandle(2, None, &mut negotiated_version, &mut client_handle);
+        if WIN32_ERROR(res) != ERROR_SUCCESS {
+            Err(format!("open handle error: {}", get_windows_error(res)?))?;
+        }
         // find wifi interface
         let mut interface_list = WiFi::WLAN_INTERFACE_INFO_LIST::default();
         let mut p_interface_list: *mut WiFi::WLAN_INTERFACE_INFO_LIST = &mut interface_list;
-        // let interface_info = WiFi::WLAN_INTERFACE_INFO::default();
-        let res = WiFi::WlanEnumInterfaces(*client_handle, None, &mut p_interface_list);
+        let res = WiFi::WlanEnumInterfaces(client_handle, None, &mut p_interface_list);
         if WIN32_ERROR(res) != ERROR_SUCCESS {
             let err = format!(
                 "Error enumerating WiFi interfaces: {}",
                 get_windows_error(res)?
             );
+            WiFi::WlanCloseHandle(client_handle, None);
             Err(err)?;
         }
-        // println!(
-        //     "Found {} WiFi interfaces",
-        //     (*p_interface_list).dwNumberOfItems
-        // );
         if (*p_interface_list).dwNumberOfItems == 0 {
+            WiFi::WlanCloseHandle(client_handle, None);
             Err("No WiFi interface found")?;
         }
-        let info = (*p_interface_list).InterfaceInfo[0];
-        let connected = info.isState == WiFi::wlan_interface_state_connected;
+        let mut interfaces: Vec<WiFiInterface> = vec![];
+        for i in 0..(*p_interface_list).dwNumberOfItems {
+            let info = (*p_interface_list).InterfaceInfo[i as usize];
+            let name = String::from_utf16_lossy(&info.strInterfaceDescription)
+                .trim_matches(char::from(0))
+                .to_string();
+            let guid = info.InterfaceGuid.to_u128();
+            let guid = format!("{}", guid); // store u128 GUID formatted as string because javascript can't handle 128-bit numbers
+            interfaces.push(WiFiInterface(name, guid));
+        }
         WiFi::WlanFreeMemory(p_interface_list as *const c_void);
-        Ok((info.InterfaceGuid, connected))
+        WiFi::WlanCloseHandle(client_handle, None);
+        Ok(interfaces)
     }
 }
 
@@ -307,7 +323,7 @@ unsafe fn unregister_hotspot_callback(client_handle: HANDLE) {
     // don't really care if this failed, don't need to error handle here?
 }
 
-fn join_hotspot(ssid: &str, password: &str) -> Result<bool, Box<dyn std::error::Error>> {
+fn join_hotspot(ssid: &str, password: &str, guid: &GUID) -> Result<bool, Box<dyn std::error::Error>> {
     let mut client_handle = HANDLE::default();
 
     let xml = "<?xml version=\"1.0\"?>\r\n".to_string()
@@ -370,12 +386,10 @@ fn join_hotspot(ssid: &str, password: &str) -> Result<bool, Box<dyn std::error::
             Err(format!("open handle error: {}", get_windows_error(res)?))?;
         }
 
-        let (guid, _connected) = get_wifi_interface(&mut client_handle)?;
-
         let (tx, rx) = mpsc::channel();
         register_for_hotspot_connected_callback(tx.clone(), client_handle)?;
 
-        res = WiFi::WlanConnect(client_handle, &guid, &parameters, None);
+        res = WiFi::WlanConnect(client_handle, guid, &parameters, None);
         if WIN32_ERROR(res) != ERROR_SUCCESS {
             unregister_hotspot_callback(client_handle);
             WiFi::WlanCloseHandle(client_handle, None);
@@ -469,15 +483,15 @@ fn is_hosting(peer: Peer, mode: Mode) -> bool {
 mod test {
     use crate::network::add_firewall_rule;
 
-    #[test]
-    fn join_hotspot() {
-        // put ssid and password here
-        crate::network::join_hotspot("", "").unwrap();
-        // unsafe {
-        //     std::thread::sleep(std::time::Duration::from_secs(10));
-        //     crate::network::delete_network("").unwrap();
-        // }
-    }
+    // #[test]
+    // fn join_hotspot() {
+    //     // put ssid and password here
+    //     crate::network::join_hotspot("", "").unwrap();
+    //     // unsafe {
+    //     //     std::thread::sleep(std::time::Duration::from_secs(10));
+    //     //     crate::network::delete_network("").unwrap();
+    //     // }
+    // }
 
     #[test]
     fn check_for_firewall_rule() {
