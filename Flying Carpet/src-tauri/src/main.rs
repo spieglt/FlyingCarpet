@@ -4,7 +4,7 @@
 )]
 
 use flying_carpet_core::{
-    clean_up_transfer, network, start_transfer, utils, PeerResource, Transfer, UI, WiFiInterface,
+    clean_up_transfer, network, start_transfer, utils, PeerResource, Transfer, WiFiInterface, UI,
 };
 use std::path::PathBuf;
 use std::str::FromStr;

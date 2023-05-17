@@ -118,14 +118,14 @@ pub async fn start_transfer<T: UI>(
     let ssid = ssid.or(Some(_ssid)).unwrap();
 
     // start hotspot or connect to peer's
-    let peer_resource = match network::connect_to_peer(peer, mode.clone(), ssid, password, interface, ui).await
-    {
-        Ok(p) => p,
-        Err(e) => {
-            ui.output(&format!("Error connecting to peer: {}", e));
-            return None;
-        }
-    };
+    let peer_resource =
+        match network::connect_to_peer(peer, mode.clone(), ssid, password, interface, ui).await {
+            Ok(p) => p,
+            Err(e) => {
+                ui.output(&format!("Error connecting to peer: {}", e));
+                return None;
+            }
+        };
 
     tokio::task::yield_now().await;
 

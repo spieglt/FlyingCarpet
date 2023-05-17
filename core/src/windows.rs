@@ -1,5 +1,5 @@
 use crate::utils::{run_command, rust_to_pcstr};
-use crate::{Mode, Peer, PeerResource, UI, WiFiInterface};
+use crate::{Mode, Peer, PeerResource, WiFiInterface, UI};
 use regex::Regex;
 use std::env::current_exe;
 use std::error::Error;
@@ -62,7 +62,8 @@ pub async fn connect_to_peer<T: UI>(
         };
         Ok(PeerResource::WindowsHotspot(hosted_network))
     } else {
-        let guid = u128::from_str_radix(&interface.1, 10).expect("couldn't get u128 guid from string");
+        let guid =
+            u128::from_str_radix(&interface.1, 10).expect("couldn't get u128 guid from string");
         let guid = GUID::from_u128(guid);
         loop {
             tokio::task::yield_now().await;
@@ -323,7 +324,11 @@ unsafe fn unregister_hotspot_callback(client_handle: HANDLE) {
     // don't really care if this failed, don't need to error handle here?
 }
 
-fn join_hotspot(ssid: &str, password: &str, guid: &GUID) -> Result<bool, Box<dyn std::error::Error>> {
+fn join_hotspot(
+    ssid: &str,
+    password: &str,
+    guid: &GUID,
+) -> Result<bool, Box<dyn std::error::Error>> {
     let mut client_handle = HANDLE::default();
 
     let xml = "<?xml version=\"1.0\"?>\r\n".to_string()
