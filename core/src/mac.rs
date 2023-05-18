@@ -1,6 +1,6 @@
 use regex::Regex;
 
-use crate::{utils, PeerResource};
+use crate::{utils, PeerResource, WiFiInterface};
 
 use super::{Mode, Peer, UI};
 use std::error::Error;
@@ -18,7 +18,7 @@ pub struct WindowsHotspot {
 
 pub fn stop_hotspot(peer_resource: &PeerResource) -> Result<(), Box<dyn Error>> {
     if let PeerResource::WifiClient(_gateway, ssid) = peer_resource {
-        let interface = get_wifi_interface();
+        let interface = get_wifi_interfaces()?[0].0.to_string(); // cursed
         let output = process::Command::new("networksetup")
             .args(vec!["-removepreferredwirelessnetwork", &interface, ssid])
             .output()?;
@@ -39,6 +39,7 @@ pub async fn connect_to_peer<T: UI>(
     _mode: Mode,
     ssid: String,
     password: String,
+    _interface: WiFiInterface,
     ui: &T,
 ) -> Result<PeerResource, Box<dyn Error>> {
     // mac never hosts
@@ -78,7 +79,10 @@ unsafe fn join_hotspot(ssid: &str, password: &str) -> Result<(), Box<dyn Error>>
 }
 
 fn find_gateway() -> Option<String> {
-    let interface = get_wifi_interface();
+    let interface = match get_wifi_interfaces() {
+        Ok(ifaces) => ifaces[0].0.to_string(),
+        Err(_e) => return None,
+    };
     if interface == "" {
         return None;
     }
@@ -94,28 +98,31 @@ fn find_gateway() -> Option<String> {
         .map(|caps| caps.name("ip").unwrap().as_str().to_string()) // unwrap ok because any captures are guaranteed to have an ip group?
 }
 
-fn get_wifi_interface() -> String {
+// unlike linux and windows, this only returns the built-in WiFi.
+// using a second wireless card on macOS is not straightforward or common,
+// nor would it be easy to scan for here, so calling this sufficient.
+pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, Box<dyn Error>> {
     let args = vec![
         "-c",
         "networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}'",
     ];
-    let output = process::Command::new("sh")
-        .args(args)
-        .output()
-        .expect("Couldn't get WiFi interface");
+    let output = process::Command::new("sh").args(args).output()?;
     let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout.trim().to_string()
+    Ok(vec![WiFiInterface(
+        stdout.trim().to_string(),
+        "".to_string(),
+    )])
 }
 
 #[cfg(test)]
 mod test {
     use crate::PeerResource;
 
-    #[test]
-    fn get_wifi_interface() {
-        let interface = crate::network::get_wifi_interface();
-        println!("wifi interface: {}", interface);
-    }
+    // #[test]
+    // fn get_wifi_interface() {
+    //     let interface = crate::network::get_wifi_interface();
+    //     println!("wifi interface: {}", interface);
+    // }
 
     #[test]
     fn delete_network() {

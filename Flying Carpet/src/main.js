@@ -187,9 +187,9 @@ async function startTransfer() {
     case 0:
       output('No WiFi interfaces found. Flying Carpet only works over WiFi.');
       return;
-    // case 1:
-    //   wifiInterface = interfaces[0];
-    //   break;
+    case 1:
+      wifiInterface = interfaces[0];
+      break;
     default:
       let alertString = 'Enter the number for which WiFi interface to use (e.g. "1" or "2"):\n'
       for (let i = 0; i < interfaces.length; i++) {
