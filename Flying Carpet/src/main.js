@@ -196,8 +196,9 @@ async function startTransfer() {
         alertString += `${i+1}: ${interfaces[i][0]}\n`
       }
       let choice = parseInt(prompt(alertString));
-      if (choice && choice > 0) {
+      if (choice && choice > 0 && choice <= interfaces.length) {
         wifiInterface = interfaces[choice - 1];
+        output(`Using interface: ${wifiInterface[0]}`);
       } else {
         output('Invalid interface selected. Please enter just the number of the WiFi interface you would like to use, e.g. "1" or "3".');
         return;
