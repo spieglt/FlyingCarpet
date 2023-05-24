@@ -388,8 +388,8 @@ async fn confirm_version(
 }
 
 // TODO:
-// code signing?
-// bluetooth?
+// code signing for windows?
+// fix bug where multiple start/cancel clicks while waiting for transfer stack, at least on linux
 // update screenshots?
 // show qr code after refresh
 // test pulling wifi card, quitting program, etc.
