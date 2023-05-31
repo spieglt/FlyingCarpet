@@ -11,7 +11,7 @@ use wifidirect_legacy_ap::WlanHostedNetworkHelper;
 use windows::core::{GUID, HSTRING, PCWSTR, PSTR};
 use windows::Win32::Foundation::{GetLastError, ERROR_SUCCESS, HANDLE, WIN32_ERROR};
 use windows::Win32::NetworkManagement::IpHelper;
-use windows::Win32::NetworkManagement::WiFi;
+use windows::Win32::NetworkManagement::WiFi::{self, WLAN_INTERFACE_INFO, WLAN_INTERFACE_INFO_LIST};
 use windows::Win32::Networking::WinSock;
 use windows::Win32::System::Com::CoInitialize;
 use windows::Win32::System::Diagnostics::Debug::{
@@ -206,6 +206,24 @@ fn find_gateway() -> Result<Option<String>, Box<dyn Error>> {
     Ok(None)
 }
 
+unsafe fn wlan_enum_multiple_interfaces(client_handle: HANDLE, p_interface_list: *mut *mut WLAN_INTERFACE_INFO_LIST)
+    -> Result<Vec<WLAN_INTERFACE_INFO>, Box<dyn Error>>
+{
+    let res = WiFi::WlanEnumInterfaces(client_handle, None, p_interface_list);
+    if WIN32_ERROR(res) != ERROR_SUCCESS {
+        let err = format!(
+            "Error enumerating WiFi interfaces: {}",
+            get_windows_error(res)?
+        );
+        WiFi::WlanCloseHandle(client_handle, None);
+        Err(err)?;
+    }
+    let list = **p_interface_list;
+    println!("num interfaces: {}", list.dwNumberOfItems);
+    let interfaces = std::slice::from_raw_parts(&list.InterfaceInfo[0], list.dwNumberOfItems as usize);
+    Ok(interfaces.to_vec())
+}
+
 pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, Box<dyn Error>> {
     unsafe {
         // get client handle
@@ -218,26 +236,14 @@ pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, Box<dyn Error>> {
         // find wifi interface
         let mut interface_list = WiFi::WLAN_INTERFACE_INFO_LIST::default();
         let mut p_interface_list: *mut WiFi::WLAN_INTERFACE_INFO_LIST = &mut interface_list;
-        let res = WiFi::WlanEnumInterfaces(client_handle, None, &mut p_interface_list);
-        if WIN32_ERROR(res) != ERROR_SUCCESS {
-            let err = format!(
-                "Error enumerating WiFi interfaces: {}",
-                get_windows_error(res)?
-            );
-            WiFi::WlanCloseHandle(client_handle, None);
-            Err(err)?;
-        }
-        if (*p_interface_list).dwNumberOfItems == 0 {
-            WiFi::WlanCloseHandle(client_handle, None);
-            Err("No WiFi interface found")?;
-        }
+
+        let wlan_interfaces = wlan_enum_multiple_interfaces(client_handle, &mut p_interface_list)?;
         let mut interfaces: Vec<WiFiInterface> = vec![];
-        for i in 0..(*p_interface_list).dwNumberOfItems {
-            let info = (*p_interface_list).InterfaceInfo[i as usize];
-            let name = String::from_utf16_lossy(&info.strInterfaceDescription)
+        for wlan_interface in wlan_interfaces {
+            let name = String::from_utf16_lossy(&wlan_interface.strInterfaceDescription)
                 .trim_matches(char::from(0))
                 .to_string();
-            let guid = info.InterfaceGuid.to_u128();
+            let guid = wlan_interface.InterfaceGuid.to_u128();
             let guid = format!("{}", guid); // store u128 GUID formatted as string because javascript can't handle 128-bit numbers
             interfaces.push(WiFiInterface(name, guid));
         }
