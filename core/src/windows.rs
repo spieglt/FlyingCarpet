@@ -515,4 +515,16 @@ mod test {
         let rule_present = super::check_for_firewall_rule().unwrap();
         assert!(rule_present);
     }
+
+    #[test]
+    fn get_wifi_interfaces() {
+        match crate::network::get_wifi_interfaces() {
+            Ok(ifaces) => {
+                for i in ifaces {
+                    println!("{:?}", i.0);
+                }
+            }
+            Err(e) => println!("{}", e),
+        }
+    }
 }
