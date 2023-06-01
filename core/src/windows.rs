@@ -206,6 +206,8 @@ fn find_gateway() -> Result<Option<String>, Box<dyn Error>> {
     Ok(None)
 }
 
+// This is a hacky way to get information on all interfaces from Windows,
+// not just the one that windows-rs's WLAN_INTERFACE_INFO_LIST gives you
 unsafe fn wlan_enum_multiple_interfaces(client_handle: HANDLE, p_interface_list: *mut *mut WLAN_INTERFACE_INFO_LIST)
     -> Result<Vec<WLAN_INTERFACE_INFO>, Box<dyn Error>>
 {
@@ -218,7 +220,6 @@ unsafe fn wlan_enum_multiple_interfaces(client_handle: HANDLE, p_interface_list:
         WiFi::WlanCloseHandle(client_handle, None);
         Err(err)?;
     }
-    println!("num interfaces: {}", (**p_interface_list).dwNumberOfItems);
     let interfaces = std::slice::from_raw_parts(&(**p_interface_list).InterfaceInfo[0], (**p_interface_list).dwNumberOfItems as usize);
     Ok(interfaces.to_vec())
 }
