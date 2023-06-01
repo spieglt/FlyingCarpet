@@ -11,7 +11,9 @@ use wifidirect_legacy_ap::WlanHostedNetworkHelper;
 use windows::core::{GUID, HSTRING, PCWSTR, PSTR};
 use windows::Win32::Foundation::{GetLastError, ERROR_SUCCESS, HANDLE, WIN32_ERROR};
 use windows::Win32::NetworkManagement::IpHelper;
-use windows::Win32::NetworkManagement::WiFi::{self, WLAN_INTERFACE_INFO, WLAN_INTERFACE_INFO_LIST};
+use windows::Win32::NetworkManagement::WiFi::{
+    self, WLAN_INTERFACE_INFO, WLAN_INTERFACE_INFO_LIST,
+};
 use windows::Win32::Networking::WinSock;
 use windows::Win32::System::Com::CoInitialize;
 use windows::Win32::System::Diagnostics::Debug::{
@@ -208,9 +210,10 @@ fn find_gateway() -> Result<Option<String>, Box<dyn Error>> {
 
 // This is a hacky way to get information on all interfaces from Windows,
 // not just the one that windows-rs's WLAN_INTERFACE_INFO_LIST gives you
-unsafe fn wlan_enum_multiple_interfaces(client_handle: HANDLE, p_interface_list: *mut *mut WLAN_INTERFACE_INFO_LIST)
-    -> Result<Vec<WLAN_INTERFACE_INFO>, Box<dyn Error>>
-{
+unsafe fn wlan_enum_multiple_interfaces(
+    client_handle: HANDLE,
+    p_interface_list: *mut *mut WLAN_INTERFACE_INFO_LIST,
+) -> Result<Vec<WLAN_INTERFACE_INFO>, Box<dyn Error>> {
     let res = WiFi::WlanEnumInterfaces(client_handle, None, p_interface_list);
     if WIN32_ERROR(res) != ERROR_SUCCESS {
         let err = format!(
@@ -220,7 +223,10 @@ unsafe fn wlan_enum_multiple_interfaces(client_handle: HANDLE, p_interface_list:
         WiFi::WlanCloseHandle(client_handle, None);
         Err(err)?;
     }
-    let interfaces = std::slice::from_raw_parts(&(**p_interface_list).InterfaceInfo[0], (**p_interface_list).dwNumberOfItems as usize);
+    let interfaces = std::slice::from_raw_parts(
+        &(**p_interface_list).InterfaceInfo[0],
+        (**p_interface_list).dwNumberOfItems as usize,
+    );
     Ok(interfaces.to_vec())
 }
 
@@ -493,16 +499,21 @@ fn is_hosting(peer: Peer, mode: Mode) -> bool {
 #[cfg(test)]
 mod test {
     use crate::network::add_firewall_rule;
+    use windows::core::GUID;
 
-    // #[test]
-    // fn join_hotspot() {
-    //     // put ssid and password here
-    //     crate::network::join_hotspot("", "").unwrap();
-    //     // unsafe {
-    //     //     std::thread::sleep(std::time::Duration::from_secs(10));
-    //     //     crate::network::delete_network("").unwrap();
-    //     // }
-    // }
+    #[test]
+    fn join_hotspot() {
+        // put ssid and password here
+        let interfaces = super::get_wifi_interfaces().expect("couldn't get wifi interfaces");
+        let guid =
+            u128::from_str_radix(&interfaces[0].1, 10).expect("couldn't get u128 guid from string");
+        let guid = GUID::from_u128(guid);
+        super::join_hotspot("", "", &guid).unwrap();
+        // unsafe {
+        //     std::thread::sleep(std::time::Duration::from_secs(10));
+        //     super::delete_network("").unwrap();
+        // }
+    }
 
     #[test]
     fn check_for_firewall_rule() {

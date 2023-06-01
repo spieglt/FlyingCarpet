@@ -18,7 +18,9 @@ pub struct WindowsHotspot {
 
 pub fn stop_hotspot(peer_resource: &PeerResource) -> Result<(), Box<dyn Error>> {
     if let PeerResource::WifiClient(_gateway, ssid) = peer_resource {
-        let interface = get_wifi_interfaces()?[0].0.to_string(); // cursed
+        // this is cursed, but having access to the selected interface here would require it being in Tauri state,
+        // which we want to avoid, and we know since we're on mac that we're only using one wifi interface
+        let interface = get_wifi_interfaces()?[0].0.to_string();
         let output = process::Command::new("networksetup")
             .args(vec!["-removepreferredwirelessnetwork", &interface, ssid])
             .output()?;

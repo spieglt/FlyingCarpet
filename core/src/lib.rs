@@ -388,6 +388,7 @@ async fn confirm_version(
 }
 
 // TODO:
+// undo js button duplicate clicking stuff, fix tests
 // code signing for windows?
 // fix bug where multiple start/cancel clicks while waiting for transfer stack, at least on linux
 // update screenshots?
