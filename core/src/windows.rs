@@ -218,9 +218,8 @@ unsafe fn wlan_enum_multiple_interfaces(client_handle: HANDLE, p_interface_list:
         WiFi::WlanCloseHandle(client_handle, None);
         Err(err)?;
     }
-    let list = **p_interface_list;
-    println!("num interfaces: {}", list.dwNumberOfItems);
-    let interfaces = std::slice::from_raw_parts(&list.InterfaceInfo[0], list.dwNumberOfItems as usize);
+    println!("num interfaces: {}", (**p_interface_list).dwNumberOfItems);
+    let interfaces = std::slice::from_raw_parts(&(**p_interface_list).InterfaceInfo[0], (**p_interface_list).dwNumberOfItems as usize);
     Ok(interfaces.to_vec())
 }
 
