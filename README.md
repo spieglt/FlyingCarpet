@@ -40,7 +40,7 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 
 + Apple devices can only transfer to/from Android, Linux, and Windows as they can no longer programmatically run hotspots. Use AirDrop instead for Apple-to-Apple transfers.
 
-+ Google's official QR code scanner is currently broken on some devices, which prevents affected Android devices from sending to Android, and from sending and receiving to Linux and Windows. [More information.](https://issuetracker.google.com/issues/261579118) Use Android's built-in Nearby Share as an alternative for Android-to-Android. The proper fix may be to use a different QR code scanning library, but that will make Flying Carpet require camera permissions, which I'd rather avoid if possible. Still researching this one.
++ Google's official QR code scanner is broken on some devices, which prevents affected Android devices from sending to Android, and from sending and receiving to Linux and Windows. [More information.](https://issuetracker.google.com/issues/261579118) Deleting Google Play Services' data and cache, and letting them re-download, appears to fix the issue. [Instructions here.](https://support.google.com/googleplay/answer/9037938)
 
 + Disables your wireless internet connection while in use. (Does not apply to Windows or Android when hosting the hotspot.)
 
