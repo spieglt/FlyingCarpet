@@ -179,37 +179,39 @@ fn find_gateway(interface: &str) -> Result<String, Box<dyn Error>> {
     Ok(stdout.trim().to_string())
 }
 
-// #[cfg(test)]
-// mod test {
-//     use crate::PeerResource;
+#[cfg(test)]
+mod test {
+    use crate::PeerResource;
 
-//     use super::get_wifi_interfaces;
+    use super::get_wifi_interfaces;
 
-//     #[test]
-//     fn start_and_stop_hotspot() {
-//         let ssid = "flyingCarpet_1234";
-//         let password = "password";
-//         let _pr = PeerResource::WifiClient("".to_string(), ssid.to_string());
-//         crate::network::start_hotspot(ssid, password).unwrap();
-//         // std::thread::sleep(std::time::Duration::from_secs(500));
-//         // crate::network::stop_hotspot(&pr).unwrap();
-//     }
+    #[test]
+    fn start_and_stop_hotspot() {
+        let ssid = "flyingCarpet_1234";
+        let password = "password";
+        let _pr = PeerResource::WifiClient("".to_string(), ssid.to_string());
+        let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].0;
+        crate::network::start_hotspot(ssid, password, interface).unwrap();
+        // std::thread::sleep(std::time::Duration::from_secs(500));
+        // crate::network::stop_hotspot(&pr).unwrap();
+    }
 
-//     #[test]
-//     fn join_hotspot() {
-//         let ssid = "";
-//         let password = "";
-//         let pr = PeerResource::WifiClient("".to_string(), ssid.to_string());
-//         crate::network::join_hotspot(ssid, password).unwrap();
-//         std::thread::sleep(std::time::Duration::from_secs(20));
-//         crate::network::stop_hotspot(&pr).unwrap();
-//     }
+    #[test]
+    fn join_hotspot() {
+        let ssid = "";
+        let password = "";
+        let pr = PeerResource::WifiClient("".to_string(), ssid.to_string());
+        let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].0;
+        crate::network::join_hotspot(ssid, password, &interface).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(20));
+        crate::network::stop_hotspot(&pr).unwrap();
+    }
 
-//     #[test]
-//     fn find_gateway() {
-//         let interface = get_wifi_interfaces().unwrap();
-//         let _gateway = crate::network::find_gateway(&interface).unwrap();
-//         // println!("interface: {}", interface);
-//         // println!("gateway: {}", gateway);
-//     }
-// }
+    #[test]
+    fn find_gateway() {
+        let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].0;
+        let gateway = crate::network::find_gateway(interface).unwrap();
+        println!("interface: {}", interface);
+        println!("gateway: {}", gateway);
+    }
+}
