@@ -222,12 +222,12 @@ async function startTransfer() {
 }
 
 async function cancelTransfer() {
-  let startState = startButton.disabled;
-  startButton.disabled = true;
-  cancelButton.disabled = true;
+  // let startState = startButton.disabled;
+  // startButton.disabled = true;
+  // cancelButton.disabled = true;
   output(await tauri.invoke('cancel_transfer'));
-  startButton.disabled = startState;
-  cancelButton.disabled = false;
+  // startButton.disabled = startState;
+  // cancelButton.disabled = false;
 }
 
 let selectFiles = async () => {

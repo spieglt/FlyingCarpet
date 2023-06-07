@@ -18,7 +18,7 @@ pub struct WindowsHotspot {
 
 pub fn stop_hotspot(peer_resource: &PeerResource) -> Result<(), Box<dyn Error>> {
     if let PeerResource::WifiClient(_gateway, ssid) = peer_resource {
-        // this is cursed, but having access to the selected interface here would require it being in Tauri state,
+        // TODO: having access to the selected interface here would require it being in Tauri state,
         // which we want to avoid, and we know since we're on mac that we're only using one wifi interface
         let interface = get_wifi_interfaces()?[0].0.to_string();
         let output = process::Command::new("networksetup")
@@ -41,7 +41,7 @@ pub async fn connect_to_peer<T: UI>(
     _mode: Mode,
     ssid: String,
     password: String,
-    _interface: WiFiInterface,
+    interface: WiFiInterface,
     ui: &T,
 ) -> Result<PeerResource, Box<dyn Error>> {
     // mac never hosts
@@ -62,7 +62,7 @@ pub async fn connect_to_peer<T: UI>(
     }
     loop {
         // println!("looking for gateway");
-        if let Some(gateway) = find_gateway() {
+        if let Some(gateway) = find_gateway(&interface) {
             return Ok(PeerResource::WifiClient(gateway, ssid));
         } else {
             tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
@@ -80,16 +80,12 @@ unsafe fn join_hotspot(ssid: &str, password: &str) -> Result<(), Box<dyn Error>>
     Ok(())
 }
 
-fn find_gateway() -> Option<String> {
-    let interface = match get_wifi_interfaces() {
-        Ok(ifaces) => ifaces[0].0.to_string(),
-        Err(_e) => return None,
-    };
-    if interface == "" {
+fn find_gateway(interface: &WiFiInterface) -> Option<String> {
+    if interface.0 == "" {
         return None;
     }
     let output = process::Command::new("ipconfig")
-        .args(vec!["getsummary", &interface])
+        .args(vec!["getsummary", &interface.0])
         .output()
         .expect("Couldn't run ipconfig");
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -120,11 +116,12 @@ pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, Box<dyn Error>> {
 mod test {
     use crate::PeerResource;
 
-    // #[test]
-    // fn get_wifi_interface() {
-    //     let interface = crate::network::get_wifi_interface();
-    //     println!("wifi interface: {}", interface);
-    // }
+    #[test]
+    fn get_wifi_interface() {
+        let interface =
+            &crate::network::get_wifi_interfaces().expect("no wifi interface present")[0];
+        println!("wifi interface: {}", interface.0);
+    }
 
     #[test]
     fn delete_network() {
