@@ -1,4 +1,4 @@
-## Version 7.0 supports Android and iOS!
+## Version 7 supports Android and iOS!
 
 Android version is available [here](https://play.google.com/store/apps/details?id=dev.spiegl.flyingcarpet), or if you prefer to sideload, `android_FlyingCarpet.apk` is available on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page.
 

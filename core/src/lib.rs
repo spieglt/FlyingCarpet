@@ -389,7 +389,7 @@ async fn confirm_version(
 
 // TODO:
 // fix tests
-// add license and modify cargo.toml
+// add license to file and cargo.toml
 // code signing for windows?
 // fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux
 // wifi networks not being deleted on linux (when hosting)?
@@ -408,4 +408,3 @@ async fn confirm_version(
 // remove file selection box and replace start button with Choose Files/Choose Folder? gets in the way of drag and drop... so no?
 // optional password length?
 // move password length constant into rust, fetch in javascript
-// replace logo with svg?

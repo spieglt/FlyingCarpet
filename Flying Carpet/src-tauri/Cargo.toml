@@ -1,6 +1,6 @@
 [package]
 name = "flying-carpet"
-version = "7.0.0"
+version = "7.1.0"
 description = "Encrypted file transfer over ad hoc WiFi between Android, iOS, Linux, macOS, and Windows"
 authors = ["Theron Spiegl"]
 license = "BSD-3-clause"
