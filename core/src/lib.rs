@@ -392,6 +392,7 @@ async fn confirm_version(
 // add license and modify cargo.toml
 // code signing for windows?
 // fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux
+// wifi networks not being deleted on linux (when hosting)?
 // update screenshots?
 // show qr code after refresh
 // test pulling wifi card, quitting program, etc.

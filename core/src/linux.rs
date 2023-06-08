@@ -109,7 +109,7 @@ pub fn stop_hotspot(peer_resource: &PeerResource) -> Result<(), Box<dyn Error>> 
                 let stderr = String::from_utf8_lossy(&command_output.stderr);
                 Err(format!("Error stopping hotspot: {}", stderr))?;
             }
-            let _output = String::from_utf8_lossy(&command_output.stdout);
+            // let output = String::from_utf8_lossy(&command_output.stdout);
             // println!("Stop hotspot output: {}", output);
         }
         _ => (),
