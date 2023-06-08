@@ -389,8 +389,9 @@ async fn confirm_version(
 
 // TODO:
 // fix tests
+// add license and modify cargo.toml
 // code signing for windows?
-// fix bug where multiple start/cancel clicks while waiting for transfer stack, at least on linux
+// fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux
 // update screenshots?
 // show qr code after refresh
 // test pulling wifi card, quitting program, etc.
