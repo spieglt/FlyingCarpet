@@ -40,8 +40,6 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 
 + Apple devices can only transfer to/from Android, Linux, and Windows as they can no longer programmatically run hotspots. Use AirDrop instead for Apple-to-Apple transfers.
 
-+ Google's official QR code scanner is broken on some devices, which prevents affected Android devices from sending to Android, and from sending and receiving to Linux and Windows. [More information.](https://issuetracker.google.com/issues/261579118) Deleting Google Play Services' data and cache, and letting them re-download, appears to fix the issue. [Instructions here.](https://support.google.com/googleplay/answer/9037938)
-
 + Disables your wireless internet connection while in use. (Does not apply to Windows or Android when hosting the hotspot.)
 
 + macOS sometimes switches back to a wireless network with internet connectivity during particularly long transfers. I haven't been able to replicate this reliably and am not sure if a fix is possible. Please file an issue if you experience this.
