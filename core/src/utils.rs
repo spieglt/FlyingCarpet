@@ -5,7 +5,6 @@ use std::{
     path::PathBuf,
     process,
 };
-use windows::core::PCSTR;
 
 use crate::MAJOR_VERSION;
 
@@ -118,8 +117,4 @@ mod tests {
 
 pub fn rust_to_c_string(s: &str) -> *const c_char {
     CString::new(s).unwrap().into_raw()
-}
-
-pub fn rust_to_pcstr(s: &str) -> PCSTR {
-    PCSTR::from_raw(CString::new(s).unwrap().into_raw() as *const u8)
 }

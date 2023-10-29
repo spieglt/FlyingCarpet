@@ -1,4 +1,4 @@
-use crate::utils::{run_command, rust_to_pcstr};
+use crate::utils::run_command;
 use crate::{Mode, Peer, PeerResource, WiFiInterface, UI};
 use regex::Regex;
 use std::env::current_exe;
@@ -494,6 +494,10 @@ fn is_hosting(peer: Peer, mode: Mode) -> bool {
             Mode::Receive(_) => true,
         },
     }
+}
+
+pub fn rust_to_pcstr(s: &str) -> PCSTR {
+    PCSTR::from_raw(CString::new(s).unwrap().into_raw() as *const u8)
 }
 
 #[cfg(test)]
