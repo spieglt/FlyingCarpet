@@ -3,12 +3,12 @@ use crate::{Mode, Peer, PeerResource, WiFiInterface, UI};
 use regex::Regex;
 use std::env::current_exe;
 use std::error::Error;
-use std::ffi::c_void;
+use std::ffi::{c_void, CString};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 use wifidirect_legacy_ap::WlanHostedNetworkHelper;
-use windows::core::{GUID, HSTRING, PCWSTR, PSTR};
+use windows::core::{GUID, HSTRING, PCWSTR, PCSTR, PSTR};
 use windows::Win32::Foundation::{GetLastError, ERROR_SUCCESS, HANDLE, WIN32_ERROR};
 use windows::Win32::NetworkManagement::IpHelper;
 use windows::Win32::NetworkManagement::WiFi::{
