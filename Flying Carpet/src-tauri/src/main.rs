@@ -4,7 +4,7 @@
 )]
 
 use flying_carpet_core::{
-    clean_up_transfer, network, start_transfer, utils, PeerResource, Transfer, WiFiInterface, UI,
+    clean_up_transfer, network, start_transfer, utils, Transfer, WiFiInterface, UI,
 };
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -86,9 +86,6 @@ fn cancel_transfer(window: Window, state: State<Transfer>) -> String {
     let hotspot = state
         .hotspot
         .lock()
-        .expect("Couldn't lock outer state hotspot mutex.");
-    let hotspot = hotspot
-        .lock()
         .expect("Couldn't lock inner state hotspot mutex.");
     if let Some(hotspot) = &*hotspot {
         match network::stop_hotspot(&hotspot) {
@@ -120,15 +117,8 @@ fn start_async(
         window: Arc::new(Mutex::new(thread_window)),
     };
 
-    // let tauri_hotspot = Arc::new(Mutex::<Option<PeerResource>>::new(None));
-    // let transfer_hotspot = tauri_hotspot.clone();
-    // let mut tauri_hotspot_mutex = state.hotspot.lock().expect("Couldn't lock outer hotspot mutex.");
-    // *tauri_hotspot_mutex = tauri_hotspot;
-
-    let hotspot = state.hotspot.lock().expect("Couldn't lock hotspot mutex.");
-    let transfer_hotspot: std::sync::Arc<std::sync::Mutex<Option<PeerResource>>> =
-        (*hotspot).clone();
-    let cleanup_hotspot = transfer_hotspot.clone();
+    let transfer_hotspot = state.hotspot.clone();
+    let transfer_ssid = state.ssid.clone();
 
     let cancel_handle = tokio::spawn(async move {
         let stream = start_transfer(
@@ -140,10 +130,11 @@ fn start_async(
             file_list,
             receive_dir,
             &gui,
-            transfer_hotspot,
+            transfer_hotspot.clone(),
+            transfer_ssid.clone(),
         )
         .await;
-        clean_up_transfer(stream, cleanup_hotspot, &gui).await;
+        clean_up_transfer(stream, transfer_hotspot, &gui).await;
     });
     let mut state_cancel_handle = state.cancel_handle.lock().unwrap();
     *state_cancel_handle = Some(cancel_handle);

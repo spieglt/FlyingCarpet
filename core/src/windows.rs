@@ -1,14 +1,14 @@
-use crate::utils::run_command;
 use crate::{Mode, Peer, PeerResource, WiFiInterface, UI};
 use regex::Regex;
 use std::env::current_exe;
 use std::error::Error;
 use std::ffi::{c_void, CString};
+use std::os::windows::process::CommandExt;
 use std::sync::mpsc;
-use std::thread;
 use std::time::Duration;
+use std::{process, thread};
 use wifidirect_legacy_ap::WlanHostedNetworkHelper;
-use windows::core::{GUID, HSTRING, PCWSTR, PCSTR, PSTR};
+use windows::core::{GUID, HSTRING, PCSTR, PCWSTR, PSTR};
 use windows::Win32::Foundation::{GetLastError, ERROR_SUCCESS, HANDLE, WIN32_ERROR};
 use windows::Win32::NetworkManagement::IpHelper;
 use windows::Win32::NetworkManagement::WiFi::{
@@ -89,7 +89,6 @@ pub async fn connect_to_peer<T: UI>(
         // or is there a chance that cancelling during that .await could let this function complete?
         Ok(PeerResource::WifiClient(
             gateway.expect("Gateway == None when it shouldn't"),
-            ssid,
         ))
     }
 }
@@ -133,7 +132,7 @@ pub fn stop_hotspot(peer_resource: &PeerResource) -> Result<(), Box<dyn Error>> 
     // if we're joining, not hosting, we don't need to do anything here. and on windows PeerResource should never be LinuxHotspot.
     match peer_resource {
         PeerResource::WindowsHotspot(hotspot) => hotspot._inner.stop()?,
-        PeerResource::WifiClient(_, _ssid) => {
+        PeerResource::WifiClient(_) => {
             // delete network? no, letting the hotspot disappear is better because the client automatically goes back to its previous network
             // and this way we don't have to keep the previous ssid
         }
@@ -427,10 +426,12 @@ fn check_for_firewall_rule() -> Result<bool, Box<dyn Error>> {
         .expect("Error: couldn't convert path to string.")
         .to_string_lossy();
     let name = format!("name=\"{}\"", file_name);
-    match run_command(
-        "netsh",
-        Some(vec!["advfirewall", "firewall", "show", "rule", &name]),
-    ) {
+    const CREATE_NO_WINDOW: u32 = 0x08000000; // https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
+    let mut command = process::Command::new("netsh");
+    let command = command
+        .args(vec!["advfirewall", "firewall", "show", "rule", &name])
+        .creation_flags(CREATE_NO_WINDOW);
+    match command.output() {
         Ok(output) => {
             // if output contains enabled: true, return true
             let output_string = String::from_utf8_lossy(&output.stdout).to_string();

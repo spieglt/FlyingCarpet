@@ -57,9 +57,9 @@ impl From<&str> for Peer {
 }
 
 pub enum PeerResource {
-    WifiClient(String, String), // if joining, .0 is ip of gateway/peer/host, .1 is ssid of hotspot
+    WifiClient(String), // used if joining, .0 is ip of gateway/peer/host
     WindowsHotspot(network::WindowsHotspot),
-    LinuxHotspot(String), // ssid of network, used to tear down later
+    LinuxHotspot,
 }
 
 // first String is the interface's name, second String is a base-10 representation of the u128 representation of the GUID of the interface. GUID is only used on Windows.
@@ -68,18 +68,16 @@ pub struct WiFiInterface(pub String, pub String);
 
 pub struct Transfer {
     pub cancel_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    // this is insane. we need the outer mutex for Tauri state: it's immutable, so mutex gives us thread-safe interior mutability.
-    // the arc is necessary because we need to clone the value and hand it to another thread: we need it to have multiple owners.
-    // but that's all an arc gets you, so we need the inner mutex to change the value. and the option because we need to initialize
-    // it at the start of the Tauri program, before any of the code in this library runs.
-    pub hotspot: Mutex<Arc<Mutex<Option<PeerResource>>>>,
+    pub hotspot: Arc<Mutex<Option<PeerResource>>>,
+    pub ssid: Arc<Mutex<Option<String>>>,
 }
 
 impl Transfer {
     pub fn new() -> Self {
         Transfer {
             cancel_handle: Mutex::new(None),
-            hotspot: Mutex::new(Arc::new(Mutex::new(None))),
+            hotspot: Arc::new(Mutex::new(None)),
+            ssid: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -94,6 +92,7 @@ pub async fn start_transfer<T: UI>(
     receive_dir: Option<String>,
     ui: &T,
     hotspot: Arc<Mutex<Option<PeerResource>>>,
+    state_ssid: Arc<Mutex<Option<String>>>,
 ) -> Option<TcpStream> {
     let peer = Peer::from(peer.as_str());
 
@@ -116,6 +115,11 @@ pub async fn start_transfer<T: UI>(
     let key = hasher.finalize();
     let _ssid = format!("flyingCarpet_{:02x}{:02x}", key[0], key[1]);
     let ssid = ssid.or(Some(_ssid)).unwrap();
+
+    {
+        let mut _state_ssid = state_ssid.lock().expect("Couldn't lock state_ssid");
+        *_state_ssid = Some(ssid.clone());
+    }
 
     // start hotspot or connect to peer's
     let peer_resource =
@@ -269,7 +273,7 @@ async fn start_tcp<T: UI>(
 ) -> Result<TcpStream, Box<dyn Error>> {
     let stream;
     match peer_resource {
-        PeerResource::WifiClient(gateway, _) => {
+        PeerResource::WifiClient(gateway) => {
             let addr = format!("{}:3290", gateway).parse::<SocketAddr>()?;
             stream = TcpStream::connect(addr).await?;
         }
@@ -312,26 +316,10 @@ async fn confirm_mode(
                 Err(msg)?
             }
         }
-        PeerResource::WindowsHotspot(_hosted_network) => {
+        // TODO: LinuxHotspot needed at all?
+        PeerResource::WindowsHotspot(_) | PeerResource::LinuxHotspot => {
             // wait for guest to say what mode they selected, compare to our own, and report back
             let peer_mode = stream.read_u64().await?;
-            if peer_mode == our_mode {
-                let msg = format!(
-                    "Both ends of the transfer selected {}",
-                    if our_mode == 0 { "receive" } else { "send" }
-                );
-                // write failure to guest
-                stream.write_u64(0).await?;
-                Err(msg)?
-            } else {
-                // write success to guest
-                stream.write_u64(1).await?;
-            }
-        }
-        PeerResource::LinuxHotspot(_ssid) => {
-            // we're hosting, so wait for guest to say what mode they selected, compare to our own, and report back
-            let peer_mode = stream.read_u64().await?;
-
             if peer_mode == our_mode {
                 let msg = format!(
                     "Both ends of the transfer selected {}",

@@ -31,7 +31,7 @@ pub async fn connect_to_peer<T: UI>(
         // start hotspot
         ui.output(&format!("Starting hotspot {}", ssid));
         start_hotspot(&ssid, &password, &interface.0)?;
-        Ok(PeerResource::LinuxHotspot(ssid))
+        Ok(PeerResource::LinuxHotspot)
     } else {
         // join hotspot and find gateway
         ui.output(&format!("Joining hotspot {}", ssid));
