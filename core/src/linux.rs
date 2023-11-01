@@ -42,7 +42,7 @@ pub async fn connect_to_peer<T: UI>(
             match find_gateway(&interface.0) {
                 Ok(gateway) => {
                     if gateway != "" {
-                        return Ok(PeerResource::WifiClient(gateway, ssid));
+                        return Ok(PeerResource::WifiClient(gateway));
                     }
                 }
                 Err(e) => Err(e)?,
@@ -100,19 +100,16 @@ fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<
     Ok(())
 }
 
-pub fn stop_hotspot(peer_resource: &PeerResource) -> Result<(), Box<dyn Error>> {
-    match peer_resource {
-        PeerResource::LinuxHotspot(ssid) | PeerResource::WifiClient(_, ssid) => {
-            let options = Some(vec!["connection", "delete", ssid]);
-            let command_output = run_command("nmcli", options)?;
-            if !command_output.status.success() {
-                let stderr = String::from_utf8_lossy(&command_output.stderr);
-                Err(format!("Error stopping hotspot: {}", stderr))?;
-            }
-            // let output = String::from_utf8_lossy(&command_output.stdout);
-            // println!("Stop hotspot output: {}", output);
+pub fn stop_hotspot(_peer_resource: Option<&PeerResource>, ssid: Option<&str>) -> Result<(), Box<dyn Error>> {
+    if ssid.is_some() {
+        let options = Some(vec!["connection", "delete", ssid.unwrap()]);
+        let command_output = run_command("nmcli", options)?;
+        if !command_output.status.success() {
+            let stderr = String::from_utf8_lossy(&command_output.stderr);
+            Err(format!("Error stopping hotspot: {}", stderr))?;
         }
-        _ => (),
+        let output = String::from_utf8_lossy(&command_output.stdout);
+        println!("Stop hotspot output: {}", output);
     }
     Ok(())
 }
@@ -189,22 +186,22 @@ mod test {
     fn start_and_stop_hotspot() {
         let ssid = "flyingCarpet_1234";
         let password = "password";
-        let _pr = PeerResource::WifiClient("".to_string(), ssid.to_string());
+        let _pr = PeerResource::WifiClient("".to_string());
         let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].0;
         crate::network::start_hotspot(ssid, password, interface).unwrap();
-        // std::thread::sleep(std::time::Duration::from_secs(500));
-        // crate::network::stop_hotspot(&pr).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        crate::network::stop_hotspot(Some(&_pr), Some(ssid)).unwrap();
     }
 
     #[test]
     fn join_hotspot() {
         let ssid = "";
         let password = "";
-        let pr = PeerResource::WifiClient("".to_string(), ssid.to_string());
+        let pr = PeerResource::WifiClient("".to_string());
         let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].0;
         crate::network::join_hotspot(ssid, password, &interface).unwrap();
         std::thread::sleep(std::time::Duration::from_secs(20));
-        crate::network::stop_hotspot(&pr).unwrap();
+        crate::network::stop_hotspot(Some(&pr), Some(ssid)).unwrap();
     }
 
     #[test]

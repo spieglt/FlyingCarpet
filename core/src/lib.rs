@@ -232,6 +232,7 @@ pub async fn start_transfer<T: UI>(
 pub async fn clean_up_transfer<T: UI>(
     stream: Option<TcpStream>,
     hotspot: Arc<Mutex<Option<PeerResource>>>,
+    ssid: Arc<Mutex<Option<String>>>,
     ui: &T,
 ) {
     // shut down tcp stream
@@ -244,7 +245,7 @@ pub async fn clean_up_transfer<T: UI>(
         None => (),
     }
     // shut down hotspot
-    shut_down_hotspot(&hotspot, ui);
+    shut_down_hotspot(&hotspot, &ssid, ui);
     // make sure hotspot gets dropped
     let mut hotspot_value = hotspot.lock().expect("Couldn't lock hotspot mutex");
     *hotspot_value = None;
@@ -252,16 +253,11 @@ pub async fn clean_up_transfer<T: UI>(
     ui.enable_ui();
 }
 
-fn shut_down_hotspot<T: UI>(hotspot: &Arc<Mutex<Option<PeerResource>>>, ui: &T) {
+fn shut_down_hotspot<T: UI>(hotspot: &Arc<Mutex<Option<PeerResource>>>, ssid: &Arc<Mutex<Option<String>>>, ui: &T) {
     let peer_resource = hotspot.lock().expect("Couldn't lock hotspot mutex.");
-    let peer_resource = match peer_resource.as_ref() {
-        Some(pr) => pr,
-        None => {
-            // ui.output("No peer resource to clean up");
-            return;
-        }
-    };
-    match network::stop_hotspot(peer_resource) {
+    let peer_resource = peer_resource.as_ref();
+    let ssid = ssid.lock().expect("Couldn't lock SSID mutex.");
+    match network::stop_hotspot(peer_resource, ssid.as_deref()) {
         Err(e) => ui.output(&format!("Error stopping hotspot: {}", e)),
         _ => (),
     };

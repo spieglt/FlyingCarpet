@@ -86,13 +86,17 @@ fn cancel_transfer(window: Window, state: State<Transfer>) -> String {
     let hotspot = state
         .hotspot
         .lock()
-        .expect("Couldn't lock inner state hotspot mutex.");
-    if let Some(hotspot) = &*hotspot {
-        match network::stop_hotspot(&hotspot) {
-            Err(e) => message += &format!("Error stopping hotspot: {} \n", e),
-            _ => (),
-        };
-    }
+        .expect("Couldn't lock state hotspot mutex.");
+    let hotspot = &*hotspot;
+    let ssid = state
+        .ssid
+        .lock()
+        .expect("Couldn't lock state ssid mutex.");
+    let ssid = &*ssid;
+    match network::stop_hotspot(hotspot.as_ref(), ssid.as_deref()) {
+        Err(e) => message += &format!("Error stopping hotspot: {} \n", e),
+        _ => (),
+    };
 
     window
         .emit("enableUi", Progress { value: 0 })
@@ -134,7 +138,7 @@ fn start_async(
             transfer_ssid.clone(),
         )
         .await;
-        clean_up_transfer(stream, transfer_hotspot, &gui).await;
+        clean_up_transfer(stream, transfer_hotspot, transfer_ssid, &gui).await;
     });
     let mut state_cancel_handle = state.cancel_handle.lock().unwrap();
     *state_cancel_handle = Some(cancel_handle);
