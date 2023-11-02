@@ -128,13 +128,12 @@ fn start_wifi_direct<T: UI>(
     }
 }
 
-pub fn stop_hotspot(peer_resource: &PeerResource) -> Result<(), Box<dyn Error>> {
+pub fn stop_hotspot(peer_resource: Option<&PeerResource>, _ssid: Option<&str>) -> Result<(), Box<dyn Error>> {
     // if we're joining, not hosting, we don't need to do anything here. and on windows PeerResource should never be LinuxHotspot.
     match peer_resource {
-        PeerResource::WindowsHotspot(hotspot) => hotspot._inner.stop()?,
-        PeerResource::WifiClient(_) => {
-            // delete network? no, letting the hotspot disappear is better because the client automatically goes back to its previous network
-            // and this way we don't have to keep the previous ssid
+        Some(PeerResource::WindowsHotspot(hotspot)) => hotspot._inner.stop()?,
+        Some(PeerResource::WifiClient(_)) => {
+            // TODO: delete network? no, letting the hotspot disappear is better because the client automatically goes back to its previous network?
         }
         _ => (),
     }
