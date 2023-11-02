@@ -16,16 +16,13 @@ pub struct WindowsHotspot {
     _inner: (),
 }
 
-pub fn stop_hotspot(peer_resource: &PeerResource) -> Result<(), Box<dyn Error>> {
-    if let PeerResource::WifiClient(_gateway, ssid) = peer_resource {
-        // TODO: having access to the selected interface here would require it being in Tauri state,
-        // which we want to avoid, and we know since we're on mac that we're only using one wifi interface
+pub fn stop_hotspot(_peer_resource: Option<&PeerResource>, ssid: Option<&str>) -> Result<(), Box<dyn Error>> {
+    if let Some(ssid) = ssid {
         let interface = get_wifi_interfaces()?[0].0.to_string();
         let output = process::Command::new("networksetup")
             .args(vec!["-removepreferredwirelessnetwork", &interface, ssid])
             .output()?;
         let _stdout = String::from_utf8_lossy(&output.stdout);
-        // println!("{}", _stdout);
 
         for mode in ["off", "on"] {
             process::Command::new("networksetup")
@@ -63,7 +60,7 @@ pub async fn connect_to_peer<T: UI>(
     loop {
         // println!("looking for gateway");
         if let Some(gateway) = find_gateway(&interface) {
-            return Ok(PeerResource::WifiClient(gateway, ssid));
+            return Ok(PeerResource::WifiClient(gateway));
         } else {
             tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
         }
@@ -114,7 +111,6 @@ pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, Box<dyn Error>> {
 
 #[cfg(test)]
 mod test {
-    use crate::PeerResource;
 
     #[test]
     fn get_wifi_interface() {
@@ -125,7 +121,7 @@ mod test {
 
     #[test]
     fn delete_network() {
-        match super::stop_hotspot(&PeerResource::WifiClient("".to_string(), "".to_string())) {
+        match super::stop_hotspot(None, Some("flyingCarpet_abcd")) {
             Ok(()) => (),
             Err(e) => println!("{:?}", e),
         };
