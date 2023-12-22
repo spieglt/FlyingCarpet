@@ -20,7 +20,7 @@ use tokio::{
 };
 
 const CHUNKSIZE: usize = 1_000_000; // 1 MB
-const MAJOR_VERSION: u64 = 7;
+const MAJOR_VERSION: u64 = 8;
 
 pub trait UI: Clone + Send + 'static {
     fn output(&self, msg: &str);
@@ -372,11 +372,11 @@ async fn confirm_version(
 }
 
 // TODO:
+// folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh.
+// version bump
 // fix tests
-// add license to file and cargo.toml
 // code signing for windows?
 // fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux
-// wifi networks not being deleted on linux (when hosting)?
 // update screenshots?
 // show qr code after refresh
 // test pulling wifi card, quitting program, etc.

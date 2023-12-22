@@ -29,6 +29,7 @@ pub async fn receive_file<T: UI>(
 
     // receive file details
     let (filename, file_size) = receive_file_details(stream).await?;
+    // TODO: convert forward slashes to backslashes before receiving if mirroring?
     ui.output(&format!("Filename: {}", filename));
     ui.output(&format!(
         "File size: {}",
@@ -36,12 +37,27 @@ pub async fn receive_file<T: UI>(
     ));
     let mut bytes_left = file_size;
 
-    // check if file being received already exists. if so, find new filename.
+    // see if we already have the file being sent
     let mut full_path = folder.clone();
     full_path.push(&filename);
+    let need_transfer = check_for_file(&full_path, file_size, stream).await?;
+    if !need_transfer {
+        ui.output("Recipient already has this file, skipping.");
+        return Ok(())
+    }
+
+    // make parent directories if necessary
+    utils::make_parent_directories(&full_path)?;
+
+    // check if file being received already exists. if so, find new filename.
     let mut i = 1;
     while full_path.is_file() {
-        let new_name = format!("({}) ", i) + &filename;
+        let file_name = full_path
+            .file_name()
+            .expect("could not get filename from full path")
+            .to_str()
+            .expect("could not convert filename to str");
+        let new_name = format!("({}) ", i) + file_name;
         full_path.pop();
         full_path.push(new_name);
         i += 1;
@@ -142,4 +158,34 @@ async fn receive_file_details(stream: &mut TcpStream) -> std::io::Result<(String
     // receive file size
     let file_size = stream.read_u64().await?;
     Ok((filename, file_size))
+}
+
+// returns Ok(true) if we need to perform the transfer
+async fn check_for_file(filename: &Path, size: u64, stream: &mut TcpStream) -> Result<bool, Box<dyn Error>> {
+    // check if file by this name and size exists
+    if filename.is_file() {
+        // check size
+        let metadata = fs::metadata(filename)?;
+        let local_size = metadata.len();
+        if size == local_size {
+            stream.write_u64(1).await?;
+            let mut hashes_match = true;
+            let local_hash = utils::hash_file(filename)?;
+            let mut peer_hash = vec![0; 32];
+            stream.read_exact(&mut peer_hash).await?;
+            for i in 0..local_hash.len() {
+                if local_hash[i] != peer_hash[i] {
+                    hashes_match = false;
+                }
+            }
+            stream.write_u64(if hashes_match { 1 } else { 0 }).await?;
+            Ok(!hashes_match)
+        } else {
+            stream.write_u64(0).await?;
+            Ok(true)
+        }
+    } else {
+        stream.write_u64(0).await?;
+        Ok(true)
+    }
 }
