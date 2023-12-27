@@ -373,7 +373,6 @@ async fn confirm_version(
 
 // TODO:
 // folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh.
-// version bump
 // fix tests
 // code signing for windows?
 // fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux
