@@ -14,6 +14,7 @@ use tokio::{
 
 pub async fn send_file<T: UI>(
     file: &Path,
+    prefix: &Path,
     key: &[u8],
     stream: &mut TcpStream,
     ui: &T,
@@ -27,13 +28,16 @@ pub async fn send_file<T: UI>(
     ui.output(&format!("File size: {}", utils::make_size_readable(size)));
 
     // send file details
-    // TODO: leave paths in here relative to base dir
-    let filename = file
-        .file_name()
-        .expect("could not extract filename from path");
-    // TODO: convert backslashes to forward slashes before sending if mirroring
+    let mut filename = file
+        .strip_prefix(prefix)?
+        .to_string_lossy()
+        .to_string();
+    #[cfg(windows)]
+    {
+        filename = filename.replace("\\", "/");
+    }
     send_file_details(
-        filename.to_str().expect("couldn't convert filename to str"),
+        &filename,
         size,
         stream,
     )
