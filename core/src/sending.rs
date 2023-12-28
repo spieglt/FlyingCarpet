@@ -32,8 +32,7 @@ pub async fn send_file<T: UI>(
         .strip_prefix(prefix)?
         .to_string_lossy()
         .to_string();
-    #[cfg(windows)]
-    {
+    if cfg!(windows) {
         filename = filename.replace("\\", "/");
     }
     send_file_details(
