@@ -1,9 +1,9 @@
 [package]
 name = "flying-carpet"
-version = "7.1.0"
+version = "8.0.0"
 description = "Encrypted file transfer over ad hoc WiFi between Android, iOS, Linux, macOS, and Windows"
 authors = ["Theron Spiegl"]
-license = "BSD-3-clause"
+license = "GPL-3.0-only"
 repository = "https://github.com/spieglt/flyingcarpet"
 edition = "2021"
 rust-version = "1.57"

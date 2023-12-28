@@ -14,6 +14,7 @@ use tokio::{
 
 pub async fn send_file<T: UI>(
     file: &Path,
+    prefix: &Path,
     key: &[u8],
     stream: &mut TcpStream,
     ui: &T,
@@ -27,15 +28,26 @@ pub async fn send_file<T: UI>(
     ui.output(&format!("File size: {}", utils::make_size_readable(size)));
 
     // send file details
-    let filename = file
-        .file_name()
-        .expect("could not extract filename from path");
+    let mut filename = file
+        .strip_prefix(prefix)?
+        .to_string_lossy()
+        .to_string();
+    if cfg!(windows) {
+        filename = filename.replace("\\", "/");
+    }
     send_file_details(
-        filename.to_str().expect("couldn't convert filename to str"),
+        &filename,
         size,
         stream,
     )
     .await?;
+
+    // check to see if receiving end already has the file
+    let need_transfer = check_for_file(&file, stream).await?;
+    if !need_transfer {
+        ui.output("Recipient already has this file, skipping.");
+        return Ok(())
+    }
 
     // show progress bar
     ui.show_progress_bar();
@@ -121,6 +133,21 @@ async fn send_file_details(
     stream.write_u64(size).await?;
     Ok(())
 }
+
+// returns Ok(true) if we need to perform the transfer
+async fn check_for_file(filename: &Path, stream: &mut TcpStream) -> Result<bool, Box<dyn Error>> {
+    let has_file = stream.read_u64().await?;
+    if has_file == 1 {
+        let hash = utils::hash_file(filename)?;
+        stream.write(&hash).await?;
+        let hashes_match = stream.read_u64().await?;
+        Ok(hashes_match != 1) // if hashes match, return false because we don't need transfer
+    } else {
+        Ok(true)
+    }
+}
+
+
 
 /*
 mod tests {

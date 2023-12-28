@@ -20,7 +20,7 @@ use tokio::{
 };
 
 const CHUNKSIZE: usize = 1_000_000; // 1 MB
-const MAJOR_VERSION: u64 = 7;
+const MAJOR_VERSION: u64 = 8;
 
 pub trait UI: Clone + Send + 'static {
     fn output(&self, msg: &str);
@@ -177,6 +177,17 @@ pub async fn start_transfer<T: UI>(
                     return Some(stream);
                 }
             }
+            // find folder common to all files
+            let mut common_folder = files[0].parent().expect("file has no parent");
+            if files.len() > 1 {
+                for file in &files[1..] {
+                    let current = file.parent().expect("file has no parent");
+                    if current.components().collect::<Vec<_>>().len() < common_folder.components().collect::<Vec<_>>().len() {
+                        common_folder = current;
+                    }
+                }
+            }
+            ui.output(&format!("common folder: {}", common_folder.display()));
             // send files
             for (i, file) in files.iter().enumerate() {
                 let file_name = file
@@ -190,7 +201,7 @@ pub async fn start_transfer<T: UI>(
                     files.len(),
                     file_name
                 ));
-                match sending::send_file(file, &key, &mut stream, ui).await {
+                match sending::send_file(file, common_folder, &key, &mut stream, ui).await {
                     Ok(_) => (),
                     Err(e) => {
                         ui.output(&format!("Error sending file: {}", e));
@@ -372,11 +383,10 @@ async fn confirm_version(
 }
 
 // TODO:
+// folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh.
 // fix tests
-// add license to file and cargo.toml
 // code signing for windows?
 // fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux
-// wifi networks not being deleted on linux (when hosting)?
 // update screenshots?
 // show qr code after refresh
 // test pulling wifi card, quitting program, etc.

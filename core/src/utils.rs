@@ -1,8 +1,11 @@
 use rand::Rng;
+use sha2::{Sha256, Digest};
 use std::{
+    error::Error,
     ffi::{c_char, CString},
     fs,
-    path::PathBuf,
+    io,
+    path::{PathBuf, Path},
     process,
 };
 
@@ -34,6 +37,20 @@ pub fn expand_dir(dir: PathBuf) -> (Vec<String>, Vec<PathBuf>) {
         }
     }
     (files_found, dirs_to_search)
+}
+
+pub fn make_parent_directories(full_path: &Path) -> io::Result<()> {
+    if let Some(dirs) = full_path.parent() {
+        fs::create_dir_all(dirs)?;
+    }
+    Ok(())
+}
+
+pub fn hash_file(filename: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
+    let mut file = fs::File::open(filename)?;
+    let mut hasher = Sha256::new();
+    io::copy(&mut file, &mut hasher)?;
+    Ok(hasher.finalize().to_vec())
 }
 
 pub fn generate_password() -> String {
@@ -77,8 +94,7 @@ pub fn format_time(seconds: f64) -> String {
 }
 
 pub fn is_compatible(peer_version: u64) -> bool {
-    // for version 7, we will only be compatible with version 7
-    // a future version 8 might be compatible with version 7, and would need to make that decision here.
+    // version 8 is not compatible with previous versions
     peer_version == MAJOR_VERSION
 }
 

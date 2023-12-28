@@ -1,10 +1,10 @@
-## Version 7 supports Android and iOS!
+## Version 8 adds the option to send folders from Android and iOS
 
 Android version is available [here](https://play.google.com/store/apps/details?id=dev.spiegl.flyingcarpet), or if you prefer to sideload, `android_FlyingCarpet.apk` is available on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page.
 
 iOS version [here](https://apps.apple.com/us/app/flying-carpet-file-transfer/id1637377410) or search the App Store for "Flying Carpet File Transfer".
 
-Linux, macOS, and Windows versions available on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page. Installers and standalone executable versions available.
+Linux, macOS, and Windows versions are available on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page. Installers and standalone executable versions available.
 
 # Flying Carpet
 
@@ -43,10 +43,6 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 + Disables your wireless internet connection while in use. (Does not apply to Windows or Android when hosting the hotspot.)
 
 + macOS sometimes switches back to a wireless network with internet connectivity during particularly long transfers. I haven't been able to replicate this reliably and am not sure if a fix is possible. Please file an issue if you experience this.
-
-+ Flying Carpet should rejoin you to your previous wireless network after a completed or canceled transfer. This may not happen if the program freezes, crashes, or if the windows is closed during operation.
-
-+ Flying Carpet no longer preserves directory structure when sending a folder. This became too complicated once the mobile versions entered the picture. If this feature is desired, please email me at theron@spiegl.dev or file an issue. Or, as a workaround, just zip the directory before sending and unzip on the other device.
 
 ## Planned Features
 
