@@ -746,7 +746,7 @@ dependencies = [
 
 [[package]]
 name = "flying-carpet"
-version = "8.0.0"
+version = "8.0.1"
 dependencies = [
  "flying-carpet-core",
  "serde",
@@ -758,7 +758,7 @@ dependencies = [
 
 [[package]]
 name = "flying-carpet-core"
-version = "8.0.0"
+version = "8.0.1"
 dependencies = [
  "aes-gcm",
  "rand 0.8.5",

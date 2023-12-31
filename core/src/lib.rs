@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use std::{
     error::Error,
     net::SocketAddr,
-    path::PathBuf,
+    path::{PathBuf, Path},
     str::FromStr,
     sync::{Arc, Mutex},
 };
@@ -178,16 +178,19 @@ pub async fn start_transfer<T: UI>(
                 }
             }
             // find folder common to all files
-            let mut common_folder = files[0].parent().expect("file has no parent");
+            let mut common_folder = files[0].parent().or(Some(Path::new(""))).unwrap();
             if files.len() > 1 {
                 for file in &files[1..] {
-                    let current = file.parent().expect("file has no parent");
-                    if current.components().collect::<Vec<_>>().len() < common_folder.components().collect::<Vec<_>>().len() {
+                    let current = file.parent().or(Some(Path::new(""))).unwrap();
+                    let current_len = current.components().collect::<Vec<_>>().len();
+                    let common_len = common_folder.components().collect::<Vec<_>>().len();
+                    if current_len < common_len {
                         common_folder = current;
+                    } else if current_len == common_len {
+                        common_folder = current.parent().or(Some(Path::new(""))).unwrap();
                     }
                 }
             }
-            ui.output(&format!("common folder: {}", common_folder.display()));
             // send files
             for (i, file) in files.iter().enumerate() {
                 let file_name = file

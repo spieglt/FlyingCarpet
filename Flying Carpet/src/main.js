@@ -383,9 +383,9 @@ window.modeChange = modeChange;
 window.peerChange = peerChange;
 
 const aboutMessage = `https://flyingcarpet.spiegl.dev
-Version: 8.0
+Version: 8.0.1
 theron@spiegl.dev
-Copyright (c) 2023, Theron Spiegl
+Copyright (c) 2024, Theron Spiegl
 All rights reserved.
 
 Flying Carpet performs file transfers between two laptops or phones (Android, iOS, Linux, Mac, Windows) via ad hoc WiFi. No access point or network gear is required. Just select a file, whether each device is sending or receiving, and the operating system of the other device. For mobile versions, search for "Flying Carpet File Transfer" in the Apple App Store or Google Play Store.
