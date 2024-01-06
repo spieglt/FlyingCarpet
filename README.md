@@ -44,6 +44,8 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 
 + macOS sometimes switches back to a wireless network with internet connectivity during particularly long transfers. I haven't been able to replicate this reliably and am not sure if a fix is possible. Please file an issue if you experience this.
 
++ The Android version does not work on Xiaomi, MIUI, or HarmonyOS devices, and possibly other Android-like OSes. I don't own these devices and so can't test, but it seems like this is due to lack of support for the [LocalOnlyHotspot](https://developer.android.com/develop/connectivity/wifi/localonlyhotspot) API. Flying Carpet requires at least Android 11/API level 30.
+
 ## Planned Features
 
 + Add Flying Carpet shortcut to iOS Share menu.
