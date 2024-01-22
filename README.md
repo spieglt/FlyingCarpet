@@ -34,6 +34,11 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 
 + Mac only: Install XCode. Open `FlyingCarpetMac/FlyingCarpetMac/FlyingCarpetMac.xcodeproj` and build it.
 
++ For Linux, install dependencies. Ubuntu 20 example:
+```
+sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pango-sys-dev libgdk3.0* librust-atk-dev librust-atk-sys-dev librust-gdk* libwebkit2gtk* librsvg2-dev
+```
+
 + Run `cargo tauri dev` to run a development version or `cargo tauri build` to create release artifacts.
 
 ## Restrictions:
