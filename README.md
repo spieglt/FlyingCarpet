@@ -47,11 +47,15 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 
 + Disables your wireless internet connection while in use. (Does not apply to Windows or Android when hosting the hotspot.)
 
-+ macOS sometimes switches back to a wireless network with internet connectivity during particularly long transfers. I haven't been able to replicate this reliably and am not sure if a fix is possible. Please file an issue if you experience this.
++ macOS sometimes switches back to a wireless network with internet connectivity during particularly long transfers.
 
-+ The Android version does not work on Xiaomi, MIUI, or HarmonyOS devices, and possibly other Android-like OSes. I don't own these devices and so can't test, but it seems like this is due to lack of support for the [LocalOnlyHotspot](https://developer.android.com/develop/connectivity/wifi/localonlyhotspot) API. Flying Carpet requires at least Android 11/API level 30.
++ The Android version requires at least Android 11/API level 30. There is a version requiring only Android 4.4/SDK 19 on the releases page, but I've heard two reports of it not working and I am not able to test or debug. The Android version does not work on some Xiaomi, MIUI, or HarmonyOS devices, and possibly other Android-like OSes. I don't own these devices and so can't test, but it seems like this is due to lack of support for the [LocalOnlyHotspot](https://developer.android.com/develop/connectivity/wifi/localonlyhotspot) API. It has been confirmed to work on at least one Xiaomi phone.
+
++ Requires Windows 10 or later.
 
 ## Planned Features
+
++ Bluetooth for connection negotiation (instead of QR code scanning or manual entry)?
 
 + Add Flying Carpet shortcut to iOS Share menu.
 
