@@ -1,6 +1,6 @@
 ## Version 8 adds the option to send folders from Android and iOS
 
-Android version is available [here](https://play.google.com/store/apps/details?id=dev.spiegl.flyingcarpet), or if you prefer to sideload, `android_FlyingCarpet.apk` is available on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page.
+Android version is available [here](https://play.google.com/store/apps/details?id=dev.spiegl.flyingcarpet), or if you prefer to sideload, `android_FlyingCarpet.apk` is available on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page. If anyone can add it to F-Droid now that the source is public, please do.
 
 iOS version [here](https://apps.apple.com/us/app/flying-carpet-file-transfer/id1637377410) or search the App Store for "Flying Carpet File Transfer".
 
@@ -53,6 +53,10 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 
 + Requires Windows 10 or later.
 
++ The Linux version was developed and tested on Linux Mint. I mainly intend for it to run on Debian-based distributions. I will try to help troubleshoot others if I can, but I may not be able to as I don't have access to spare machines. There has been at least one [issue](https://github.com/spieglt/FlyingCarpet/issues/64) running on Fedora, possibly to SELinux but I don't really know.
+
++ Sometimes when the Cancel button is hit on the desktop platforms, it can take time for the OS to finish trying to join or create a hotspot. Please only click the Cancel button once and wait a few seconds. This sounds like it should be easy to fix, but last time I tried it was not.
+
 ## Planned Features
 
 + Bluetooth for connection negotiation (instead of QR code scanning or manual entry)?
@@ -63,12 +67,8 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 
 + **Wasn't this a Go repo?** Yes, carcinization has come for the gopher. There were several issues I didn't know how to solve in the Go/Qt paradigm, especially with Windows: not being able to make a single-file executable, needing to Run as Administrator, and having to write the WiFi Direct DLL to a temp folder and link to it at runtime because Go doesn't work with MSVC. Plus it was fun to use `tokio`/`async` and `windows-rs`, with which the Windows networking portions are written. The GUI framework is now Tauri which gives a native experience on all platforms with a very small footprint. The Android version is written in Kotlin and the code is in this repository. The iOS version is written in Swift and the code is not public.
 
-+ **You're using SHA-256 to derive the key from a password. Isn't that bad? Shouldn't you be using a Password-Based Key Derivation Function like Scrypt or Argon2?** I was doing this before, but it wasn't strictly necessary because these keys are only used during the file transfer. For an attacker to intercept the data in transit, they'd need to be on the hotspot network, which is protected by WPA2, so they'd need to shoulder-surf the password or QR code. The change was made because I couldn't find a good Scrypt or Argon2 implementation on all platforms.
++ **You're using SHA-256 to derive the key from a password. Isn't that bad? Shouldn't you be using a Password-Based Key Derivation Function like Scrypt or Argon2?** I was doing this before, but it wasn't strictly necessary because these keys are only used during the file transfer. For an attacker to intercept the data in transit, they'd need to be on the hotspot network, which is protected by WPA2, so they'd need to shoulder-surf the password or QR code. The change to SHA-256 was made because I couldn't find a good Scrypt or Argon2 implementation on all platforms when I added the mobile versions.
 
 + **Why are you using AES-GCM at all if there's already WPA2 then?** When I started working on this project in 2017, I was trying to allow for IBSS WiFi networks on macOS that didn't use authentication. I was using the wrong encryption (and incorrectly) then, and later I added AES-GCM because it's the only good and official-ish AEAD implementation I could find in all of Go, Swift, Kotlin, and now Rust. If any cryptographers read this and find that I'm still being dumb, please let me know.
-
-## Questions for Hypothetical Users:
-
-+ Did anyone use the CLI version? Is there need for one now? With the original Go version, I wrote the CLI first and then learned how to make a GUI. For this version, with Tauri requiring Tokio, the async stuff is pretty deeply hooked in, so it didn't make sense to do the CLI first. It may be relatively straightforward to make a CLI version, but I might not do so unless people will use it. Please let me know: theron@spiegl.dev.
 
 If you've used Flying Carpet, please send feedback to theron@spiegl.dev. Thanks for your interest! Please also check out https://github.com/spieglt/cloaker, https://cloaker.mobi, and https://github.com/spieglt/whatfiles.
