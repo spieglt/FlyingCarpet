@@ -33,7 +33,7 @@ class About : DialogFragment() {
 
 const val AboutMessage = """
     https://flyingcarpet.spiegl.dev
-    Version 8.0.1
+    Version 8.0.2
     theron@spiegl.dev
     Copyright 2024, Theron Spiegl, all rights reserved.
     

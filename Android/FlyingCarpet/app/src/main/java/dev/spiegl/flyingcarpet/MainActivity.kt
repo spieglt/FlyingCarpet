@@ -69,13 +69,22 @@ class MainActivity : AppCompatActivity() {
                 return
             }
 
-            val info = viewModel.reservation.softApConfiguration
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                info.wifiSsid?.let { viewModel.ssid = it.toString() }
+            // get ssid and password
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                val info = viewModel.reservation.wifiConfiguration
+                info?.let {
+                    viewModel.ssid = it.SSID
+                    viewModel.password = it.preSharedKey
+                }
             } else {
-                info.ssid?.let { viewModel.ssid = it }
+                val info = viewModel.reservation.softApConfiguration
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    info.wifiSsid?.let { viewModel.ssid = it.toString() }
+                } else {
+                    info.ssid?.let { viewModel.ssid = it }
+                }
+                info.passphrase?.let { viewModel.password = it }
             }
-            info.passphrase?.let { viewModel.password = it }
 
             // ensure no quotes around the ssid, not sure why this is necessary
             viewModel.ssid = viewModel.ssid.replace("\"", "")

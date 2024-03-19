@@ -8,10 +8,10 @@ android {
 
     defaultConfig {
         applicationId "dev.spiegl.flyingcarpet"
-        minSdk 23
+        minSdk 26
         targetSdk 34
-        versionCode 13
-        versionName "8.0.1"
+        versionCode 14
+        versionName "8.0.2"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
