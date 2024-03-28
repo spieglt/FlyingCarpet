@@ -1,6 +1,6 @@
 ## Version 8 adds the option to send folders from Android and iOS
 
-Android version is available [here](https://play.google.com/store/apps/details?id=dev.spiegl.flyingcarpet), or if you prefer to sideload, `android_FlyingCarpet.apk` is available on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page. If anyone can add it to F-Droid now that the source is public, please do.
+Android version is available either on [F-Droid](https://f-droid.org/packages/dev.spiegl.flyingcarpet/) or on [Google Play](https://play.google.com/store/apps/details?id=dev.spiegl.flyingcarpet). If you prefer to sideload, `android_FlyingCarpet.apk` is available in the [Releases Section](https://github.com/spieglt/FlyingCarpet/releases).
 
 iOS version [here](https://apps.apple.com/us/app/flying-carpet-file-transfer/id1637377410) or search the App Store for "Flying Carpet File Transfer".
 
