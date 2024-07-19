@@ -1,6 +1,16 @@
 package dev.spiegl.flyingcarpet
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattService
+import android.bluetooth.BluetoothManager
+import android.bluetooth.le.AdvertiseData
+import android.bluetooth.le.AdvertiseSettings
+import android.bluetooth.le.ScanFilter
+import android.bluetooth.le.ScanSettings
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
@@ -12,6 +22,8 @@ import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import android.os.Bundle
+import android.os.ParcelUuid
+import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
@@ -41,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var outputBox: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
+    private lateinit var bluetoothRequestPermissionLauncher: ActivityResultLauncher<Array<String>> // TODO: need both of these?
     private lateinit var filePicker: ActivityResultLauncher<Array<String>>
     private lateinit var folderPicker: ActivityResultLauncher<Uri?>
     private lateinit var barcodeLauncher: ActivityResultLauncher<ScanOptions>
@@ -184,113 +197,107 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(layout.activity_main)
-
-//        viewModel = ViewModelProvider(this)[MainViewModel::class.java]
-        viewModel = ViewModelProvider(this).get(MainViewModel::class.java)
-
-        // set up file and folder pickers
-        filePicker =
-            registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-                viewModel.files = mutableListOf()
-                viewModel.fileStreams = mutableListOf()
-                if (uris.isEmpty()) {
-                    viewModel.outputText("No files selected.")
+    fun getFilePicker(): ActivityResultLauncher<Array<String>> {
+        return registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            viewModel.files = mutableListOf()
+            viewModel.fileStreams = mutableListOf()
+            if (uris.isEmpty()) {
+                viewModel.outputText("No files selected.")
+                cleanUpTransfer()
+                return@registerForActivityResult
+            }
+            for (uri in uris) {
+                val file = DocumentFile.fromSingleUri(applicationContext, uri)
+                if (file != null) {
+                    viewModel.files.add(file)
+                } else {
+                    viewModel.outputText("Could not open file")
                     cleanUpTransfer()
                     return@registerForActivityResult
                 }
-                for (uri in uris) {
-                    val file = DocumentFile.fromSingleUri(applicationContext, uri)
-                    if (file != null) {
-                        viewModel.files.add(file)
-                    } else {
-                        viewModel.outputText("Could not open file")
-                        cleanUpTransfer()
-                        return@registerForActivityResult
-                    }
-                    val stream = applicationContext.contentResolver.openInputStream(uri)
-                    if (stream != null) {
-                        viewModel.fileStreams.add(stream)
-                    } else {
-                        viewModel.outputText("Could not open file stream")
-                        cleanUpTransfer()
-                        return@registerForActivityResult
-                    }
+                val stream = applicationContext.contentResolver.openInputStream(uri)
+                if (stream != null) {
+                    viewModel.fileStreams.add(stream)
+                } else {
+                    viewModel.outputText("Could not open file stream")
+                    cleanUpTransfer()
+                    return@registerForActivityResult
                 }
-                connectToPeer()
             }
-        folderPicker =
-            registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-                uri?.let {
-                    if (viewModel.mode == Mode.Sending) {
-                        viewModel.files = mutableListOf()
-                        viewModel.fileStreams = mutableListOf()
-                        viewModel.filePaths = mutableListOf()
-                        val dir = DocumentFile.fromTreeUri(getApplication(), it) ?: run {
-                            viewModel.outputText("Could not get DocumentFile from selected directory.")
+            connectToPeer()
+        }
+    }
+
+    fun getFolderPicker(): ActivityResultLauncher<Uri?> {
+        return registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            uri?.let {
+                if (viewModel.mode == Mode.Sending) {
+                    viewModel.files = mutableListOf()
+                    viewModel.fileStreams = mutableListOf()
+                    viewModel.filePaths = mutableListOf()
+                    val dir = DocumentFile.fromTreeUri(getApplication(), it) ?: run {
+                        viewModel.outputText("Could not get DocumentFile from selected directory.")
+                        cleanUpTransfer()
+                        return@registerForActivityResult
+                    }
+                    val filesAndPaths = getFilesInDir(dir, "")
+                    for (fileAndPath in filesAndPaths) {
+                        val file = fileAndPath.first
+                        val path = fileAndPath.second
+                        viewModel.files.add(file)
+                        viewModel.filePaths.add(path)
+                        val stream = applicationContext.contentResolver.openInputStream(file.uri)
+                        if (stream != null) {
+                            viewModel.fileStreams.add(stream)
+                        } else {
+                            viewModel.outputText("Could not open file stream")
                             cleanUpTransfer()
                             return@registerForActivityResult
                         }
-                        val filesAndPaths = getFilesInDir(dir, "")
-                        for (fileAndPath in filesAndPaths) {
-                            val file = fileAndPath.first
-                            val path = fileAndPath.second
-                            viewModel.files.add(file)
-                            viewModel.filePaths.add(path)
-                            val stream = applicationContext.contentResolver.openInputStream(file.uri)
-                            if (stream != null) {
-                                viewModel.fileStreams.add(stream)
-                            } else {
-                                viewModel.outputText("Could not open file stream")
-                                cleanUpTransfer()
-                                return@registerForActivityResult
-                            }
-                        }
-                        viewModel.sendDir = it
-                    } else {
-                        viewModel.receiveDir = it
                     }
-                    connectToPeer()
-                } ?: run {
-                    viewModel.outputText("No folder selected.")
-                    cleanUpTransfer()
-                    return@registerForActivityResult
-                }
-            }
-
-        // set up permissions request
-        viewModel.wifiManager = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
-        requestPermissionLauncher =
-            registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-                if (isGranted) {
-                    // Permission is granted. Continue the action or workflow in your app.
-                    viewModel.outputText("Permission granted.")
-                    // start hotspot here
-                    startHotspot()
+                    viewModel.sendDir = it
                 } else {
-                    // Explain to the user that the feature is unavailable because the
-                    // features requires a permission that the user has denied. At the
-                    // same time, respect the user's decision. Don't link to system
-                    // settings in an effort to convince the user to change their
-                    // decision.
-                    val permission = if (Build.VERSION.SDK_INT < 33) {
-                        "fine location"
-                    } else {
-                        "nearby device"
-                    }
-                    viewModel.outputText(
-                        "The Android WifiManager requires $permission permission to start hotspot. "
-                                + "This data is not collected. "
-                                + "Start transfer again if you would like to grant permission."
-                    )
-                    cleanUpTransfer()
+                    viewModel.receiveDir = it
                 }
+                connectToPeer()
+            } ?: run {
+                viewModel.outputText("No folder selected.")
+                cleanUpTransfer()
+                return@registerForActivityResult
             }
+        }
+    }
 
+    fun getRequestPermissionLauncher(): ActivityResultLauncher<String> {
+        return registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+            if (isGranted) {
+                // Permission is granted. Continue the action or workflow in your app.
+                viewModel.outputText("Permission granted.")
+                // start hotspot here
+                startHotspot()
+            } else {
+                // Explain to the user that the feature is unavailable because the
+                // features requires a permission that the user has denied. At the
+                // same time, respect the user's decision. Don't link to system
+                // settings in an effort to convince the user to change their
+                // decision.
+                val permission = if (Build.VERSION.SDK_INT < 33) {
+                    "fine location"
+                } else {
+                    "nearby device"
+                }
+                viewModel.outputText(
+                    "The Android WifiManager requires $permission permission to start hotspot. "
+                            + "This data is not collected. "
+                            + "Start transfer again if you would like to grant permission."
+                )
+                cleanUpTransfer()
+            }
+        }
+    }
 
-        barcodeLauncher = registerForActivityResult(ScanContract()) { result ->
+    fun getBarcodeLauncher(): ActivityResultLauncher<ScanOptions> {
+        return registerForActivityResult(ScanContract()) { result ->
             if (result.contents == null) {
                 viewModel.outputText("Scan cancelled, exiting transfer.")
                 cleanUpTransfer()
@@ -316,6 +323,25 @@ class MainActivity : AppCompatActivity() {
                 joinHotspot()
             }
         }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(layout.activity_main)
+
+//        viewModel = ViewModelProvider(this)[MainViewModel::class.java]
+        viewModel = ViewModelProvider(this).get(MainViewModel::class.java)
+        bluetoothOnCreate()
+
+        // set up file and folder pickers
+        filePicker = getFilePicker()
+        folderPicker = getFolderPicker()
+
+        // set up permissions request
+        viewModel.wifiManager = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
+        requestPermissionLauncher = getRequestPermissionLauncher()
+
+        barcodeLauncher = getBarcodeLauncher()
 
         outputBox = findViewById(id.outputBox)
         viewModel.output.observe(this) { msg ->
@@ -536,9 +562,136 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<ProgressBar>(id.progressBar).progress = savedInstanceState.getInt("progress")
     }
+
+    // bluetooth
+
+    private var permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_SCAN,
+        )
+    } else {
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    private fun checkForBluetoothPermissions(): Boolean {
+        for (permission in permissions) {
+            if (ActivityCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                Log.i("Bluetooth", "Missing permission: $permission")
+                return false
+            }
+        }
+        Log.i("Bluetooth", "All permissions granted")
+        return true
+    }
+
+    fun bluetoothOnCreate() {
+        val bluetoothManager = getSystemService(BluetoothManager::class.java)
+        viewModel.bluetooth.bluetoothManager = bluetoothManager
+
+        bluetoothRequestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results: Map<String, Boolean> ->
+            var allPermissionsGranted = true
+            for (result in results) {
+                Log.i("Bluetooth", "Have permission ${result.key}: ${result.value}")
+                if (!result.value) {
+                    allPermissionsGranted = false
+                }
+            }
+            if (allPermissionsGranted) {
+                initializeBluetooth()
+            }
+        }
+
+        val bluetoothButton = findViewById<Button>(R.id.bluetoothButton)
+        bluetoothButton.setOnClickListener {
+            initializeBluetooth()
+        }
+
+        // register for bluetooth bonding events
+        val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        registerReceiver(viewModel.bluetooth.bluetoothReceiver, filter)
+    }
+
+    private fun initializeBluetooth() {
+        if (!checkForBluetoothPermissions()) {
+            Log.e("Bluetooth", "Missing permissions")
+            bluetoothRequestPermissionLauncher.launch(permissions)
+            return
+        }
+        initializeBluetoothPeripheral()
+        initializeBluetoothCentral()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun initializeBluetoothPeripheral() {
+
+        val bluetoothGattServer =
+            viewModel.bluetooth.bluetoothManager.openGattServer(application, viewModel.bluetooth.serverCallback)
+        if (bluetoothGattServer == null) {
+            Log.e("Bluetooth", "Device cannot act as a Bluetooth peripheral")
+            return
+        } else {
+            viewModel.bluetooth.bluetoothGattServer = bluetoothGattServer
+        }
+
+        val service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
+        val characteristic = BluetoothGattCharacteristic(
+            CHARACTERISTIC_UUID,
+            BluetoothGattCharacteristic.PROPERTY_READ,
+            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM,
+        )
+        service.addCharacteristic(characteristic)
+        viewModel.bluetooth.service = service
+        viewModel.bluetooth.bluetoothGattServer.addService(service)
+
+        // BluetoothLeAdvertiser
+        val bluetoothLeAdvertiser = viewModel.bluetooth.bluetoothManager.adapter.bluetoothLeAdvertiser
+        val settingsBuilder = AdvertiseSettings.Builder()
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+            .setConnectable(true)
+            .setTimeout(0)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            settingsBuilder.setDiscoverable(true)
+        }
+        val settings = settingsBuilder.build()
+
+        val data = AdvertiseData.Builder()
+            .setIncludeDeviceName(true)
+            .setIncludeTxPowerLevel(false)
+            .addServiceUuid(ParcelUuid(SERVICE_UUID))
+            .build()
+        bluetoothLeAdvertiser.startAdvertising(settings, data, viewModel.bluetooth.advertiseCallback)
+        viewModel.bluetooth.bluetoothLeAdvertiser = bluetoothLeAdvertiser
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun initializeBluetoothCentral() {
+        if (!checkForBluetoothPermissions()) {
+            bluetoothRequestPermissionLauncher.launch(permissions)
+            return
+        }
+        viewModel.bluetooth.bluetoothLeScanner = viewModel.bluetooth.bluetoothManager.adapter.bluetoothLeScanner
+
+        val scanFilter = ScanFilter.Builder()
+            .setServiceUuid(ParcelUuid(SERVICE_UUID))
+            .build()
+        val scanSettings = ScanSettings.Builder()
+            .setLegacy(false)
+            .build()
+        viewModel.bluetooth.bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, viewModel.bluetooth.leScanCallback)
+//        viewModel.bluetoothLeScanner.startScan(viewModel.leScanCallback)
+        Log.i("Bluetooth", "Called startScan")
+    }
 }
 
 // TODO:
+// how much bluetooth stuff can be pushed down?
+// bluetooth UI in landscape mode
+// bluetooth UI save/reload when screen rotated
+// bluetooth icon color change when scan/advertisement stops or starts: livedata?
 // transfer "completing" if receiving end quit?
 // check !!s
 // test what happens if wifi is turned off - done. hotspot still runs, not sure about joining.

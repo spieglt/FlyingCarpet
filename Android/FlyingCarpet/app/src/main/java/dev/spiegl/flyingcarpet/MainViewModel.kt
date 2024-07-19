@@ -63,6 +63,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var transferIsRunning = false
     lateinit var wifiManager: WifiManager
     lateinit var reservation: WifiManager.LocalOnlyHotspotReservation
+    val bluetooth = Bluetooth(application)
     val handler = Handler(Looper.getMainLooper())
     private var _output = MutableLiveData<String>()
     val output: LiveData<String>
