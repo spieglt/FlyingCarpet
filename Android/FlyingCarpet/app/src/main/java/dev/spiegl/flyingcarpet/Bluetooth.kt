@@ -39,6 +39,7 @@ class Bluetooth(application: Application) {
     lateinit var service: BluetoothGattService
     lateinit var bluetoothLeScanner: BluetoothLeScanner
     var bluetoothReceiver = BluetoothReceiver(application, null)
+    var active = false
 //    lateinit var address: String // address of device advertising service that we as central are trying to connect to
 
     // peripheral
@@ -60,11 +61,27 @@ class Bluetooth(application: Application) {
             characteristic: BluetoothGattCharacteristic?
         ) {
             super.onCharacteristicReadRequest(device, requestId, offset, characteristic)
-
-            if (characteristic == null || characteristic.uuid != CHARACTERISTIC_UUID) {
-                Log.i("Bluetooth", "Invalid characteristic")
-                bluetoothGattServer.sendResponse(device, requestId, BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED, 0, null)
+            if (characteristic == null) {
                 return
+            }
+            when (characteristic.uuid) { // TODO
+                WIFI_CHARACTERISTIC_UUID -> {
+
+                }
+                OS_CHARACTERISTIC_UUID -> {
+
+                }
+                else -> {
+                    Log.i("Bluetooth", "Invalid characteristic")
+                    bluetoothGattServer.sendResponse(
+                        device,
+                        requestId,
+                        BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED,
+                        0,
+                        null
+                    )
+                    return
+                }
             }
             bluetoothGattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, "wifi:password".toByteArray())
         }

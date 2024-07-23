@@ -18,4 +18,5 @@
     <string name="about">About</string>
     <string name="versionNumber">Version 8</string>
     <string name="sendFolderText">Send Folder</string>
+    <string name="bluetooth">Use Bluetooth</string>
 </resources>

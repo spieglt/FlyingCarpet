@@ -276,25 +276,23 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/programTitle" />
 
-    <Switch
+    <androidx.appcompat.widget.SwitchCompat
         android:id="@+id/bluetoothSwitch"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_height="48dp"
         android:layout_marginStart="8dp"
-        android:layout_marginTop="8dp"
-        android:text="Use Bluetooth"
+        android:text="@string/bluetooth"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textView" />
 
     <ImageView
-        android:id="@+id/imageView"
-        android:layout_width="25dp"
-        android:layout_height="27dp"
-        android:layout_marginStart="4dp"
-        android:layout_marginTop="1dp"
-        android:tint="@color/black"
+        android:id="@+id/bluetoothIcon"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:layout_marginTop="8dp"
         app:layout_constraintStart_toEndOf="@+id/bluetoothSwitch"
-        app:layout_constraintTop_toTopOf="@+id/bluetoothSwitch"
-        app:srcCompat="@android:drawable/stat_sys_data_bluetooth" />
+        app:layout_constraintTop_toBottomOf="@+id/textView"
+        app:srcCompat="@android:drawable/stat_sys_data_bluetooth"
+        app:tint="#000000" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

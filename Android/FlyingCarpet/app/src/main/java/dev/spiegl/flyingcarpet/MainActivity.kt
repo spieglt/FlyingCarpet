@@ -34,6 +34,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.ActivityCompat
 import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
@@ -57,6 +58,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var filePicker: ActivityResultLauncher<Array<String>>
     private lateinit var folderPicker: ActivityResultLauncher<Uri?>
     private lateinit var barcodeLauncher: ActivityResultLauncher<ScanOptions>
+    private lateinit var peerGroup: MaterialButtonToggleGroup
+    private lateinit var peerInstruction: TextView
+    private lateinit var bluetoothSwitch: SwitchCompat
+    private lateinit var bluetoothIcon: ImageView
 
     // hotspot stuff
     private val localOnlyHotspotCallback = object : WifiManager.LocalOnlyHotspotCallback() {
@@ -201,6 +206,8 @@ class MainActivity : AppCompatActivity() {
         return registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             viewModel.files = mutableListOf()
             viewModel.fileStreams = mutableListOf()
+            // TODO: do this? If not, and filePaths is set by a sendFolder transfer, then a non-sendFolder transfer is run, can this cause bad things?
+            viewModel.filePaths = mutableListOf()
             if (uris.isEmpty()) {
                 viewModel.outputText("No files selected.")
                 cleanUpTransfer()
@@ -343,6 +350,9 @@ class MainActivity : AppCompatActivity() {
 
         barcodeLauncher = getBarcodeLauncher()
 
+
+        peerGroup = findViewById<MaterialButtonToggleGroup>(id.peerGroup)
+        peerInstruction = findViewById<TextView>(id.peerInstruction)
         outputBox = findViewById(id.outputBox)
         viewModel.output.observe(this) { msg ->
             outputBox.append(msg + '\n')
@@ -390,7 +400,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             // get peer
-            val peerGroup = findViewById<MaterialButtonToggleGroup>(id.peerGroup)
             val selectedPeer = peerGroup.checkedButtonId
             this.viewModel.peer = when (selectedPeer) {
                 id.androidButton -> Peer.Android
@@ -604,9 +613,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val bluetoothButton = findViewById<Button>(R.id.bluetoothButton)
-        bluetoothButton.setOnClickListener {
-            initializeBluetooth()
+        bluetoothIcon = findViewById<ImageView>(R.id.bluetoothIcon)
+        bluetoothSwitch = findViewById<SwitchCompat>(R.id.bluetoothSwitch)
+        bluetoothSwitch.setOnCheckedChangeListener { _, isChecked ->
+            bluetoothIcon.isVisible = isChecked
+            peerGroup.isVisible = !isChecked
+            peerInstruction.isVisible = !isChecked
         }
 
         // register for bluetooth bonding events
@@ -620,8 +632,18 @@ class MainActivity : AppCompatActivity() {
             bluetoothRequestPermissionLauncher.launch(permissions)
             return
         }
-        initializeBluetoothPeripheral()
-        initializeBluetoothCentral()
+        var initialized = false
+        try {
+            initializeBluetoothPeripheral()
+            initializeBluetoothCentral()
+            initialized = true
+        } catch (e: Exception) {
+            viewModel.outputText("Could not initialize Bluetooth: $e")
+        }
+        viewModel.bluetooth.active = initialized
+        bluetoothSwitch.isChecked = initialized
+        bluetoothSwitch.isEnabled = initialized
+        bluetoothIcon.isVisible = initialized
     }
 
     @SuppressLint("MissingPermission")
@@ -630,19 +652,24 @@ class MainActivity : AppCompatActivity() {
         val bluetoothGattServer =
             viewModel.bluetooth.bluetoothManager.openGattServer(application, viewModel.bluetooth.serverCallback)
         if (bluetoothGattServer == null) {
-            Log.e("Bluetooth", "Device cannot act as a Bluetooth peripheral")
-            return
+            throw Exception("Device cannot act as a Bluetooth peripheral")
         } else {
             viewModel.bluetooth.bluetoothGattServer = bluetoothGattServer
         }
 
         val service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
-        val characteristic = BluetoothGattCharacteristic(
-            CHARACTERISTIC_UUID,
-            BluetoothGattCharacteristic.PROPERTY_READ,
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM,
+        val wifi_characteristic = BluetoothGattCharacteristic(
+            WIFI_CHARACTERISTIC_UUID,
+            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE, // TODO: correct?
+            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
         )
-        service.addCharacteristic(characteristic)
+        val os_characteristic = BluetoothGattCharacteristic(
+            OS_CHARACTERISTIC_UUID,
+            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE, // TODO: correct?
+            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
+        )
+        service.addCharacteristic(wifi_characteristic)
+        service.addCharacteristic(os_characteristic)
         viewModel.bluetooth.service = service
         viewModel.bluetooth.bluetoothGattServer.addService(service)
 
