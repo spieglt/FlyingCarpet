@@ -16,7 +16,6 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseSettings
-import android.bluetooth.le.BluetoothLeAdvertiser
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
@@ -35,7 +34,6 @@ class Bluetooth(application: Application) {
 
     lateinit var bluetoothManager: BluetoothManager
     lateinit var bluetoothGattServer: BluetoothGattServer
-    lateinit var bluetoothLeAdvertiser: BluetoothLeAdvertiser
     lateinit var service: BluetoothGattService
     lateinit var bluetoothLeScanner: BluetoothLeScanner
     var bluetoothReceiver = BluetoothReceiver(application, null)
@@ -160,7 +158,8 @@ class Bluetooth(application: Application) {
                     }
                     val service = gatt.getService(SERVICE_UUID) ?: return
                     Log.i("Bluetooth", "Got service: $service")
-                    val characteristic = service.getCharacteristic(CHARACTERISTIC_UUID) ?: return
+                    // TODO
+                    val characteristic = service.getCharacteristic(WIFI_CHARACTERISTIC_UUID) ?: return
                     Log.i("Bluetooth", "Got characteristic: $characteristic")
                     gatt.readCharacteristic(characteristic)
                 }

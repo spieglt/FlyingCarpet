@@ -202,7 +202,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun getFilePicker(): ActivityResultLauncher<Array<String>> {
+    private fun getFilePicker(): ActivityResultLauncher<Array<String>> {
         return registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             viewModel.files = mutableListOf()
             viewModel.fileStreams = mutableListOf()
@@ -235,7 +235,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun getFolderPicker(): ActivityResultLauncher<Uri?> {
+    private fun getFolderPicker(): ActivityResultLauncher<Uri?> {
         return registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
             uri?.let {
                 if (viewModel.mode == Mode.Sending) {
@@ -303,7 +303,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun getBarcodeLauncher(): ActivityResultLauncher<ScanOptions> {
+    private fun getBarcodeLauncher(): ActivityResultLauncher<ScanOptions> {
         return registerForActivityResult(ScanContract()) { result ->
             if (result.contents == null) {
                 viewModel.outputText("Scan cancelled, exiting transfer.")
@@ -613,8 +613,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        bluetoothIcon = findViewById<ImageView>(R.id.bluetoothIcon)
-        bluetoothSwitch = findViewById<SwitchCompat>(R.id.bluetoothSwitch)
+        bluetoothIcon = findViewById(R.id.bluetoothIcon)
+        bluetoothSwitch = findViewById(R.id.bluetoothSwitch)
         bluetoothSwitch.setOnCheckedChangeListener { _, isChecked ->
             bluetoothIcon.isVisible = isChecked
             peerGroup.isVisible = !isChecked
@@ -650,7 +650,10 @@ class MainActivity : AppCompatActivity() {
     private fun initializeBluetoothPeripheral() {
 
         val bluetoothGattServer =
-            viewModel.bluetooth.bluetoothManager.openGattServer(application, viewModel.bluetooth.serverCallback)
+            viewModel.bluetooth.bluetoothManager.openGattServer(
+                application,
+                viewModel.bluetooth.serverCallback
+            )
         if (bluetoothGattServer == null) {
             throw Exception("Device cannot act as a Bluetooth peripheral")
         } else {
@@ -658,21 +661,23 @@ class MainActivity : AppCompatActivity() {
         }
 
         val service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
-        val wifi_characteristic = BluetoothGattCharacteristic(
+        val wifiCharacteristic = BluetoothGattCharacteristic(
             WIFI_CHARACTERISTIC_UUID,
             BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE, // TODO: correct?
             BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
         )
-        val os_characteristic = BluetoothGattCharacteristic(
+        val osCharacteristic = BluetoothGattCharacteristic(
             OS_CHARACTERISTIC_UUID,
             BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE, // TODO: correct?
             BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
         )
-        service.addCharacteristic(wifi_characteristic)
-        service.addCharacteristic(os_characteristic)
+        service.addCharacteristic(wifiCharacteristic)
+        service.addCharacteristic(osCharacteristic)
         viewModel.bluetooth.service = service
         viewModel.bluetooth.bluetoothGattServer.addService(service)
+    }
 
+    fun advertise() {
         // BluetoothLeAdvertiser
         val bluetoothLeAdvertiser = viewModel.bluetooth.bluetoothManager.adapter.bluetoothLeAdvertiser
         val settingsBuilder = AdvertiseSettings.Builder()
@@ -691,7 +696,7 @@ class MainActivity : AppCompatActivity() {
             .addServiceUuid(ParcelUuid(SERVICE_UUID))
             .build()
         bluetoothLeAdvertiser.startAdvertising(settings, data, viewModel.bluetooth.advertiseCallback)
-        viewModel.bluetooth.bluetoothLeAdvertiser = bluetoothLeAdvertiser
+//        viewModel.bluetooth.bluetoothLeAdvertiser = bluetoothLeAdvertiser
     }
 
     @SuppressLint("MissingPermission")
@@ -700,7 +705,7 @@ class MainActivity : AppCompatActivity() {
             bluetoothRequestPermissionLauncher.launch(permissions)
             return
         }
-        viewModel.bluetooth.bluetoothLeScanner = viewModel.bluetooth.bluetoothManager.adapter.bluetoothLeScanner
+//        viewModel.bluetooth.bluetoothLeScanner = viewModel.bluetooth.bluetoothManager.adapter.bluetoothLeScanner
 
         val scanFilter = ScanFilter.Builder()
             .setServiceUuid(ParcelUuid(SERVICE_UUID))
