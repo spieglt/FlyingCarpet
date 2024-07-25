@@ -6,6 +6,25 @@
     android:layout_height="match_parent"
     tools:context="dev.spiegl.flyingcarpet.MainActivity">
 
+    <ImageView
+        android:id="@+id/bluetoothIcon"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:layout_marginTop="10dp"
+        app:layout_constraintStart_toEndOf="@+id/bluetoothSwitch"
+        app:layout_constraintTop_toBottomOf="@+id/textView2"
+        app:srcCompat="@android:drawable/stat_sys_data_bluetooth"
+        app:tint="@color/bluetoothColor" />
+
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/bluetoothSwitch"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginStart="37dp"
+        android:text="@string/bluetooth"
+        app:layout_constraintStart_toEndOf="@+id/startButton"
+        app:layout_constraintTop_toBottomOf="@+id/peerGroup" />
+
     <TextView
         android:id="@+id/aboutButton"
         android:layout_width="wrap_content"

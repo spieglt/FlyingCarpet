@@ -15,14 +15,18 @@ import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.AdvertiseCallback
+import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.ParcelUuid
 import android.util.Log
 import java.util.UUID
 
@@ -38,9 +42,28 @@ class Bluetooth(application: Application) {
     lateinit var bluetoothLeScanner: BluetoothLeScanner
     var bluetoothReceiver = BluetoothReceiver(application, null)
     var active = false
-//    lateinit var address: String // address of device advertising service that we as central are trying to connect to
 
     // peripheral
+
+    @SuppressLint("MissingPermission")
+    fun initializePeripheral(application: Context) {
+        bluetoothGattServer = bluetoothManager.openGattServer(application, serverCallback)
+        service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
+        val wifiCharacteristic = BluetoothGattCharacteristic(
+            WIFI_CHARACTERISTIC_UUID,
+            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE, // TODO: correct?
+            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
+        )
+        val osCharacteristic = BluetoothGattCharacteristic(
+            OS_CHARACTERISTIC_UUID,
+            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE, // TODO: correct?
+            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
+        )
+        service.addCharacteristic(wifiCharacteristic)
+        service.addCharacteristic(osCharacteristic)
+        bluetoothGattServer.addService(service)
+    }
+
     val serverCallback = object : BluetoothGattServerCallback() {
         override fun onConnectionStateChange(device: BluetoothDevice?, status: Int, newState: Int) {
             super.onConnectionStateChange(device, status, newState)
@@ -85,7 +108,30 @@ class Bluetooth(application: Application) {
         }
     }
 
-    val advertiseCallback = object : AdvertiseCallback() {
+    // TODO: fix these SuppressLints
+    @SuppressLint("MissingPermission")
+    fun advertise() {
+        // BluetoothLeAdvertiser
+        val bluetoothLeAdvertiser = bluetoothManager.adapter.bluetoothLeAdvertiser
+        val settingsBuilder = AdvertiseSettings.Builder()
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+            .setConnectable(true)
+            .setTimeout(0)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            settingsBuilder.setDiscoverable(true)
+        }
+        val settings = settingsBuilder.build()
+
+        val data = AdvertiseData.Builder()
+            .setIncludeDeviceName(true)
+            .setIncludeTxPowerLevel(false)
+            .addServiceUuid(ParcelUuid(SERVICE_UUID))
+            .build()
+        bluetoothLeAdvertiser.startAdvertising(settings, data, advertiseCallback)
+    }
+
+    private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             super.onStartSuccess(settingsInEffect)
             // TODO: turn icon blue
@@ -99,7 +145,26 @@ class Bluetooth(application: Application) {
     }
 
     // central
-    val leScanCallback = object : ScanCallback() {
+
+    fun initializeCentral() {
+        // TODO: nothing to do in this function and this should all go to scan()?
+        //    bluetoothManager will have an adapter, and
+    }
+
+    @SuppressLint("MissingPermission")
+    fun scan() {
+        val scanFilter = ScanFilter.Builder()
+            .setServiceUuid(ParcelUuid(SERVICE_UUID))
+            .build()
+        val scanSettings = ScanSettings.Builder()
+            .setLegacy(false)
+            .build()
+        bluetoothLeScanner = bluetoothManager.adapter.bluetoothLeScanner
+        bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
+        bluetoothLeScanner.startScan(leScanCallback)
+    }
+
+    private val leScanCallback = object : ScanCallback() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             super.onScanResult(callbackType, result)
@@ -118,6 +183,7 @@ class Bluetooth(application: Application) {
         }
     }
 
+    // this class receives the bluetooth bonded events
     class BluetoothReceiver(private val application: Application, var result: ScanResult?): BroadcastReceiver() {
 
         @SuppressLint("MissingPermission")

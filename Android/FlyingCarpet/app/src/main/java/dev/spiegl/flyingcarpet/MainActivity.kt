@@ -189,6 +189,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun connectToPeer() {
         // if windows/linux or android sending, join hotspot. if ios/mac or android receiving, start hotspot.
+        // TODO:
+        //    startHotspot shows the QR code. this function scans the QR code. if bluetooth, we need to
+        //    use bluetooth instead of having peer and getting/giving wifi info. but this should've happened before
+        //    we got here? need to trade OS information as soon as we select files? then startHotspot (or don't)
+        //    then trade wifi info, then join hotspot (or don't). this is where we come after selecting files/folders,
+        //    so we should do OS here.
+        viewModel.bluetooth.advertise()
+
         if (viewModel.isHosting()) {
             // start hotspot
             startHotspot()
@@ -242,7 +250,7 @@ class MainActivity : AppCompatActivity() {
                     viewModel.files = mutableListOf()
                     viewModel.fileStreams = mutableListOf()
                     viewModel.filePaths = mutableListOf()
-                    val dir = DocumentFile.fromTreeUri(getApplication(), it) ?: run {
+                    val dir = DocumentFile.fromTreeUri(applicationContext, it) ?: run {
                         viewModel.outputText("Could not get DocumentFile from selected directory.")
                         cleanUpTransfer()
                         return@registerForActivityResult
@@ -275,7 +283,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun getRequestPermissionLauncher(): ActivityResultLauncher<String> {
+    private fun getRequestPermissionLauncher(): ActivityResultLauncher<String> {
         return registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (isGranted) {
                 // Permission is granted. Continue the action or workflow in your app.
@@ -336,8 +344,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(layout.activity_main)
 
-//        viewModel = ViewModelProvider(this)[MainViewModel::class.java]
-        viewModel = ViewModelProvider(this).get(MainViewModel::class.java)
+        viewModel = ViewModelProvider(this)[MainViewModel::class.java]
+//        viewModel = ViewModelProvider(this).get(MainViewModel::class.java)
         bluetoothOnCreate()
 
         // set up file and folder pickers
@@ -351,8 +359,8 @@ class MainActivity : AppCompatActivity() {
         barcodeLauncher = getBarcodeLauncher()
 
 
-        peerGroup = findViewById<MaterialButtonToggleGroup>(id.peerGroup)
-        peerInstruction = findViewById<TextView>(id.peerInstruction)
+        peerGroup = findViewById(id.peerGroup)
+        peerInstruction = findViewById(id.peerInstruction)
         outputBox = findViewById(id.outputBox)
         viewModel.output.observe(this) { msg ->
             outputBox.append(msg + '\n')
@@ -400,6 +408,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             // get peer
+            // TODO: bluetooth may have already
             val selectedPeer = peerGroup.checkedButtonId
             this.viewModel.peer = when (selectedPeer) {
                 id.androidButton -> Peer.Android
@@ -596,7 +605,7 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
-    fun bluetoothOnCreate() {
+    private fun bluetoothOnCreate() {
         val bluetoothManager = getSystemService(BluetoothManager::class.java)
         viewModel.bluetooth.bluetoothManager = bluetoothManager
 
@@ -613,8 +622,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        bluetoothIcon = findViewById(R.id.bluetoothIcon)
-        bluetoothSwitch = findViewById(R.id.bluetoothSwitch)
+        bluetoothIcon = findViewById(id.bluetoothIcon)
+        bluetoothSwitch = findViewById(id.bluetoothSwitch)
         bluetoothSwitch.setOnCheckedChangeListener { _, isChecked ->
             bluetoothIcon.isVisible = isChecked
             peerGroup.isVisible = !isChecked
@@ -634,8 +643,8 @@ class MainActivity : AppCompatActivity() {
         }
         var initialized = false
         try {
-            initializeBluetoothPeripheral()
-            initializeBluetoothCentral()
+            viewModel.bluetooth.initializePeripheral(this)
+            viewModel.bluetooth.initializeCentral()
             initialized = true
         } catch (e: Exception) {
             viewModel.outputText("Could not initialize Bluetooth: $e")
@@ -645,82 +654,9 @@ class MainActivity : AppCompatActivity() {
         bluetoothSwitch.isEnabled = initialized
         bluetoothIcon.isVisible = initialized
     }
-
-    @SuppressLint("MissingPermission")
-    private fun initializeBluetoothPeripheral() {
-
-        val bluetoothGattServer =
-            viewModel.bluetooth.bluetoothManager.openGattServer(
-                application,
-                viewModel.bluetooth.serverCallback
-            )
-        if (bluetoothGattServer == null) {
-            throw Exception("Device cannot act as a Bluetooth peripheral")
-        } else {
-            viewModel.bluetooth.bluetoothGattServer = bluetoothGattServer
-        }
-
-        val service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
-        val wifiCharacteristic = BluetoothGattCharacteristic(
-            WIFI_CHARACTERISTIC_UUID,
-            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE, // TODO: correct?
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
-        )
-        val osCharacteristic = BluetoothGattCharacteristic(
-            OS_CHARACTERISTIC_UUID,
-            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE, // TODO: correct?
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
-        )
-        service.addCharacteristic(wifiCharacteristic)
-        service.addCharacteristic(osCharacteristic)
-        viewModel.bluetooth.service = service
-        viewModel.bluetooth.bluetoothGattServer.addService(service)
-    }
-
-    fun advertise() {
-        // BluetoothLeAdvertiser
-        val bluetoothLeAdvertiser = viewModel.bluetooth.bluetoothManager.adapter.bluetoothLeAdvertiser
-        val settingsBuilder = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
-            .setConnectable(true)
-            .setTimeout(0)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            settingsBuilder.setDiscoverable(true)
-        }
-        val settings = settingsBuilder.build()
-
-        val data = AdvertiseData.Builder()
-            .setIncludeDeviceName(true)
-            .setIncludeTxPowerLevel(false)
-            .addServiceUuid(ParcelUuid(SERVICE_UUID))
-            .build()
-        bluetoothLeAdvertiser.startAdvertising(settings, data, viewModel.bluetooth.advertiseCallback)
-//        viewModel.bluetooth.bluetoothLeAdvertiser = bluetoothLeAdvertiser
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun initializeBluetoothCentral() {
-        if (!checkForBluetoothPermissions()) {
-            bluetoothRequestPermissionLauncher.launch(permissions)
-            return
-        }
-//        viewModel.bluetooth.bluetoothLeScanner = viewModel.bluetooth.bluetoothManager.adapter.bluetoothLeScanner
-
-        val scanFilter = ScanFilter.Builder()
-            .setServiceUuid(ParcelUuid(SERVICE_UUID))
-            .build()
-        val scanSettings = ScanSettings.Builder()
-            .setLegacy(false)
-            .build()
-        viewModel.bluetooth.bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, viewModel.bluetooth.leScanCallback)
-//        viewModel.bluetoothLeScanner.startScan(viewModel.leScanCallback)
-        Log.i("Bluetooth", "Called startScan")
-    }
 }
 
 // TODO:
-// how much bluetooth stuff can be pushed down?
 // bluetooth UI in landscape mode
 // bluetooth UI save/reload when screen rotated
 // bluetooth icon color change when scan/advertisement stops or starts: livedata?
