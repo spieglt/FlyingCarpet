@@ -136,6 +136,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         outputText("Transfer complete\n")
     }
 
+    fun bluetoothWrotePeer(value: ByteArray) {
+        val peerOS = value.toString(Charsets.UTF_8)
+        peer = when (peerOS) {
+            "android" -> Peer.Android
+            "ios" -> Peer.iOS
+            "linux" -> Peer.Linux
+            "macos" -> Peer.macOS
+            "windows" -> Peer.Windows
+            else -> {
+                outputText("Error: peer sent an unsupported OS.")
+                return
+            }
+        }
+        // TODO: isHosting and startHotspot or joinHotspot
+    }
+
     private suspend fun startTCP() {
         withContext(Dispatchers.IO) {
             if (isHosting()) {

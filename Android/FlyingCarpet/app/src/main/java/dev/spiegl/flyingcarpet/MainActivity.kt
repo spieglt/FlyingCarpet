@@ -1,15 +1,8 @@
 package dev.spiegl.flyingcarpet
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
-import android.bluetooth.le.AdvertiseData
-import android.bluetooth.le.AdvertiseSettings
-import android.bluetooth.le.ScanFilter
-import android.bluetooth.le.ScanSettings
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
@@ -22,7 +15,6 @@ import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import android.os.Bundle
-import android.os.ParcelUuid
 import android.util.Log
 import android.view.View
 import android.widget.Button
@@ -195,18 +187,25 @@ class MainActivity : AppCompatActivity() {
         //    we got here? need to trade OS information as soon as we select files? then startHotspot (or don't)
         //    then trade wifi info, then join hotspot (or don't). this is where we come after selecting files/folders,
         //    so we should do OS here.
-        viewModel.bluetooth.advertise()
-
-        if (viewModel.isHosting()) {
-            // start hotspot
-            startHotspot()
-        } else { // joining hotspot
-            // scan qr code
-            val options = ScanOptions()
-            options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-            options.setPrompt("Start transfer on the other device and scan the QR code displayed.")
-            options.setOrientationLocked(false)
-            barcodeLauncher.launch(options)
+        if (viewModel.bluetooth.active) {
+            if (viewModel.mode == Mode.Sending) {
+                viewModel.bluetooth.advertise()
+            } else if (viewModel.mode == Mode.Receiving) {
+                viewModel.bluetooth.scan()
+            }
+        } else {
+            // not using bluetooth, startHotspot or launch barcodeLauncher to joinHotspot
+            if (viewModel.isHosting()) {
+                // start hotspot
+                startHotspot()
+            } else { // joining hotspot
+                // scan qr code
+                val options = ScanOptions()
+                options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                options.setPrompt("Start transfer on the other device and scan the QR code displayed.")
+                options.setOrientationLocked(false)
+                barcodeLauncher.launch(options)
+            }
         }
     }
 

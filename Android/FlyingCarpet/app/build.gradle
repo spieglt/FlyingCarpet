@@ -43,4 +43,5 @@ dependencies {
     implementation 'com.google.zxing:core:3.5.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4'
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
+    implementation "org.jetbrains.kotlin:kotlin-reflect:1.9.20"
 }

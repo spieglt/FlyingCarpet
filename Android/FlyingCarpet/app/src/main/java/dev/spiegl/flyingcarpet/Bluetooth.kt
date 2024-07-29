@@ -1,6 +1,6 @@
 package dev.spiegl.flyingcarpet
 
-import android.annotation.SuppressLint
+import android.Manifest
 import android.app.Application
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothDevice.BOND_BONDED
@@ -25,16 +25,18 @@ import android.bluetooth.le.ScanSettings
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.ParcelUuid
 import android.util.Log
+import androidx.core.app.ActivityCompat
 import java.util.UUID
 
 
 val SERVICE_UUID: UUID = UUID.fromString("A70BF3CA-F708-4314-8A0E-5E37C259BE5C")
 val OS_CHARACTERISTIC_UUID: UUID = UUID.fromString("BEE14848-CC55-4FDE-8E9D-2E0F9EC45946")
 val WIFI_CHARACTERISTIC_UUID: UUID = UUID.fromString("0D820768-A329-4ED4-8F53-BDF364EDAC75")
-class Bluetooth(application: Application) {
+class Bluetooth(val application: Application) {
 
     lateinit var bluetoothManager: BluetoothManager
     lateinit var bluetoothGattServer: BluetoothGattServer
@@ -45,8 +47,10 @@ class Bluetooth(application: Application) {
 
     // peripheral
 
-    @SuppressLint("MissingPermission")
     fun initializePeripheral(application: Context) {
+        if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
         bluetoothGattServer = bluetoothManager.openGattServer(application, serverCallback)
         service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
         val wifiCharacteristic = BluetoothGattCharacteristic(
@@ -64,7 +68,7 @@ class Bluetooth(application: Application) {
         bluetoothGattServer.addService(service)
     }
 
-    val serverCallback = object : BluetoothGattServerCallback() {
+    private val serverCallback = object : BluetoothGattServerCallback() {
         override fun onConnectionStateChange(device: BluetoothDevice?, status: Int, newState: Int) {
             super.onConnectionStateChange(device, status, newState)
             if (newState == BluetoothProfile.STATE_CONNECTED) {
@@ -74,7 +78,6 @@ class Bluetooth(application: Application) {
             }
         }
 
-        @SuppressLint("MissingPermission")
         override fun onCharacteristicReadRequest(
             device: BluetoothDevice?,
             requestId: Int,
@@ -82,6 +85,9 @@ class Bluetooth(application: Application) {
             characteristic: BluetoothGattCharacteristic?
         ) {
             super.onCharacteristicReadRequest(device, requestId, offset, characteristic)
+            if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                return
+            }
             if (characteristic == null) {
                 return
             }
@@ -90,7 +96,9 @@ class Bluetooth(application: Application) {
 
                 }
                 OS_CHARACTERISTIC_UUID -> {
-
+                    bluetoothGattServer.sendResponse(
+                        device, requestId, BluetoothGatt.GATT_SUCCESS, 0, "android".toByteArray()
+                    )
                 }
                 else -> {
                     Log.i("Bluetooth", "Invalid characteristic")
@@ -106,11 +114,57 @@ class Bluetooth(application: Application) {
             }
             bluetoothGattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, "wifi:password".toByteArray())
         }
+
+        override fun onCharacteristicWriteRequest(
+            device: BluetoothDevice?,
+            requestId: Int,
+            characteristic: BluetoothGattCharacteristic?,
+            preparedWrite: Boolean,
+            responseNeeded: Boolean,
+            offset: Int,
+            value: ByteArray?
+        ) {
+            super.onCharacteristicWriteRequest(
+                device,
+                requestId,
+                characteristic,
+                preparedWrite,
+                responseNeeded,
+                offset,
+                value
+            )
+            if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                return
+            }
+            if (characteristic == null) {
+                return
+            }
+            when (characteristic.uuid) {
+                WIFI_CHARACTERISTIC_UUID -> {
+
+                }
+                OS_CHARACTERISTIC_UUID -> {
+                    // wrote peer
+                }
+                else -> {
+                    Log.i("Bluetooth", "Invalid characteristic")
+                    bluetoothGattServer.sendResponse(
+                        device,
+                        requestId,
+                        BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED,
+                        0,
+                        null
+                    )
+                    return
+                }
+            }
+        }
     }
 
-    // TODO: fix these SuppressLints
-    @SuppressLint("MissingPermission")
     fun advertise() {
+        if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
         // BluetoothLeAdvertiser
         val bluetoothLeAdvertiser = bluetoothManager.adapter.bluetoothLeAdvertiser
         val settingsBuilder = AdvertiseSettings.Builder()
@@ -151,8 +205,10 @@ class Bluetooth(application: Application) {
         //    bluetoothManager will have an adapter, and
     }
 
-    @SuppressLint("MissingPermission")
     fun scan() {
+        if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
         val scanFilter = ScanFilter.Builder()
             .setServiceUuid(ParcelUuid(SERVICE_UUID))
             .build()
@@ -165,9 +221,11 @@ class Bluetooth(application: Application) {
     }
 
     private val leScanCallback = object : ScanCallback() {
-        @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             super.onScanResult(callbackType, result)
+            if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                return
+            }
             Log.i("Bluetooth", "Scan result: $result")
             if (result != null) {
 //                address = result.device.address
@@ -186,7 +244,6 @@ class Bluetooth(application: Application) {
     // this class receives the bluetooth bonded events
     class BluetoothReceiver(private val application: Application, var result: ScanResult?): BroadcastReceiver() {
 
-        @SuppressLint("MissingPermission")
         override fun onReceive(context: Context?, intent: Intent?) {
             Log.i("Bluetooth", "Action: ${intent?.action}")
             val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -217,6 +274,9 @@ class Bluetooth(application: Application) {
                 }
 
                 override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+                    if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                        return
+                    }
                     super.onServicesDiscovered(gatt, status)
                     Log.i("Bluetooth", "Discovered services")
                     for (service in gatt?.services!!) {
@@ -232,6 +292,9 @@ class Bluetooth(application: Application) {
 
                 override fun onServiceChanged(gatt: BluetoothGatt) {
                     super.onServiceChanged(gatt)
+                    if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                        return
+                    }
                     Log.i("Bluetooth", "Services changed")
                     gatt.discoverServices()
                 }
@@ -242,6 +305,9 @@ class Bluetooth(application: Application) {
                     newState: Int
                 ) {
                     super.onConnectionStateChange(gatt, status, newState)
+                    if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                        return
+                    }
                     Log.i("Bluetooth", "Connected")
                     gatt?.discoverServices()
                 }
