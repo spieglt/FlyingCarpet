@@ -1,16 +1,23 @@
 package dev.spiegl.flyingcarpet
 
+import android.Manifest
 import android.app.Application
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.*
 import android.net.wifi.WifiManager
+import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.activity.result.ActivityResultLauncher
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.*
 import java.io.InputStream
 import java.io.OutputStream
@@ -19,6 +26,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
 import java.nio.ByteBuffer
+import java.security.MessageDigest
 
 const val PORT = 3290
 
@@ -41,7 +49,7 @@ val one = byteArrayOf(0, 0, 0, 0, 0, 0, 0, 1) // meant to represent a 64-bit uns
 const val chunkSize = 5_000_000
 //fun ByteArray.toHex(): String = joinToString(separator = "") { eachByte -> "%02x".format(eachByte) }
 
-class MainViewModel(application: Application) : AndroidViewModel(application) {
+class MainViewModel(private val application: Application) : AndroidViewModel(application) {
 
     lateinit var mode: Mode
     lateinit var peer: Peer
@@ -55,7 +63,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     lateinit var receiveDir: Uri
     lateinit var sendDir: Uri
     var sendFolder: Boolean = false
-    lateinit var server: ServerSocket // TCP listener, used to release port when transfer fails/ends/is cancelled
+    private lateinit var server: ServerSocket // TCP listener, used to release port when transfer fails/ends/is cancelled
     lateinit var client: Socket // TCP socket, used to release port when transfer fails/ends/is cancelled
     lateinit var inputStream: InputStream // incoming TCP stream from peer
     lateinit var outputStream: OutputStream // outgoing TCP stream to peer
@@ -63,8 +71,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var transferIsRunning = false
     lateinit var wifiManager: WifiManager
     lateinit var reservation: WifiManager.LocalOnlyHotspotReservation
-    val bluetooth = Bluetooth(application)
-    val handler = Handler(Looper.getMainLooper())
+    val bluetooth = Bluetooth(application, ::gotPeer, ::getWifiInfo) // TODO: better way to do these callbacks?
+    lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
+    lateinit var barcodeLauncher: ActivityResultLauncher<ScanOptions>
+    lateinit var displayQrCode: (String, String) -> Unit
+    private val handler = Handler(Looper.getMainLooper())
     private var _output = MutableLiveData<String>()
     val output: LiveData<String>
         get() = _output
@@ -136,7 +147,165 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         outputText("Transfer complete\n")
     }
 
-    fun bluetoothWrotePeer(value: ByteArray) {
+    fun cleanUpTransfer() {
+        transferIsRunning = false
+        // cancel transfer
+        if (transferCoroutine != null) {
+            transferCoroutine!!.cancel()
+            transferCoroutine = null
+        }
+        // close tcp streams
+        if (inputStreamIsInitialized()) {
+            inputStream.close()
+        }
+        if (outputStreamIsInitialized()) {
+            outputStream.close()
+        }
+        // close sockets, release port
+        if (clientIsInitialized()) {
+            client.close()
+        }
+        if (serverIsInitialized()) {
+            server.close()
+        }
+        // tear down hotspot
+        if (reservationIsInitialized()) {
+            reservation.close()
+        }
+    }
+
+    fun connectToPeer() {
+        // not using bluetooth, startHotspot or launch barcodeLauncher to joinHotspot
+        if (isHosting()) {
+            // start hotspot
+            startHotspot()
+        } else { // joining hotspot
+            // scan qr code
+            val options = ScanOptions()
+            options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+            options.setPrompt("Start transfer on the other device and scan the QR code displayed.")
+            options.setOrientationLocked(false)
+            barcodeLauncher.launch(options)
+        }
+    }
+
+    // hotspot stuff
+    private val localOnlyHotspotCallback = object : WifiManager.LocalOnlyHotspotCallback() {
+        override fun onFailed(reason: Int) {
+            super.onFailed(reason)
+            outputText("Hotspot failed: $reason")
+        }
+
+        override fun onStarted(res: WifiManager.LocalOnlyHotspotReservation?) {
+            super.onStarted(res)
+
+            // check for cancellation
+            if (!transferIsRunning) {
+                res?.close()
+                return
+            }
+
+            if (res != null) {
+                reservation = res
+            } else {
+                outputText("Failed to get hotspot reservation")
+                cleanUpTransfer()
+                return
+            }
+
+            // get ssid and password
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                val info = reservation.wifiConfiguration
+                info?.let {
+                    ssid = it.SSID
+                    password = it.preSharedKey
+                }
+            } else {
+                val info = reservation.softApConfiguration
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    info.wifiSsid?.let { ssid = it.toString() }
+                } else {
+                    info.ssid?.let { ssid = it }
+                }
+                info.passphrase?.let { password = it }
+            }
+
+            // ensure no quotes around the ssid, not sure why this is necessary
+            ssid = ssid.replace("\"", "")
+
+            // set key
+            val hasher = MessageDigest.getInstance("SHA-256")
+            hasher.update(password.encodeToByteArray())
+            key = hasher.digest()
+
+            // android generates ssid and password for us
+            displayQrCode(ssid, password)
+
+            outputText("SSID: ${ssid}")
+            outputText("Password: ${password}")
+
+            transferCoroutine = GlobalScope.launch {
+                try {
+                    startTransfer()
+                } catch (e: Exception) {
+                    outputText("Transfer error: ${e.message}\n")
+                }
+                finishTransfer()
+            }
+
+        }
+
+        override fun onStopped() {
+            super.onStopped()
+            outputText("Hotspot stopped")
+        }
+    }
+
+    fun startHotspot() {
+        val requiredPermission = if (Build.VERSION.SDK_INT < 33) {
+            Manifest.permission.ACCESS_FINE_LOCATION
+        } else {
+            Manifest.permission.NEARBY_WIFI_DEVICES
+        }
+        if (ActivityCompat.checkSelfPermission(
+                application, requiredPermission
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissionLauncher.launch(requiredPermission)
+//            Log.e("FCLOGS", "Didn't have $requiredPermission")
+        } else {
+//            Log.i("FCLOGS", "Had $requiredPermission")
+            try {
+                wifiManager.startLocalOnlyHotspot(localOnlyHotspotCallback, handler)
+                outputText("Started hotspot.")
+            } catch (e: Exception) {
+                e.message?.let { outputText(it) }
+                cleanUpTransfer()
+            }
+        }
+    }
+
+    fun joinHotspot() {
+        val callback = NetworkCallback()
+        outputText("Joining ${ssid}")
+        // outputText("Password ${password}")
+        val specifier = WifiNetworkSpecifier.Builder()
+            .setSsid(ssid)
+            .setWpa2Passphrase(password)
+            .build()
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .setNetworkSpecifier(specifier)
+            .build()
+        val connectivityManager =
+            application.getSystemService(AppCompatActivity.CONNECTIVITY_SERVICE) as ConnectivityManager
+        callback.connectivityManager = connectivityManager
+        peerIP = null // we check this in NetworkCallback so that we only start the transfer once per joinHotspot invocation
+        connectivityManager.requestNetwork(request, callback)
+    }
+
+    fun gotPeer(value: ByteArray) {
         val peerOS = value.toString(Charsets.UTF_8)
         peer = when (peerOS) {
             "android" -> Peer.Android
@@ -149,7 +318,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return
             }
         }
-        // TODO: isHosting and startHotspot or joinHotspot
+        connectToPeer()
+    }
+
+    fun getWifiInfo(): String {
+        return "$ssid;$password"
     }
 
     private suspend fun startTCP() {

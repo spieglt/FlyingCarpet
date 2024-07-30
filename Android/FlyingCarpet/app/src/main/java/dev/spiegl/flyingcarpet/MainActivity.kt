@@ -28,7 +28,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.ActivityCompat
-import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModelProvider
@@ -45,139 +44,14 @@ class MainActivity : AppCompatActivity() {
     lateinit var viewModel: MainViewModel
     private lateinit var outputBox: TextView
     private lateinit var progressBar: ProgressBar
-    private lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
     private lateinit var bluetoothRequestPermissionLauncher: ActivityResultLauncher<Array<String>> // TODO: need both of these?
     private lateinit var filePicker: ActivityResultLauncher<Array<String>>
     private lateinit var folderPicker: ActivityResultLauncher<Uri?>
-    private lateinit var barcodeLauncher: ActivityResultLauncher<ScanOptions>
     private lateinit var peerGroup: MaterialButtonToggleGroup
     private lateinit var peerInstruction: TextView
     private lateinit var bluetoothSwitch: SwitchCompat
     private lateinit var bluetoothIcon: ImageView
 
-    // hotspot stuff
-    private val localOnlyHotspotCallback = object : WifiManager.LocalOnlyHotspotCallback() {
-        override fun onFailed(reason: Int) {
-            super.onFailed(reason)
-            viewModel.outputText("Hotspot failed: $reason")
-        }
-
-        override fun onStarted(res: WifiManager.LocalOnlyHotspotReservation?) {
-            super.onStarted(res)
-
-            // check for cancellation
-            if (!viewModel.transferIsRunning) {
-                res?.close()
-                return
-            }
-
-            if (res != null) {
-                viewModel.reservation = res
-            } else {
-                viewModel.outputText("Failed to get hotspot reservation")
-                cleanUpTransfer()
-                return
-            }
-
-            // get ssid and password
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-                val info = viewModel.reservation.wifiConfiguration
-                info?.let {
-                    viewModel.ssid = it.SSID
-                    viewModel.password = it.preSharedKey
-                }
-            } else {
-                val info = viewModel.reservation.softApConfiguration
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    info.wifiSsid?.let { viewModel.ssid = it.toString() }
-                } else {
-                    info.ssid?.let { viewModel.ssid = it }
-                }
-                info.passphrase?.let { viewModel.password = it }
-            }
-
-            // ensure no quotes around the ssid, not sure why this is necessary
-            viewModel.ssid = viewModel.ssid.replace("\"", "")
-
-            // set key
-            val hasher = MessageDigest.getInstance("SHA-256")
-            hasher.update(viewModel.password.encodeToByteArray())
-            viewModel.key = hasher.digest()
-
-            // android generates ssid and password for us
-            if (viewModel.peer == Peer.iOS || viewModel.peer == Peer.Android) {
-                // display qr code
-                val qrCode = findViewById<ImageView>(id.qrCodeView)
-                viewModel.qrBitmap = getQrCodeBitmap(viewModel.ssid, viewModel.password)
-                qrCode.setImageBitmap(viewModel.qrBitmap)
-            } else { // peer is macOS, because if windows or linux we wouldn't be hosting
-                val alertFragment = Alert(viewModel.ssid, viewModel.password)
-                alertFragment.show(supportFragmentManager, "alert")
-            }
-
-            viewModel.outputText("SSID: ${viewModel.ssid}")
-            viewModel.outputText("Password: ${viewModel.password}")
-
-            viewModel.transferCoroutine = GlobalScope.launch {
-                try {
-                    viewModel.startTransfer()
-                } catch (e: Exception) {
-                    viewModel.outputText("Transfer error: ${e.message}\n")
-                }
-                viewModel.finishTransfer()
-            }
-
-        }
-
-        override fun onStopped() {
-            super.onStopped()
-            viewModel.outputText("Hotspot stopped")
-        }
-    }
-
-    private fun startHotspot() {
-        val requiredPermission = if (Build.VERSION.SDK_INT < 33) {
-            Manifest.permission.ACCESS_FINE_LOCATION
-        } else {
-            Manifest.permission.NEARBY_WIFI_DEVICES
-        }
-        if (ActivityCompat.checkSelfPermission(
-                applicationContext, requiredPermission
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissionLauncher.launch(requiredPermission)
-//            Log.e("FCLOGS", "Didn't have $requiredPermission")
-        } else {
-//            Log.i("FCLOGS", "Had $requiredPermission")
-            try {
-                viewModel.wifiManager.startLocalOnlyHotspot(localOnlyHotspotCallback, viewModel.handler)
-                viewModel.outputText("Started hotspot.")
-            } catch (e: Exception) {
-                e.message?.let { viewModel.outputText(it) }
-                cleanUpTransfer()
-            }
-        }
-    }
-
-    private fun joinHotspot() {
-        val callback = viewModel.NetworkCallback()
-        viewModel.outputText("Joining ${viewModel.ssid}")
-        // outputText("Password ${viewModel.password}")
-        val specifier = WifiNetworkSpecifier.Builder()
-            .setSsid(viewModel.ssid)
-            .setWpa2Passphrase(viewModel.password)
-            .build()
-        val request = NetworkRequest.Builder()
-            .addTransportType(TRANSPORT_WIFI)
-            .removeCapability(NET_CAPABILITY_INTERNET)
-            .setNetworkSpecifier(specifier)
-            .build()
-        val connectivityManager =
-            applicationContext.getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-        callback.connectivityManager = connectivityManager
-        viewModel.peerIP = null // we check this in NetworkCallback so that we only start the transfer once per joinHotspot invocation
-        connectivityManager.requestNetwork(request, callback)
-    }
 
     private fun connectToPeer() {
         // if windows/linux or android sending, join hotspot. if ios/mac or android receiving, start hotspot.
@@ -194,18 +68,7 @@ class MainActivity : AppCompatActivity() {
                 viewModel.bluetooth.scan()
             }
         } else {
-            // not using bluetooth, startHotspot or launch barcodeLauncher to joinHotspot
-            if (viewModel.isHosting()) {
-                // start hotspot
-                startHotspot()
-            } else { // joining hotspot
-                // scan qr code
-                val options = ScanOptions()
-                options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                options.setPrompt("Start transfer on the other device and scan the QR code displayed.")
-                options.setOrientationLocked(false)
-                barcodeLauncher.launch(options)
-            }
+            viewModel.connectToPeer()
         }
     }
 
@@ -288,7 +151,7 @@ class MainActivity : AppCompatActivity() {
                 // Permission is granted. Continue the action or workflow in your app.
                 viewModel.outputText("Permission granted.")
                 // start hotspot here
-                startHotspot()
+                viewModel.startHotspot()
             } else {
                 // Explain to the user that the feature is unavailable because the
                 // features requires a permission that the user has denied. At the
@@ -334,7 +197,7 @@ class MainActivity : AppCompatActivity() {
                         "flyingCarpet_%02x%02x".format(viewModel.key[0], viewModel.key[1])
                 }
                 // join hotspot
-                joinHotspot()
+                viewModel.joinHotspot()
             }
         }
     }
@@ -344,7 +207,6 @@ class MainActivity : AppCompatActivity() {
         setContentView(layout.activity_main)
 
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
-//        viewModel = ViewModelProvider(this).get(MainViewModel::class.java)
         bluetoothOnCreate()
 
         // set up file and folder pickers
@@ -353,9 +215,10 @@ class MainActivity : AppCompatActivity() {
 
         // set up permissions request
         viewModel.wifiManager = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
-        requestPermissionLauncher = getRequestPermissionLauncher()
+        viewModel.requestPermissionLauncher = getRequestPermissionLauncher()
 
-        barcodeLauncher = getBarcodeLauncher()
+        viewModel.barcodeLauncher = getBarcodeLauncher()
+        viewModel.displayQrCode = ::displayQrCode
 
 
         peerGroup = findViewById(id.peerGroup)
@@ -472,30 +335,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun cleanUpTransfer() {
-        viewModel.transferIsRunning = false
-        // cancel transfer
-        if (viewModel.transferCoroutine != null) {
-            viewModel.transferCoroutine!!.cancel()
-            viewModel.transferCoroutine = null
-        }
-        // close tcp streams
-        if (viewModel.inputStreamIsInitialized()) {
-            viewModel.inputStream.close()
-        }
-        if (viewModel.outputStreamIsInitialized()) {
-            viewModel.outputStream.close()
-        }
-        // close sockets, release port
-        if (viewModel.clientIsInitialized()) {
-            viewModel.client.close()
-        }
-        if (viewModel.serverIsInitialized()) {
-            viewModel.server.close()
-        }
-        // tear down hotspot
-        if (viewModel.reservationIsInitialized()) {
-            viewModel.reservation.close()
-        }
+        viewModel.cleanUpTransfer()
+        // TODO: problem, this won't happen in viewModel.cleanUpTransfer()
         // toggle UI and replace icon
         runOnUiThread {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -503,6 +344,18 @@ class MainActivity : AppCompatActivity() {
             val qrCode = findViewById<ImageView>(id.qrCodeView)
             val drawable = AppCompatResources.getDrawable(applicationContext, R.drawable.icon1024)
             qrCode.setImageDrawable(drawable)
+        }
+    }
+
+    fun displayQrCode(ssid: String, password: String) {
+        if (viewModel.peer == Peer.iOS || viewModel.peer == Peer.Android) {
+            // display qr code
+            val qrCode = findViewById<ImageView>(R.id.qrCodeView)
+            viewModel.qrBitmap = getQrCodeBitmap(ssid, password)
+            qrCode.setImageBitmap(viewModel.qrBitmap)
+        } else { // peer is macOS, because if windows or linux we wouldn't be hosting
+            val alertFragment = Alert(ssid, password)
+            alertFragment.show(supportFragmentManager, "alert")
         }
     }
 
@@ -516,8 +369,8 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(id.windowsButton).isEnabled = enabled
         findViewById<CheckBox>(id.sendFolderCheckBox).isEnabled = enabled
 
-        findViewById<Button>(id.startButton).isInvisible = !enabled
-        findViewById<Button>(id.cancelButton).isInvisible = enabled
+        findViewById<Button>(id.startButton).isVisible = enabled
+        findViewById<Button>(id.cancelButton).isVisible = !enabled
 
         findViewById<TextView>(id.aboutButton).isClickable = enabled
     }
@@ -656,6 +509,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // TODO:
+// one permission check for all permissions?
 // bluetooth UI in landscape mode
 // bluetooth UI save/reload when screen rotated
 // bluetooth icon color change when scan/advertisement stops or starts: livedata?

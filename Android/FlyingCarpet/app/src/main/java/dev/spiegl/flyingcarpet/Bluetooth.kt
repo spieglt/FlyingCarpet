@@ -36,7 +36,7 @@ import java.util.UUID
 val SERVICE_UUID: UUID = UUID.fromString("A70BF3CA-F708-4314-8A0E-5E37C259BE5C")
 val OS_CHARACTERISTIC_UUID: UUID = UUID.fromString("BEE14848-CC55-4FDE-8E9D-2E0F9EC45946")
 val WIFI_CHARACTERISTIC_UUID: UUID = UUID.fromString("0D820768-A329-4ED4-8F53-BDF364EDAC75")
-class Bluetooth(val application: Application) {
+class Bluetooth(val application: Application, val gotPeer: (ByteArray) -> Unit, val getWifiInfo: () -> String) {
 
     lateinit var bluetoothManager: BluetoothManager
     lateinit var bluetoothGattServer: BluetoothGattServer
@@ -92,12 +92,16 @@ class Bluetooth(val application: Application) {
                 return
             }
             when (characteristic.uuid) { // TODO
-                WIFI_CHARACTERISTIC_UUID -> {
-
-                }
+                // tell peer we're android
                 OS_CHARACTERISTIC_UUID -> {
                     bluetoothGattServer.sendResponse(
                         device, requestId, BluetoothGatt.GATT_SUCCESS, 0, "android".toByteArray()
+                    )
+                }
+                // must have started wifi hotspot by this point, so send ssid and password
+                WIFI_CHARACTERISTIC_UUID -> {
+                    bluetoothGattServer.sendResponse(
+                        device, requestId, BluetoothGatt.GATT_SUCCESS, 0, "$getWifiInfo()".toByteArray()
                     )
                 }
                 else -> {
@@ -112,7 +116,6 @@ class Bluetooth(val application: Application) {
                     return
                 }
             }
-            bluetoothGattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, "wifi:password".toByteArray())
         }
 
         override fun onCharacteristicWriteRequest(
@@ -140,11 +143,12 @@ class Bluetooth(val application: Application) {
                 return
             }
             when (characteristic.uuid) {
-                WIFI_CHARACTERISTIC_UUID -> {
-
-                }
                 OS_CHARACTERISTIC_UUID -> {
-                    // wrote peer
+                    // now we know peer's OS, so figure out hosting
+                    value?.let { gotPeer(it) }
+                }
+                WIFI_CHARACTERISTIC_UUID -> {
+                    // if peer is writing wifi details to us, we're joining. but we already know that because OS characteristic is already written, so we can just call connectToPeer?
                 }
                 else -> {
                     Log.i("Bluetooth", "Invalid characteristic")
