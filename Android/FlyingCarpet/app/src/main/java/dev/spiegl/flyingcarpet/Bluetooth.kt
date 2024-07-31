@@ -36,11 +36,17 @@ import java.util.UUID
 val SERVICE_UUID: UUID = UUID.fromString("A70BF3CA-F708-4314-8A0E-5E37C259BE5C")
 val OS_CHARACTERISTIC_UUID: UUID = UUID.fromString("BEE14848-CC55-4FDE-8E9D-2E0F9EC45946")
 val WIFI_CHARACTERISTIC_UUID: UUID = UUID.fromString("0D820768-A329-4ED4-8F53-BDF364EDAC75")
-class Bluetooth(val application: Application, val gotPeer: (ByteArray) -> Unit, val getWifiInfo: () -> String) {
+class Bluetooth(
+    val application: Application,
+    val gotPeer: (ByteArray) -> Unit,
+    val getWifiInfo: () -> String,
+    val connectToPeer: () -> Unit,
+    val uiBluetoothStarted: () -> Unit,
+) {
 
     lateinit var bluetoothManager: BluetoothManager
     lateinit var bluetoothGattServer: BluetoothGattServer
-    lateinit var service: BluetoothGattService
+    private lateinit var service: BluetoothGattService
     lateinit var bluetoothLeScanner: BluetoothLeScanner
     var bluetoothReceiver = BluetoothReceiver(application, null)
     var active = false
@@ -144,11 +150,18 @@ class Bluetooth(val application: Application, val gotPeer: (ByteArray) -> Unit, 
             }
             when (characteristic.uuid) {
                 OS_CHARACTERISTIC_UUID -> {
-                    // now we know peer's OS, so figure out hosting
+                    // now we know peer's OS, so figure out hosting and connect
                     value?.let { gotPeer(it) }
                 }
                 WIFI_CHARACTERISTIC_UUID -> {
-                    // if peer is writing wifi details to us, we're joining. but we already know that because OS characteristic is already written, so we can just call connectToPeer?
+                    // TODO:
+                    //    if peer is writing wifi details to us, we're joining. but we already know that because OS characteristic is already written, so we can just call connectToPeer?
+                    //    no, connectToPeer assumes no bluetooth because it launches QR scanner? - fixed
+                    //    what do we actually need to do? just join. but really we shouldn't be scanning qr code in connectToPeer unless we're not using bluetooth?
+                    //    and shouldn't be showing QR code unless we're not using bluetooth, but have to take care of that in localOnlyHotspotCallback.onStarted callback where we get the wifi details.
+                    //    if using bluetooth, connectToPeer won't need to scan QR code because it will already have wifi details.
+                    //    can call connectToPeer() or joinHotspot here()?
+                    connectToPeer()
                 }
                 else -> {
                     Log.i("Bluetooth", "Invalid characteristic")
@@ -192,7 +205,7 @@ class Bluetooth(val application: Application, val gotPeer: (ByteArray) -> Unit, 
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             super.onStartSuccess(settingsInEffect)
-            // TODO: turn icon blue
+            uiBluetoothStarted()
             Log.i("Bluetooth", "Advertiser started")
         }
 
@@ -219,9 +232,20 @@ class Bluetooth(val application: Application, val gotPeer: (ByteArray) -> Unit, 
         val scanSettings = ScanSettings.Builder()
             .setLegacy(false)
             .build()
-        bluetoothLeScanner = bluetoothManager.adapter.bluetoothLeScanner
-        bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
-        bluetoothLeScanner.startScan(leScanCallback)
+        bluetoothManager.adapter.bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
+        // bluetoothLeScanner = bluetoothManager.adapter.bluetoothLeScanner
+        // bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
+        // bluetoothLeScanner.startScan(leScanCallback)
+    }
+
+    fun read(characteristicUuid: UUID) {
+        if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+        when (characteristicUuid) {
+            OS_CHARACTERISTIC_UUID -> bluetoothReceiver.bluetoothGatt?.readCharacteristic(bluetoothReceiver.osCharacteristic)
+            WIFI_CHARACTERISTIC_UUID -> bluetoothReceiver.bluetoothGatt?.readCharacteristic(bluetoothReceiver.wifiCharacteristic)
+        }
     }
 
     private val leScanCallback = object : ScanCallback() {
@@ -233,6 +257,7 @@ class Bluetooth(val application: Application, val gotPeer: (ByteArray) -> Unit, 
             Log.i("Bluetooth", "Scan result: $result")
             if (result != null) {
 //                address = result.device.address
+                uiBluetoothStarted()
                 bluetoothReceiver.result = result
                 result.device.createBond()
                 bluetoothLeScanner.stopScan(this)
@@ -248,9 +273,14 @@ class Bluetooth(val application: Application, val gotPeer: (ByteArray) -> Unit, 
     // this class receives the bluetooth bonded events
     class BluetoothReceiver(private val application: Application, var result: ScanResult?): BroadcastReceiver() {
 
+        var peerDevice: BluetoothDevice? = null
+        var bluetoothGatt: BluetoothGatt? = null
+        var osCharacteristic: BluetoothGattCharacteristic? = null
+        var wifiCharacteristic: BluetoothGattCharacteristic? = null
+
         override fun onReceive(context: Context?, intent: Intent?) {
             Log.i("Bluetooth", "Action: ${intent?.action}")
-            val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            peerDevice = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent?.getParcelableExtra(EXTRA_DEVICE, BluetoothDevice::class.java)
             } else {
                 intent?.getParcelableExtra(EXTRA_DEVICE)
@@ -263,7 +293,7 @@ class Bluetooth(val application: Application, val gotPeer: (ByteArray) -> Unit, 
                 Log.i("Bluetooth", "Not bonded")
                 return
             }
-            Log.i("Bluetooth", "Device: $device")
+            Log.i("Bluetooth", "Device: $peerDevice")
 
             val gattCallback = object : BluetoothGattCallback() {
                 override fun onCharacteristicRead(
@@ -288,10 +318,9 @@ class Bluetooth(val application: Application, val gotPeer: (ByteArray) -> Unit, 
                     }
                     val service = gatt.getService(SERVICE_UUID) ?: return
                     Log.i("Bluetooth", "Got service: $service")
-                    // TODO
-                    val characteristic = service.getCharacteristic(WIFI_CHARACTERISTIC_UUID) ?: return
-                    Log.i("Bluetooth", "Got characteristic: $characteristic")
-                    gatt.readCharacteristic(characteristic)
+                    osCharacteristic = service.getCharacteristic(OS_CHARACTERISTIC_UUID) ?: return
+                    wifiCharacteristic = service.getCharacteristic(WIFI_CHARACTERISTIC_UUID) ?: return
+                    Log.i("Bluetooth", "Got characteristics: $osCharacteristic, $wifiCharacteristic")
                 }
 
                 override fun onServiceChanged(gatt: BluetoothGatt) {
@@ -312,6 +341,7 @@ class Bluetooth(val application: Application, val gotPeer: (ByteArray) -> Unit, 
                     if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                         return
                     }
+                    bluetoothGatt = gatt
                     Log.i("Bluetooth", "Connected")
                     gatt?.discoverServices()
                 }

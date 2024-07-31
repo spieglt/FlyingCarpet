@@ -71,7 +71,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     var transferIsRunning = false
     lateinit var wifiManager: WifiManager
     lateinit var reservation: WifiManager.LocalOnlyHotspotReservation
-    val bluetooth = Bluetooth(application, ::gotPeer, ::getWifiInfo) // TODO: better way to do these callbacks?
+    val bluetooth = Bluetooth(application, ::gotPeer, ::getWifiInfo, ::connectToPeer, ::uiBluetoothStarted) // TODO: better way to do these callbacks?
     lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
     lateinit var barcodeLauncher: ActivityResultLauncher<ScanOptions>
     lateinit var displayQrCode: (String, String) -> Unit
@@ -180,12 +180,16 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             // start hotspot
             startHotspot()
         } else { // joining hotspot
-            // scan qr code
-            val options = ScanOptions()
-            options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-            options.setPrompt("Start transfer on the other device and scan the QR code displayed.")
-            options.setOrientationLocked(false)
-            barcodeLauncher.launch(options)
+            if (bluetooth.active) {
+                joinHotspot()
+            } else {
+                // scan qr code
+                val options = ScanOptions()
+                options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                options.setPrompt("Start transfer on the other device and scan the QR code displayed.")
+                options.setOrientationLocked(false)
+                barcodeLauncher.launch(options)
+            }
         }
     }
 
@@ -239,7 +243,9 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             key = hasher.digest()
 
             // android generates ssid and password for us
-            displayQrCode(ssid, password)
+            if (!bluetooth.active) {
+                displayQrCode(ssid, password)
+            }
 
             outputText("SSID: ${ssid}")
             outputText("Password: ${password}")
@@ -305,7 +311,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         connectivityManager.requestNetwork(request, callback)
     }
 
-    fun gotPeer(value: ByteArray) {
+    private fun gotPeer(value: ByteArray) {
         val peerOS = value.toString(Charsets.UTF_8)
         peer = when (peerOS) {
             "android" -> Peer.Android

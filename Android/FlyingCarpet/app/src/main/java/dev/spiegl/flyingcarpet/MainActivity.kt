@@ -52,26 +52,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bluetoothSwitch: SwitchCompat
     private lateinit var bluetoothIcon: ImageView
 
-
-    private fun connectToPeer() {
-        // if windows/linux or android sending, join hotspot. if ios/mac or android receiving, start hotspot.
-        // TODO:
-        //    startHotspot shows the QR code. this function scans the QR code. if bluetooth, we need to
-        //    use bluetooth instead of having peer and getting/giving wifi info. but this should've happened before
-        //    we got here? need to trade OS information as soon as we select files? then startHotspot (or don't)
-        //    then trade wifi info, then join hotspot (or don't). this is where we come after selecting files/folders,
-        //    so we should do OS here.
-        if (viewModel.bluetooth.active) {
-            if (viewModel.mode == Mode.Sending) {
-                viewModel.bluetooth.advertise()
-            } else if (viewModel.mode == Mode.Receiving) {
-                viewModel.bluetooth.scan()
-            }
-        } else {
-            viewModel.connectToPeer()
-        }
-    }
-
     private fun getFilePicker(): ActivityResultLauncher<Array<String>> {
         return registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             viewModel.files = mutableListOf()
@@ -101,7 +81,17 @@ class MainActivity : AppCompatActivity() {
                     return@registerForActivityResult
                 }
             }
-            connectToPeer()
+
+            // if using bluetooth, start the process of exchanging OS and wifi information
+            if (viewModel.bluetooth.active) {
+                if (viewModel.mode == Mode.Sending) {
+                    viewModel.bluetooth.advertise()
+                } else if (viewModel.mode == Mode.Receiving) {
+                    viewModel.bluetooth.scan()
+                }
+            } else {
+                viewModel.connectToPeer()
+            }
         }
     }
 
@@ -136,7 +126,16 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     viewModel.receiveDir = it
                 }
-                connectToPeer()
+                // if using bluetooth, start the process of exchanging OS and wifi information
+                if (viewModel.bluetooth.active) {
+                    if (viewModel.mode == Mode.Sending) {
+                        viewModel.bluetooth.advertise()
+                    } else if (viewModel.mode == Mode.Receiving) {
+                        viewModel.bluetooth.scan()
+                    }
+                } else {
+                    viewModel.connectToPeer()
+                }
             } ?: run {
                 viewModel.outputText("No folder selected.")
                 cleanUpTransfer()
