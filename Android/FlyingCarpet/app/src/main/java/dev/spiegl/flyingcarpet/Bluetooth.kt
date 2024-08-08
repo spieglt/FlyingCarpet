@@ -26,10 +26,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
 import android.os.ParcelUuid
 import android.util.Log
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import java.util.UUID
 
 
@@ -41,7 +44,6 @@ class Bluetooth(
     val gotPeer: (ByteArray) -> Unit,
     val getWifiInfo: () -> String,
     val connectToPeer: () -> Unit,
-    val uiBluetoothStarted: () -> Unit,
 ) {
 
     lateinit var bluetoothManager: BluetoothManager
@@ -50,6 +52,11 @@ class Bluetooth(
     lateinit var bluetoothLeScanner: BluetoothLeScanner
     var bluetoothReceiver = BluetoothReceiver(application, null)
     var active = false
+
+
+    private var _status = MutableLiveData<Boolean>()
+    val status: LiveData<Boolean>
+        get() = _status
 
     // peripheral
 
@@ -205,7 +212,7 @@ class Bluetooth(
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             super.onStartSuccess(settingsInEffect)
-            uiBluetoothStarted()
+            _status.postValue(true)
             Log.i("Bluetooth", "Advertiser started")
         }
 
@@ -238,6 +245,7 @@ class Bluetooth(
         // bluetoothLeScanner.startScan(leScanCallback)
     }
 
+    // TODO: use read and write when receiving... we call scan, scan bonds, then BluetoothReceiver reads OS and kicks us off?
     fun read(characteristicUuid: UUID) {
         if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             return
@@ -245,6 +253,32 @@ class Bluetooth(
         when (characteristicUuid) {
             OS_CHARACTERISTIC_UUID -> bluetoothReceiver.bluetoothGatt?.readCharacteristic(bluetoothReceiver.osCharacteristic)
             WIFI_CHARACTERISTIC_UUID -> bluetoothReceiver.bluetoothGatt?.readCharacteristic(bluetoothReceiver.wifiCharacteristic)
+        }
+    }
+
+    fun write(characteristicUuid: UUID, value: ByteArray) {
+        if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+        when (characteristicUuid) {
+            OS_CHARACTERISTIC_UUID -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    bluetoothReceiver.bluetoothGatt?.writeCharacteristic(
+                        bluetoothReceiver.osCharacteristic!!,
+                        value,
+                        BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                    )
+                } else {
+                    // this takes place in the context of being a central. the peerDevice will have discoverable characteristics.
+                    // we should've discovered them by this point?
+                    bluetoothReceiver.osCharacteristic?.value = value
+                    bluetoothReceiver.bluetoothGatt?.writeCharacteristic(bluetoothReceiver.osCharacteristic)
+                }
+            }
+            WIFI_CHARACTERISTIC_UUID -> {
+                bluetoothReceiver.wifiCharacteristic?.value = value
+                bluetoothReceiver.bluetoothGatt?.writeCharacteristic(bluetoothReceiver.wifiCharacteristic)
+            }
         }
     }
 
@@ -257,7 +291,7 @@ class Bluetooth(
             Log.i("Bluetooth", "Scan result: $result")
             if (result != null) {
 //                address = result.device.address
-                uiBluetoothStarted()
+                _status.postValue(true)
                 bluetoothReceiver.result = result
                 result.device.createBond()
                 bluetoothLeScanner.stopScan(this)
@@ -277,6 +311,9 @@ class Bluetooth(
         var bluetoothGatt: BluetoothGatt? = null
         var osCharacteristic: BluetoothGattCharacteristic? = null
         var wifiCharacteristic: BluetoothGattCharacteristic? = null
+//        private var _receivedData = MutableLiveData<String>()
+//        val receivedData: LiveData<String>
+//            get() = _receivedData
 
         override fun onReceive(context: Context?, intent: Intent?) {
             Log.i("Bluetooth", "Action: ${intent?.action}")
@@ -305,6 +342,21 @@ class Bluetooth(
                     super.onCharacteristicRead(gatt, characteristic, value, status)
                     val stringRepresentation = value.toString(Charsets.UTF_8)
                     Log.i("Bluetooth", "Read characteristic: $stringRepresentation")
+                    // TODO: we're central, so receiving. if we read OS characteristic, we know whether to start hotspot or join it.
+                    //    if we start it, we need to write the details. if we're joining, need to read them.
+                    //    use liveData? no. pass a bunch of callbacks into here?
+//                    _receivedData.postValue(stringRepresentation)
+                    osReadCallback
+                    when (characteristic.uuid) {
+                        OS_CHARACTERISTIC_UUID -> {
+                            if (isHosting()) {
+
+                            }
+                        }
+                        WIFI_CHARACTERISTIC_UUID -> {
+
+                        }
+                    }
                 }
 
                 override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
@@ -321,6 +373,7 @@ class Bluetooth(
                     osCharacteristic = service.getCharacteristic(OS_CHARACTERISTIC_UUID) ?: return
                     wifiCharacteristic = service.getCharacteristic(WIFI_CHARACTERISTIC_UUID) ?: return
                     Log.i("Bluetooth", "Got characteristics: $osCharacteristic, $wifiCharacteristic")
+
                 }
 
                 override fun onServiceChanged(gatt: BluetoothGatt) {

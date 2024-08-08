@@ -54,8 +54,8 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     lateinit var mode: Mode
     lateinit var peer: Peer
     var peerIP: Inet4Address? = null
-    lateinit var ssid: String
-    lateinit var password: String
+    var ssid: String = "" // TODO: reset these to empty string on each run of transfer, or how to not allow reads of getWifiInfo() until localOnlyHotspotCallback.onStarted() has run?
+    var password: String = ""
     lateinit var key: ByteArray
     var files: MutableList<DocumentFile> = mutableListOf()
     var fileStreams: MutableList<InputStream> = mutableListOf()
@@ -71,7 +71,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     var transferIsRunning = false
     lateinit var wifiManager: WifiManager
     lateinit var reservation: WifiManager.LocalOnlyHotspotReservation
-    val bluetooth = Bluetooth(application, ::gotPeer, ::getWifiInfo, ::connectToPeer, ::uiBluetoothStarted) // TODO: better way to do these callbacks?
+    val bluetooth = Bluetooth(application, ::gotPeer, ::getWifiInfo, ::connectToPeer) // TODO: better way to do these callbacks?
     lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
     lateinit var barcodeLauncher: ActivityResultLauncher<ScanOptions>
     lateinit var displayQrCode: (String, String) -> Unit
@@ -175,6 +175,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     }
 
     fun connectToPeer() {
+        // TODO: set ssid and password to empty string here, to prevent bluetooth from allowing reads of values from previous transfer?
         // not using bluetooth, startHotspot or launch barcodeLauncher to joinHotspot
         if (isHosting()) {
             // start hotspot
@@ -191,6 +192,20 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 barcodeLauncher.launch(options)
             }
         }
+    }
+
+//    enum class BluetoothMessageType {
+//        OS_READ, WIFI_READ
+//    }
+    fun bluetoothOsReadCallback() {
+        // TODO: we got OS, so need to decide whether we're sending or receiving and connectToPeer()?
+        //    take peer OS as a param here, set it, then what?
+        connectToPeer()
+    }
+    fun bluetoothWifiReadCallback() {
+        // TODO: we read WiFi information, so we're joining, and we're central, so we're receiving
+        //    just joinHotspot()?
+        joinHotspot()
     }
 
     // hotspot stuff

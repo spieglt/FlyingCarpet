@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothManager
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET
 import android.net.NetworkCapabilities.TRANSPORT_WIFI
@@ -474,6 +475,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         bluetoothIcon = findViewById(id.bluetoothIcon)
+        viewModel.bluetooth.status.observe(this) {
+            bluetoothIcon.setBackgroundColor(Color.BLUE)
+        }
         bluetoothSwitch = findViewById(id.bluetoothSwitch)
         bluetoothSwitch.setOnCheckedChangeListener { _, isChecked ->
             bluetoothIcon.isVisible = isChecked
