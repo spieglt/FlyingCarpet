@@ -7,13 +7,8 @@ import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET
-import android.net.NetworkCapabilities.TRANSPORT_WIFI
-import android.net.NetworkRequest
 import android.net.Uri
 import android.net.wifi.WifiManager
-import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -37,9 +32,6 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import dev.spiegl.flyingcarpet.R.id
 import dev.spiegl.flyingcarpet.R.layout
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
-import java.security.MessageDigest
 
 class MainActivity : AppCompatActivity() {
     lateinit var viewModel: MainViewModel
@@ -179,23 +171,10 @@ class MainActivity : AppCompatActivity() {
                 viewModel.outputText("Scan cancelled, exiting transfer.")
                 cleanUpTransfer()
             } else {
-                val ssidAndPassword = result.contents.split(';')
-                if (ssidAndPassword.count() > 1) {
-                    viewModel.ssid = ssidAndPassword[0]
-                    viewModel.password = ssidAndPassword[1]
-                    // make sha256 hash of password
-                    val hasher = MessageDigest.getInstance("SHA-256")
-                    hasher.update(viewModel.password.encodeToByteArray())
-                    viewModel.key = hasher.digest()
-                } else {
-                    viewModel.password = ssidAndPassword[0]
-                    // make sha256 hash of password
-                    val hasher = MessageDigest.getInstance("SHA-256")
-                    hasher.update(viewModel.password.encodeToByteArray())
-                    viewModel.key = hasher.digest()
-                    viewModel.ssid =
-                        "flyingCarpet_%02x%02x".format(viewModel.key[0], viewModel.key[1])
-                }
+                val wifiInfo = parseWifiInfo(result.contents)
+                viewModel.ssid = wifiInfo.first
+                viewModel.password = wifiInfo.second
+                viewModel.key = wifiInfo.third
                 // join hotspot
                 viewModel.joinHotspot()
             }
@@ -350,7 +329,7 @@ class MainActivity : AppCompatActivity() {
     fun displayQrCode(ssid: String, password: String) {
         if (viewModel.peer == Peer.iOS || viewModel.peer == Peer.Android) {
             // display qr code
-            val qrCode = findViewById<ImageView>(R.id.qrCodeView)
+            val qrCode = findViewById<ImageView>(id.qrCodeView)
             viewModel.qrBitmap = getQrCodeBitmap(ssid, password)
             qrCode.setImageBitmap(viewModel.qrBitmap)
         } else { // peer is macOS, because if windows or linux we wouldn't be hosting

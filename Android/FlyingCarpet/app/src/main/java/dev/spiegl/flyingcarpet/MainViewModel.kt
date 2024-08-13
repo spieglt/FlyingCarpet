@@ -71,7 +71,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     var transferIsRunning = false
     lateinit var wifiManager: WifiManager
     lateinit var reservation: WifiManager.LocalOnlyHotspotReservation
-    val bluetooth = Bluetooth(application, ::gotPeer, ::getWifiInfo, ::connectToPeer) // TODO: better way to do these callbacks?
+    val bluetooth = Bluetooth(application, ::gotPeer, ::gotWifiInfo, ::getWifiInfo) // TODO: better way to do these callbacks?
     lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
     lateinit var barcodeLauncher: ActivityResultLauncher<ScanOptions>
     lateinit var displayQrCode: (String, String) -> Unit
@@ -176,6 +176,14 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
     fun connectToPeer() {
         // TODO: set ssid and password to empty string here, to prevent bluetooth from allowing reads of values from previous transfer?
+        //    no, because if joining hotspot we may have received this data from QR code scanner already? no, we scan QR code here.
+        //    and if we startHotspot, we always want it to be fresh
+        //    if we're here and joining and have bluetooth, do we have the wifi info? need to call this only when:
+        //        - as central, we've hit the onCharacteristicRead of the gattCallback of bluetoothReceiver
+        //        - as peripheral, we've hit onCharacteristicWriteRequest of serverCallback of bluetoothGattServer
+        //    both of these will call gotWifiInfo which will call this?
+        ssid = ""
+        password = ""
         // not using bluetooth, startHotspot or launch barcodeLauncher to joinHotspot
         if (isHosting()) {
             // start hotspot
@@ -192,20 +200,6 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 barcodeLauncher.launch(options)
             }
         }
-    }
-
-//    enum class BluetoothMessageType {
-//        OS_READ, WIFI_READ
-//    }
-    fun bluetoothOsReadCallback() {
-        // TODO: we got OS, so need to decide whether we're sending or receiving and connectToPeer()?
-        //    take peer OS as a param here, set it, then what?
-        connectToPeer()
-    }
-    fun bluetoothWifiReadCallback() {
-        // TODO: we read WiFi information, so we're joining, and we're central, so we're receiving
-        //    just joinHotspot()?
-        joinHotspot()
     }
 
     // hotspot stuff
@@ -257,8 +251,9 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             hasher.update(password.encodeToByteArray())
             key = hasher.digest()
 
-            // android generates ssid and password for us
+            // if not using bluetooth, show the QR code
             if (!bluetooth.active) {
+                // android generates ssid and password for us
                 displayQrCode(ssid, password)
             }
 
@@ -326,8 +321,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         connectivityManager.requestNetwork(request, callback)
     }
 
-    private fun gotPeer(value: ByteArray) {
-        val peerOS = value.toString(Charsets.UTF_8)
+    private fun gotPeer(peerOS: String) {
         peer = when (peerOS) {
             "android" -> Peer.Android
             "ios" -> Peer.iOS
@@ -339,10 +333,19 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 return
             }
         }
+    }
+
+    private fun gotWifiInfo(ssid: String, password: String, key: ByteArray) {
+        this.ssid = ssid
+        this.password = password
+        this.key = key
         connectToPeer()
     }
 
-    fun getWifiInfo(): String {
+    private fun getWifiInfo(): String {
+        if (ssid == "" || password == "") {
+            return ""
+        }
         return "$ssid;$password"
     }
 

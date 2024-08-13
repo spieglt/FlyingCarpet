@@ -98,3 +98,26 @@ fun MainViewModel.hashFile(file: DocumentFile): ByteArray {
     stream.close()
     return hasher.digest()
 }
+
+fun parseWifiInfo(info: String): Triple<String, String, ByteArray> {
+    val ssid: String
+    val password: String
+    val key: ByteArray
+    val ssidAndPassword = info.split(';')
+    if (ssidAndPassword.count() > 1) {
+        ssid = ssidAndPassword[0]
+        password = ssidAndPassword[1]
+        // make sha256 hash of password
+        val hasher = MessageDigest.getInstance("SHA-256")
+        hasher.update(password.encodeToByteArray())
+        key = hasher.digest()
+    } else {
+        password = ssidAndPassword[0]
+        // make sha256 hash of password
+        val hasher = MessageDigest.getInstance("SHA-256")
+        hasher.update(password.encodeToByteArray())
+        key = hasher.digest()
+        ssid = "flyingCarpet_%02x%02x".format(key[0], key[1])
+    }
+    return Triple(ssid, password, key)
+}
