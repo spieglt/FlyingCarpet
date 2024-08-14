@@ -37,7 +37,7 @@ class MainActivity : AppCompatActivity() {
     lateinit var viewModel: MainViewModel
     private lateinit var outputBox: TextView
     private lateinit var progressBar: ProgressBar
-    private lateinit var bluetoothRequestPermissionLauncher: ActivityResultLauncher<Array<String>> // TODO: need both of these?
+    private lateinit var bluetoothRequestPermissionLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var filePicker: ActivityResultLauncher<Array<String>>
     private lateinit var folderPicker: ActivityResultLauncher<Uri?>
     private lateinit var peerGroup: MaterialButtonToggleGroup
@@ -49,11 +49,10 @@ class MainActivity : AppCompatActivity() {
         return registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             viewModel.files = mutableListOf()
             viewModel.fileStreams = mutableListOf()
-            // TODO: do this? If not, and filePaths is set by a sendFolder transfer, then a non-sendFolder transfer is run, can this cause bad things?
             viewModel.filePaths = mutableListOf()
             if (uris.isEmpty()) {
                 viewModel.outputText("No files selected.")
-                cleanUpTransfer()
+                viewModel.cleanUpTransfer()
                 return@registerForActivityResult
             }
             for (uri in uris) {
@@ -62,7 +61,7 @@ class MainActivity : AppCompatActivity() {
                     viewModel.files.add(file)
                 } else {
                     viewModel.outputText("Could not open file")
-                    cleanUpTransfer()
+                    viewModel.cleanUpTransfer()
                     return@registerForActivityResult
                 }
                 val stream = applicationContext.contentResolver.openInputStream(uri)
@@ -70,7 +69,7 @@ class MainActivity : AppCompatActivity() {
                     viewModel.fileStreams.add(stream)
                 } else {
                     viewModel.outputText("Could not open file stream")
-                    cleanUpTransfer()
+                    viewModel.cleanUpTransfer()
                     return@registerForActivityResult
                 }
             }
@@ -97,7 +96,7 @@ class MainActivity : AppCompatActivity() {
                     viewModel.filePaths = mutableListOf()
                     val dir = DocumentFile.fromTreeUri(applicationContext, it) ?: run {
                         viewModel.outputText("Could not get DocumentFile from selected directory.")
-                        cleanUpTransfer()
+                        viewModel.cleanUpTransfer()
                         return@registerForActivityResult
                     }
                     val filesAndPaths = getFilesInDir(dir, "")
@@ -111,7 +110,7 @@ class MainActivity : AppCompatActivity() {
                             viewModel.fileStreams.add(stream)
                         } else {
                             viewModel.outputText("Could not open file stream")
-                            cleanUpTransfer()
+                            viewModel.cleanUpTransfer()
                             return@registerForActivityResult
                         }
                     }
@@ -131,7 +130,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } ?: run {
                 viewModel.outputText("No folder selected.")
-                cleanUpTransfer()
+                viewModel.cleanUpTransfer()
                 return@registerForActivityResult
             }
         }
@@ -145,11 +144,6 @@ class MainActivity : AppCompatActivity() {
                 // start hotspot here
                 viewModel.startHotspot()
             } else {
-                // Explain to the user that the feature is unavailable because the
-                // features requires a permission that the user has denied. At the
-                // same time, respect the user's decision. Don't link to system
-                // settings in an effort to convince the user to change their
-                // decision.
                 val permission = if (Build.VERSION.SDK_INT < 33) {
                     "fine location"
                 } else {
@@ -160,7 +154,7 @@ class MainActivity : AppCompatActivity() {
                             + "This data is not collected. "
                             + "Start transfer again if you would like to grant permission."
                 )
-                cleanUpTransfer()
+                viewModel.cleanUpTransfer()
             }
         }
     }
@@ -169,7 +163,7 @@ class MainActivity : AppCompatActivity() {
         return registerForActivityResult(ScanContract()) { result ->
             if (result.contents == null) {
                 viewModel.outputText("Scan cancelled, exiting transfer.")
-                cleanUpTransfer()
+                viewModel.cleanUpTransfer()
             } else {
                 val wifiInfo = parseWifiInfo(result.contents)
                 viewModel.ssid = wifiInfo.first
@@ -198,7 +192,7 @@ class MainActivity : AppCompatActivity() {
 
         viewModel.barcodeLauncher = getBarcodeLauncher()
         viewModel.displayQrCode = ::displayQrCode
-
+        viewModel.cleanUpUi = ::cleanUpUi
 
         peerGroup = findViewById(id.peerGroup)
         peerInstruction = findViewById(id.peerInstruction)
@@ -211,10 +205,10 @@ class MainActivity : AppCompatActivity() {
             progressBar.progress = value
         }
         viewModel.transferFinished.observe(this) { finished ->
-            // this was firing because when we started observing, we were running cleanUpTransfer()
+            // this was firing because when we started observing, we were running viewModel.cleanUpTransfer()
             // no matter what. and then _transferFinished was true. now initializing as false.
             if (finished) {
-                cleanUpTransfer()
+                viewModel.cleanUpTransfer()
             }
         }
 
@@ -243,24 +237,25 @@ class MainActivity : AppCompatActivity() {
                 id.receiveButton -> Mode.Receiving
                 else -> {
                     viewModel.outputText("Must select whether this device is sending or receiving.")
-                    cleanUpTransfer()
+                    viewModel.cleanUpTransfer()
                     return@setOnClickListener
                 }
             }
 
             // get peer
-            // TODO: bluetooth may have already
             val selectedPeer = peerGroup.checkedButtonId
-            this.viewModel.peer = when (selectedPeer) {
-                id.androidButton -> Peer.Android
-                id.iosButton -> Peer.iOS
-                id.linuxButton -> Peer.Linux
-                id.macButton -> Peer.macOS
-                id.windowsButton -> Peer.Windows
-                else -> {
-                    viewModel.outputText("Must select operating system of other device.")
-                    cleanUpTransfer()
-                    return@setOnClickListener
+            if (!viewModel.bluetooth.active) {
+                this.viewModel.peer = when (selectedPeer) {
+                    id.androidButton -> Peer.Android
+                    id.iosButton -> Peer.iOS
+                    id.linuxButton -> Peer.Linux
+                    id.macButton -> Peer.macOS
+                    id.windowsButton -> Peer.Windows
+                    else -> {
+                        viewModel.outputText("Must select operating system of other device.")
+                        viewModel.cleanUpTransfer()
+                        return@setOnClickListener
+                    }
                 }
             }
 
@@ -284,7 +279,7 @@ class MainActivity : AppCompatActivity() {
         // cancel button
         val cancelButton = findViewById<Button>(id.cancelButton)
         cancelButton.setOnClickListener {
-            cleanUpTransfer()
+            viewModel.cleanUpTransfer()
         }
 
         // sending folder checkbox
@@ -313,9 +308,7 @@ class MainActivity : AppCompatActivity() {
 
     }
 
-    fun cleanUpTransfer() {
-        viewModel.cleanUpTransfer()
-        // TODO: problem, this won't happen in viewModel.cleanUpTransfer()
+    fun cleanUpUi() {
         // toggle UI and replace icon
         runOnUiThread {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -428,11 +421,11 @@ class MainActivity : AppCompatActivity() {
     private fun checkForBluetoothPermissions(): Boolean {
         for (permission in permissions) {
             if (ActivityCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-                Log.i("Bluetooth", "Missing permission: $permission")
+                viewModel.outputText("Missing permission: $permission")
                 return false
             }
         }
-        Log.i("Bluetooth", "All permissions granted")
+        viewModel.outputText("All permissions granted")
         return true
     }
 
@@ -443,13 +436,22 @@ class MainActivity : AppCompatActivity() {
         bluetoothRequestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results: Map<String, Boolean> ->
             var allPermissionsGranted = true
             for (result in results) {
-                Log.i("Bluetooth", "Have permission ${result.key}: ${result.value}")
+                viewModel.outputText("Have permission ${result.key}: ${result.value}")
                 if (!result.value) {
                     allPermissionsGranted = false
                 }
             }
             if (allPermissionsGranted) {
-                initializeBluetooth()
+                if (initializeBluetooth()) {
+                    viewModel.outputText("Bluetooth initialized")
+                } else {
+                    viewModel.outputText("Device can't use Bluetooth")
+                    bluetoothSwitch.isChecked = false
+                    bluetoothSwitch.isEnabled = false
+                }
+            } else {
+                viewModel.outputText("To use Flying Carpet, either grant Bluetooth permissions to the app, or turn off the Use Bluetooth switch.")
+                bluetoothSwitch.isChecked = false
             }
         }
 
@@ -467,19 +469,27 @@ class MainActivity : AppCompatActivity() {
         // register for bluetooth bonding events
         val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         registerReceiver(viewModel.bluetooth.bluetoothReceiver, filter)
+
+        if (initializeBluetooth()) {
+            viewModel.outputText("Bluetooth initialized")
+        } else {
+            viewModel.outputText("Device can't use Bluetooth")
+            bluetoothSwitch.isChecked = false
+            bluetoothSwitch.isEnabled = false
+        }
     }
 
-    private fun initializeBluetooth() {
+    private fun initializeBluetooth(): Boolean {
         if (!checkForBluetoothPermissions()) {
             Log.e("Bluetooth", "Missing permissions")
             bluetoothRequestPermissionLauncher.launch(permissions)
-            return
+            return false
         }
         var initialized = false
         try {
-            viewModel.bluetooth.initializePeripheral(this)
-            viewModel.bluetooth.initializeCentral()
-            initialized = true
+            if (viewModel.bluetooth.initializePeripheral(this) && viewModel.bluetooth.initializeCentral()) {
+                initialized = true
+            }
         } catch (e: Exception) {
             viewModel.outputText("Could not initialize Bluetooth: $e")
         }
@@ -487,6 +497,7 @@ class MainActivity : AppCompatActivity() {
         bluetoothSwitch.isChecked = initialized
         bluetoothSwitch.isEnabled = initialized
         bluetoothIcon.isVisible = initialized
+        return initialized
     }
 }
 

@@ -54,7 +54,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     lateinit var mode: Mode
     lateinit var peer: Peer
     var peerIP: Inet4Address? = null
-    var ssid: String = "" // TODO: reset these to empty string on each run of transfer, or how to not allow reads of getWifiInfo() until localOnlyHotspotCallback.onStarted() has run?
+    var ssid: String = ""
     var password: String = ""
     lateinit var key: ByteArray
     var files: MutableList<DocumentFile> = mutableListOf()
@@ -71,10 +71,10 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     var transferIsRunning = false
     lateinit var wifiManager: WifiManager
     lateinit var reservation: WifiManager.LocalOnlyHotspotReservation
-    val bluetooth = Bluetooth(application, ::gotPeer, ::gotWifiInfo, ::getWifiInfo) // TODO: better way to do these callbacks?
     lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
     lateinit var barcodeLauncher: ActivityResultLauncher<ScanOptions>
     lateinit var displayQrCode: (String, String) -> Unit
+    lateinit var cleanUpUi: () -> Unit
     private val handler = Handler(Looper.getMainLooper())
     private var _output = MutableLiveData<String>()
     val output: LiveData<String>
@@ -84,6 +84,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             _output.value = msg
         }
     }
+    val bluetooth = Bluetooth(application, ::gotPeer, ::gotWifiInfo, ::getWifiInfo, outputText) // TODO: better way to do these callbacks?
     var qrBitmap: Bitmap? = null
 
     var _progressBar = MutableLiveData(0)
@@ -97,12 +98,6 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     // and activity is recreated, so that the new activity's observer catches this LiveData event
     // and calls cleanUpTransfer() on the new activity
     val finishTransfer = { _transferFinished.postValue(true) }
-
-    fun serverIsInitialized() = ::server.isInitialized
-    fun clientIsInitialized() = ::client.isInitialized
-    fun inputStreamIsInitialized() = ::inputStream.isInitialized
-    fun outputStreamIsInitialized() = ::outputStream.isInitialized
-    fun reservationIsInitialized() = ::reservation.isInitialized
 
     fun isHosting(): Boolean {
         return peer == Peer.iOS
@@ -155,33 +150,28 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             transferCoroutine = null
         }
         // close tcp streams
-        if (inputStreamIsInitialized()) {
+        if (this::inputStream.isInitialized) {
             inputStream.close()
         }
-        if (outputStreamIsInitialized()) {
+        if (this::outputStream.isInitialized) {
             outputStream.close()
         }
         // close sockets, release port
-        if (clientIsInitialized()) {
+        if (this::client.isInitialized) {
             client.close()
         }
-        if (serverIsInitialized()) {
+        if (this::server.isInitialized) {
             server.close()
         }
         // tear down hotspot
-        if (reservationIsInitialized()) {
+        if (this::reservation.isInitialized) {
             reservation.close()
         }
+        // clean up UI
+        cleanUpUi()
     }
 
     fun connectToPeer() {
-        // TODO: set ssid and password to empty string here, to prevent bluetooth from allowing reads of values from previous transfer?
-        //    no, because if joining hotspot we may have received this data from QR code scanner already? no, we scan QR code here.
-        //    and if we startHotspot, we always want it to be fresh
-        //    if we're here and joining and have bluetooth, do we have the wifi info? need to call this only when:
-        //        - as central, we've hit the onCharacteristicRead of the gattCallback of bluetoothReceiver
-        //        - as peripheral, we've hit onCharacteristicWriteRequest of serverCallback of bluetoothGattServer
-        //    both of these will call gotWifiInfo which will call this?
         ssid = ""
         password = ""
         // not using bluetooth, startHotspot or launch barcodeLauncher to joinHotspot
@@ -251,8 +241,11 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             hasher.update(password.encodeToByteArray())
             key = hasher.digest()
 
-            // if not using bluetooth, show the QR code
-            if (!bluetooth.active) {
+
+            if (bluetooth.active) {
+                // write the wifi details to peer
+                bluetooth.bluetoothReceiver.write(WIFI_CHARACTERISTIC_UUID, "$ssid;$password".toByteArray())
+            } else {
                 // android generates ssid and password for us
                 displayQrCode(ssid, password)
             }
@@ -333,6 +326,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 return
             }
         }
+        bluetooth.bluetoothReceiver.write(OS_CHARACTERISTIC_UUID, "android".toByteArray())
     }
 
     private fun gotWifiInfo(ssid: String, password: String, key: ByteArray) {

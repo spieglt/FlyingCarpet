@@ -32,6 +32,7 @@ import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import kotlinx.coroutines.Job
 import java.util.UUID
 
 
@@ -43,13 +44,14 @@ class Bluetooth(
     val gotPeer: (String) -> Unit,
     val gotWifiInfo: (String, String, ByteArray) -> Unit,
     val getWifiInfo: () -> String,
+    val outputText: (String) -> Job,
 ) {
 
     lateinit var bluetoothManager: BluetoothManager
     lateinit var bluetoothGattServer: BluetoothGattServer
     private lateinit var service: BluetoothGattService
     lateinit var bluetoothLeScanner: BluetoothLeScanner
-    var bluetoothReceiver = BluetoothReceiver(application, null, gotPeer, gotWifiInfo)
+    var bluetoothReceiver = BluetoothReceiver(application, null, gotPeer, gotWifiInfo, outputText)
     var active = false
 
 
@@ -59,9 +61,12 @@ class Bluetooth(
 
     // peripheral
 
-    fun initializePeripheral(application: Context) {
+    fun initializePeripheral(application: Context): Boolean {
         if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            return
+            return false
+        }
+        if (bluetoothManager.adapter == null) {
+            return false
         }
         bluetoothGattServer = bluetoothManager.openGattServer(application, serverCallback)
         service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
@@ -78,15 +83,16 @@ class Bluetooth(
         service.addCharacteristic(wifiCharacteristic)
         service.addCharacteristic(osCharacteristic)
         bluetoothGattServer.addService(service)
+        return true
     }
 
     private val serverCallback = object : BluetoothGattServerCallback() {
         override fun onConnectionStateChange(device: BluetoothDevice?, status: Int, newState: Int) {
             super.onConnectionStateChange(device, status, newState)
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                Log.i("Bluetooth", "Device connected")
+                outputText("Device connected")
             } else {
-                Log.i("Bluetooth", "Device disconnected")
+                outputText("Device disconnected")
             }
         }
 
@@ -103,22 +109,21 @@ class Bluetooth(
             if (characteristic == null) {
                 return
             }
-            when (characteristic.uuid) { // TODO
+            when (characteristic.uuid) {
                 // tell peer we're android
                 OS_CHARACTERISTIC_UUID -> {
                     bluetoothGattServer.sendResponse(
                         device, requestId, BluetoothGatt.GATT_SUCCESS, 0, "android".toByteArray()
                     )
                 }
-                // must have started wifi hotspot by this point, so send ssid and password
-                // TODO: true?
+                // if we've started wifi hotspot, this will send the details. if not, it will send a blank string and the peer will need to wait and try again
                 WIFI_CHARACTERISTIC_UUID -> {
                     bluetoothGattServer.sendResponse(
                         device, requestId, BluetoothGatt.GATT_SUCCESS, 0, "$getWifiInfo()".toByteArray()
                     )
                 }
                 else -> {
-                    Log.i("Bluetooth", "Invalid characteristic")
+                    outputText("Invalid characteristic")
                     bluetoothGattServer.sendResponse(
                         device,
                         requestId,
@@ -170,7 +175,7 @@ class Bluetooth(
                     }
                 }
                 else -> {
-                    Log.i("Bluetooth", "Invalid characteristic")
+                    outputText("Invalid characteristic")
                     bluetoothGattServer.sendResponse(
                         device,
                         requestId,
@@ -212,20 +217,20 @@ class Bluetooth(
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             super.onStartSuccess(settingsInEffect)
             _status.postValue(true)
-            Log.i("Bluetooth", "Advertiser started")
+            outputText("Advertiser started")
         }
 
         override fun onStartFailure(errorCode: Int) {
             super.onStartFailure(errorCode)
-            Log.i("Bluetooth", "Advertiser failed to start: $errorCode")
+            outputText("Advertiser failed to start: $errorCode")
+            // TODO: disable and turn off bluetooth UI, print message here?
         }
     }
 
     // central
 
-    fun initializeCentral() {
-        // TODO: nothing to do in this function and this should all go to scan()?
-        //    bluetoothManager will have an adapter, and
+    fun initializeCentral(): Boolean {
+        return bluetoothManager.adapter != null
     }
 
     fun scan() {
@@ -254,7 +259,7 @@ class Bluetooth(
             if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
                 return
             }
-            Log.i("Bluetooth", "Scan result: $result")
+            outputText("Scan result: $result")
             if (result != null) {
 //                address = result.device.address
                 _status.postValue(true)
@@ -267,15 +272,18 @@ class Bluetooth(
         override fun onScanFailed(errorCode: Int) {
             Log.e("Bluetooth", "Scan failed: $errorCode")
             super.onScanFailed(errorCode)
+            // TODO: disable and turn off bluetooth UI, print message here?
         }
     }
 
     // this class receives the bluetooth bonded events
+    // TODO: rename?
     class BluetoothReceiver(
         private val application: Application,
         var result: ScanResult?,
         val gotPeer: (String) -> Unit,
         val gotWifiInfo: (String, String, ByteArray) -> Unit,
+        val outputText: (String) -> Job,
     ): BroadcastReceiver() {
         var peerDevice: BluetoothDevice? = null
         var bluetoothGatt: BluetoothGatt? = null
@@ -286,7 +294,7 @@ class Bluetooth(
 //            get() = _receivedData
 
         override fun onReceive(context: Context?, intent: Intent?) {
-            Log.i("Bluetooth", "Action: ${intent?.action}")
+            outputText("Action: ${intent?.action}")
             peerDevice = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent?.getParcelableExtra(EXTRA_DEVICE, BluetoothDevice::class.java)
             } else {
@@ -297,10 +305,10 @@ class Bluetooth(
 //            }
             val bondState = intent?.getIntExtra(EXTRA_BOND_STATE, -1)
             if (bondState != BOND_BONDED) {
-                Log.i("Bluetooth", "Not bonded")
+                outputText("Not bonded")
                 return
             }
-            Log.i("Bluetooth", "Device: $peerDevice")
+            outputText("Device: $peerDevice")
 
             val gattCallback = object : BluetoothGattCallback() {
 
@@ -313,11 +321,7 @@ class Bluetooth(
                 ) {
                     super.onCharacteristicRead(gatt, characteristic, value, status)
                     val stringRepresentation = value.toString(Charsets.UTF_8)
-                    Log.i("Bluetooth", "Read characteristic: $stringRepresentation")
-                    // TODO: we're central, so receiving. if we read OS characteristic, we know whether to start hotspot or join it.
-                    //    if we start it, we need to write the details. if we're joining, need to read them.
-                    //    use liveData? no. pass a bunch of callbacks into here?
-
+                    outputText("Read characteristic: $stringRepresentation")
                     when (characteristic.uuid) {
                         OS_CHARACTERISTIC_UUID -> {
                             gotPeer(value.toString(Charsets.UTF_8))
@@ -326,8 +330,10 @@ class Bluetooth(
                             val info = value.toString(Charsets.UTF_8)
                             if (info == "") {
                                 // kill a second, then read again, which will loop us back here
-                                Log.i("Bluetooth", "Could not read peer's WiFi characteristic. trying again...")
-
+                                outputText("Could not read peer's WiFi characteristic. trying again...")
+                                Thread.sleep(1000)
+                                read(WIFI_CHARACTERISTIC_UUID)
+                                return
                             }
                             val (ssid, password, key) = parseWifiInfo(info)
                             gotWifiInfo(ssid, password, key)
@@ -342,6 +348,7 @@ class Bluetooth(
                     status: Int
                 ) {
                     super.onCharacteristicWrite(gatt, characteristic, status)
+                    outputText("Wrote OS to peer")
                 }
 
                 override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
@@ -349,16 +356,16 @@ class Bluetooth(
                         return
                     }
                     super.onServicesDiscovered(gatt, status)
-                    Log.i("Bluetooth", "Discovered services")
+                    outputText("Discovered services")
                     for (service in gatt?.services!!) {
-                        Log.i("Bluetooth", "Service: ${service.uuid}")
+                        outputText("Service: ${service.uuid}")
                     }
                     val service = gatt.getService(SERVICE_UUID) ?: return
-                    Log.i("Bluetooth", "Got service: $service")
+                    outputText("Got service: $service")
                     osCharacteristic = service.getCharacteristic(OS_CHARACTERISTIC_UUID) ?: return
                     wifiCharacteristic = service.getCharacteristic(WIFI_CHARACTERISTIC_UUID) ?: return
-                    Log.i("Bluetooth", "Got characteristics: $osCharacteristic, $wifiCharacteristic")
-
+                    outputText("Got characteristics: $osCharacteristic, $wifiCharacteristic")
+                    read(OS_CHARACTERISTIC_UUID)
                 }
 
                 override fun onServiceChanged(gatt: BluetoothGatt) {
@@ -366,7 +373,7 @@ class Bluetooth(
                     if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                         return
                     }
-                    Log.i("Bluetooth", "Services changed")
+                    outputText("Services changed")
                     gatt.discoverServices()
                 }
 
@@ -380,7 +387,7 @@ class Bluetooth(
                         return
                     }
                     bluetoothGatt = gatt
-                    Log.i("Bluetooth", "Connected")
+                    outputText("Connected")
                     gatt?.discoverServices()
                 }
             }
