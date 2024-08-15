@@ -51,7 +51,7 @@ class Bluetooth(
     lateinit var bluetoothGattServer: BluetoothGattServer
     private lateinit var service: BluetoothGattService
     lateinit var bluetoothLeScanner: BluetoothLeScanner
-    var bluetoothReceiver = BluetoothReceiver(application, null, gotPeer, gotWifiInfo, outputText)
+    var bluetoothReceiver = BluetoothReceiver(application, null)
     var active = false
 
 
@@ -68,7 +68,8 @@ class Bluetooth(
         if (bluetoothManager.adapter == null) {
             return false
         }
-        bluetoothGattServer = bluetoothManager.openGattServer(application, serverCallback)
+        bluetoothGattServer = bluetoothManager.openGattServer(application, serverCallback) ?: return false
+
         service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
         val wifiCharacteristic = BluetoothGattCharacteristic(
             WIFI_CHARACTERISTIC_UUID,
@@ -154,6 +155,8 @@ class Bluetooth(
                 offset,
                 value
             )
+
+            outputText("Central peer wrote something: ${value?.let {it.toString(Charsets.UTF_8)}}")
             if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 return
             }
@@ -230,11 +233,16 @@ class Bluetooth(
     // central
 
     fun initializeCentral(): Boolean {
+        if (bluetoothManager.adapter.bluetoothLeScanner == null) {
+            return false
+        }
+        bluetoothLeScanner = bluetoothManager.adapter.bluetoothLeScanner
         return bluetoothManager.adapter != null
     }
 
     fun scan() {
         if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+            outputText("Missing permission BLUETOOTH_SCAN")
             return
         }
         val scanFilter = ScanFilter.Builder()
@@ -243,10 +251,8 @@ class Bluetooth(
         val scanSettings = ScanSettings.Builder()
             .setLegacy(false)
             .build()
-        bluetoothManager.adapter.bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
-        // bluetoothLeScanner = bluetoothManager.adapter.bluetoothLeScanner
-        // bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
-        // bluetoothLeScanner.startScan(leScanCallback)
+        bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
+        outputText("Called startScan")
     }
 
     private val leScanCallback = object : ScanCallback() {
@@ -257,6 +263,7 @@ class Bluetooth(
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             super.onScanResult(callbackType, result)
             if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                outputText("Missing permission BLUETOOTH_SCAN")
                 return
             }
             outputText("Scan result: $result")
@@ -266,6 +273,7 @@ class Bluetooth(
                 bluetoothReceiver.result = result
                 result.device.createBond()
                 bluetoothLeScanner.stopScan(this)
+                outputText("Called createBond()")
             }
         }
 
@@ -281,17 +289,18 @@ class Bluetooth(
     class BluetoothReceiver(
         private val application: Application,
         var result: ScanResult?,
-        val gotPeer: (String) -> Unit,
-        val gotWifiInfo: (String, String, ByteArray) -> Unit,
-        val outputText: (String) -> Job,
     ): BroadcastReceiver() {
-        var peerDevice: BluetoothDevice? = null
+
+        // TODO: does the signature of this class matter?
+        lateinit var gotPeer: (String) -> Unit
+        lateinit var gotWifiInfo: (String, String, ByteArray) -> Unit
+        lateinit var connectToPeer: () -> Unit
+        lateinit var outputText: (String) -> Job
+
+        private var peerDevice: BluetoothDevice? = null
         var bluetoothGatt: BluetoothGatt? = null
         var osCharacteristic: BluetoothGattCharacteristic? = null
         var wifiCharacteristic: BluetoothGattCharacteristic? = null
-//        private var _receivedData = MutableLiveData<String>()
-//        val receivedData: LiveData<String>
-//            get() = _receivedData
 
         override fun onReceive(context: Context?, intent: Intent?) {
             outputText("Action: ${intent?.action}")
@@ -348,7 +357,15 @@ class Bluetooth(
                     status: Int
                 ) {
                     super.onCharacteristicWrite(gatt, characteristic, status)
-                    outputText("Wrote OS to peer")
+                    when (characteristic?.uuid) {
+                        OS_CHARACTERISTIC_UUID -> {
+                            outputText("Wrote OS to peer")
+                            connectToPeer()
+                        }
+                        WIFI_CHARACTERISTIC_UUID -> {
+                            // TODO: what to do here?
+                        }
+                    }
                 }
 
                 override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {

@@ -87,9 +87,9 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     val bluetooth = Bluetooth(application, ::gotPeer, ::gotWifiInfo, ::getWifiInfo, outputText) // TODO: better way to do these callbacks?
     var qrBitmap: Bitmap? = null
 
-    var _progressBar = MutableLiveData(0)
+    var progressBarMut = MutableLiveData(0)
     val progressBar: LiveData<Int>
-        get() = _progressBar
+        get() = progressBarMut
 
     private var _transferFinished = MutableLiveData(false)
     val transferFinished: LiveData<Boolean>
@@ -99,7 +99,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     // and calls cleanUpTransfer() on the new activity
     val finishTransfer = { _transferFinished.postValue(true) }
 
-    fun isHosting(): Boolean {
+    private fun isHosting(): Boolean {
         return peer == Peer.iOS
                 || peer == Peer.macOS
                 || (peer == Peer.Android && mode == Mode.Receiving)
@@ -174,13 +174,21 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     fun connectToPeer() {
         ssid = ""
         password = ""
-        // not using bluetooth, startHotspot or launch barcodeLauncher to joinHotspot
+        // if we're hosting, startHotspot() will write the wifi details over bluetooth or display the QR code
+        // if we're joining and using bluetooth, we read peer's wifi characteristic here, then bluetoothReceiver's gattCallback's onCharacteristicRead will call gotWifiInfo(), which will call joinHotspot()
+        // if we're joining and not using bluetooth, barcodeLauncher will call joinHotspot()
+        // but who will call connectToPeer? file/folder pickers in MainActivity if not using bluetooth, or after we write OS if bluetooth
         if (isHosting()) {
-            // start hotspot
             startHotspot()
         } else { // joining hotspot
             if (bluetooth.active) {
-                joinHotspot()
+                if (mode == Mode.Sending) {
+                    // we're peripheral, and we're joining, and already know peer's OS, so need to wait for central to write the hotspot details
+                    // so nothing to do here
+                } else {
+                    // we're central, so read wifi details
+                    bluetooth.bluetoothReceiver.read(WIFI_CHARACTERISTIC_UUID)
+                }
             } else {
                 // scan qr code
                 val options = ScanOptions()
@@ -243,15 +251,23 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
 
             if (bluetooth.active) {
-                // write the wifi details to peer
-                bluetooth.bluetoothReceiver.write(WIFI_CHARACTERISTIC_UUID, "$ssid;$password".toByteArray())
+                if (mode == Mode.Sending) {
+                    // we're peripheral, and hosting, so just need to wait for the central to read from our
+                    // wifi characteristic. nothing to do here.
+                } else {
+                    // write the wifi details to peer
+                    bluetooth.bluetoothReceiver.write(
+                        WIFI_CHARACTERISTIC_UUID,
+                        "$ssid;$password".toByteArray()
+                    )
+                }
             } else {
                 // android generates ssid and password for us
                 displayQrCode(ssid, password)
             }
 
-            outputText("SSID: ${ssid}")
-            outputText("Password: ${password}")
+            outputText("SSID: $ssid")
+            outputText("Password: $password")
 
             transferCoroutine = GlobalScope.launch {
                 try {
@@ -296,7 +312,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
     fun joinHotspot() {
         val callback = NetworkCallback()
-        outputText("Joining ${ssid}")
+        outputText("Joining $ssid")
         // outputText("Password ${password}")
         val specifier = WifiNetworkSpecifier.Builder()
             .setSsid(ssid)
@@ -314,7 +330,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         connectivityManager.requestNetwork(request, callback)
     }
 
-    private fun gotPeer(peerOS: String) {
+    fun gotPeer(peerOS: String) {
         peer = when (peerOS) {
             "android" -> Peer.Android
             "ios" -> Peer.iOS
@@ -326,14 +342,19 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 return
             }
         }
-        bluetooth.bluetoothReceiver.write(OS_CHARACTERISTIC_UUID, "android".toByteArray())
+        if (mode == Mode.Sending) {
+            connectToPeer()
+        } else {
+            // TODO: this only makes sense if we're central. if we're peripheral, after we get peer,
+            bluetooth.bluetoothReceiver.write(OS_CHARACTERISTIC_UUID, "android".toByteArray())
+        }
     }
 
-    private fun gotWifiInfo(ssid: String, password: String, key: ByteArray) {
+    fun gotWifiInfo(ssid: String, password: String, key: ByteArray) {
         this.ssid = ssid
         this.password = password
         this.key = key
-        connectToPeer()
+        joinHotspot()
     }
 
     private fun getWifiInfo(): String {

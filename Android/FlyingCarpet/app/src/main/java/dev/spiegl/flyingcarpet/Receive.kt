@@ -43,7 +43,7 @@ suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
         }
         bytesRead += chunk.size
         val percentDone = (bytesRead.toDouble() / fileSize) * 100
-        _progressBar.postValue(percentDone.toInt())
+        progressBarMut.postValue(percentDone.toInt())
     }
 
     // tell sending end we're finished
@@ -52,7 +52,7 @@ suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
     }
 
     // stats
-    _progressBar.postValue(100)
+    progressBarMut.postValue(100)
     // TODO: put these details before needTransfer check? but then we don't get to display newFilename...
     outputText("Received file $newFilename. Size: ${makeSizeReadable(bytesRead)}")
     val end = System.currentTimeMillis()

@@ -34,7 +34,7 @@ import dev.spiegl.flyingcarpet.R.id
 import dev.spiegl.flyingcarpet.R.layout
 
 class MainActivity : AppCompatActivity() {
-    lateinit var viewModel: MainViewModel
+    private lateinit var viewModel: MainViewModel
     private lateinit var outputBox: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var bluetoothRequestPermissionLauncher: ActivityResultLauncher<Array<String>>
@@ -180,7 +180,6 @@ class MainActivity : AppCompatActivity() {
         setContentView(layout.activity_main)
 
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
-        bluetoothOnCreate()
 
         // set up file and folder pickers
         filePicker = getFilePicker()
@@ -211,6 +210,9 @@ class MainActivity : AppCompatActivity() {
                 viewModel.cleanUpTransfer()
             }
         }
+
+        // set up bluetooth
+        bluetoothOnCreate()
 
         // start button
         val startButton = findViewById<Button>(id.startButton)
@@ -308,7 +310,7 @@ class MainActivity : AppCompatActivity() {
 
     }
 
-    fun cleanUpUi() {
+    private fun cleanUpUi() {
         // toggle UI and replace icon
         runOnUiThread {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -319,7 +321,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun displayQrCode(ssid: String, password: String) {
+    private fun displayQrCode(ssid: String, password: String) {
         if (viewModel.peer == Peer.iOS || viewModel.peer == Peer.Android) {
             // display qr code
             val qrCode = findViewById<ImageView>(id.qrCodeView)
@@ -409,13 +411,18 @@ class MainActivity : AppCompatActivity() {
 
     private var permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(
+            Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_CONNECT,
             Manifest.permission.BLUETOOTH_SCAN,
         )
     } else {
-        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.BLUETOOTH_ADMIN,
+            Manifest.permission.BLUETOOTH,
+        )
     }
 
     private fun checkForBluetoothPermissions(): Boolean {
@@ -442,16 +449,18 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             if (allPermissionsGranted) {
-                if (initializeBluetooth()) {
-                    viewModel.outputText("Bluetooth initialized")
-                } else {
-                    viewModel.outputText("Device can't use Bluetooth")
-                    bluetoothSwitch.isChecked = false
-                    bluetoothSwitch.isEnabled = false
-                }
+                viewModel.outputText("Bluetooth permissions granted")
             } else {
-                viewModel.outputText("To use Flying Carpet, either grant Bluetooth permissions to the app, or turn off the Use Bluetooth switch.")
+//                viewModel.outputText("To use Flying Carpet, either grant Bluetooth permissions to the app, or turn off the Use Bluetooth switch.")
+                Log.e("Bluetooth", "To use Flying Carpet, either grant Bluetooth permissions to the app, or turn off the Use Bluetooth switch.")
                 bluetoothSwitch.isChecked = false
+//                if (initializeBluetooth()) {
+//                    viewModel.outputText("Bluetooth initialized")
+//                } else {
+//                    viewModel.outputText("Device can't use Bluetooth")
+//                    bluetoothSwitch.isChecked = false
+//                    bluetoothSwitch.isEnabled = false
+//                }
             }
         }
 
@@ -477,6 +486,12 @@ class MainActivity : AppCompatActivity() {
             bluetoothSwitch.isChecked = false
             bluetoothSwitch.isEnabled = false
         }
+
+        // TODO: this is ugly
+        viewModel.bluetooth.bluetoothReceiver.gotPeer = viewModel::gotPeer
+        viewModel.bluetooth.bluetoothReceiver.gotWifiInfo = viewModel::gotWifiInfo
+        viewModel.bluetooth.bluetoothReceiver.connectToPeer = viewModel::connectToPeer
+        viewModel.bluetooth.bluetoothReceiver.outputText = viewModel.outputText
     }
 
     private fun initializeBluetooth(): Boolean {
@@ -485,13 +500,19 @@ class MainActivity : AppCompatActivity() {
             bluetoothRequestPermissionLauncher.launch(permissions)
             return false
         }
-        var initialized = false
+        var initialized = true
         try {
-            if (viewModel.bluetooth.initializePeripheral(this) && viewModel.bluetooth.initializeCentral()) {
-                initialized = true
+            if (!viewModel.bluetooth.initializePeripheral(this)) {
+                Log.e("Bluetooth", "Device cannot act as a Bluetooth peripheral")
+                // TODO: undo after testing
+//                 initialized = false
+            }
+            if (!viewModel.bluetooth.initializeCentral()) {
+                Log.e("Bluetooth", "Device cannot act as a Bluetooth central")
+                initialized = false
             }
         } catch (e: Exception) {
-            viewModel.outputText("Could not initialize Bluetooth: $e")
+            Log.e("Bluetooth", "Could not initialize Bluetooth: $e")
         }
         viewModel.bluetooth.active = initialized
         bluetoothSwitch.isChecked = initialized
@@ -502,6 +523,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // TODO:
+// text box scrolls up over cancel button
 // one permission check for all permissions?
 // bluetooth UI in landscape mode
 // bluetooth UI save/reload when screen rotated
