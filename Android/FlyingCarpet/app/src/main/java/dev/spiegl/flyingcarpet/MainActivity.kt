@@ -502,10 +502,10 @@ class MainActivity : AppCompatActivity() {
         }
         var initialized = true
         try {
+            // TODO: undo after testing
             if (!viewModel.bluetooth.initializePeripheral(this)) {
                 Log.e("Bluetooth", "Device cannot act as a Bluetooth peripheral")
-                // TODO: undo after testing
-//                 initialized = false
+                 initialized = false
             }
             if (!viewModel.bluetooth.initializeCentral()) {
                 Log.e("Bluetooth", "Device cannot act as a Bluetooth central")
@@ -523,15 +523,19 @@ class MainActivity : AppCompatActivity() {
 }
 
 // TODO:
-// text box scrolls up over cancel button
-// one permission check for all permissions?
-// bluetooth UI in landscape mode
-// bluetooth UI save/reload when screen rotated
-// bluetooth icon color change when scan/advertisement stops or starts: livedata?
-// transfer "completing" if receiving end quit?
-// check !!s
-// test what happens if wifi is turned off - done. hotspot still runs, not sure about joining.
-// if hotspot already in use, don't request again - hit start transfer twice - not a problem because of cancel button/ui? and error is caught and transfer cleaned up in this case?
-// don't show progress bar till transfer starts?
+//   mutex needed for wifi info?
+//   can't run advertiser more than once, have to quit app
+//   bluetooth permissions messed up on launch
+//   support if devices already bonded
+//   text box scrolls up over cancel button
+//   one permission check for all permissions?
+//   bluetooth UI in landscape mode
+//   bluetooth UI save/reload when screen rotated
+//   bluetooth icon color change when scan/advertisement stops or starts: livedata?
+//   transfer "completing" if receiving end quit?
+//   check !!s
+//   test what happens if wifi is turned off - done. hotspot still runs, not sure about joining.
+//   if hotspot already in use, don't request again - hit start transfer twice - not a problem because of cancel button/ui? and error is caught and transfer cleaned up in this case?
+//   don't show progress bar till transfer starts?
 
 // https://developers.google.com/ml-kit/code-scanner

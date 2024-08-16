@@ -34,11 +34,16 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import kotlinx.coroutines.Job
 import java.util.UUID
+import kotlin.math.min
 
 
 val SERVICE_UUID: UUID = UUID.fromString("A70BF3CA-F708-4314-8A0E-5E37C259BE5C")
 val OS_CHARACTERISTIC_UUID: UUID = UUID.fromString("BEE14848-CC55-4FDE-8E9D-2E0F9EC45946")
 val WIFI_CHARACTERISTIC_UUID: UUID = UUID.fromString("0D820768-A329-4ED4-8F53-BDF364EDAC75")
+
+val messageTerminator = "DONE".toByteArray()
+const val packetSize = 15
+
 class Bluetooth(
     val application: Application,
     val gotPeer: (String) -> Unit,
@@ -54,6 +59,9 @@ class Bluetooth(
     var bluetoothReceiver = BluetoothReceiver(application, null)
     var active = false
 
+    // keeping these values here to stream wifiInfo over bluetooth since max packet size is 20
+    var wifiInfo = byteArrayOf()
+    var cursor = 0
 
     private var _status = MutableLiveData<Boolean>()
     val status: LiveData<Boolean>
@@ -89,6 +97,7 @@ class Bluetooth(
 
     private val serverCallback = object : BluetoothGattServerCallback() {
         override fun onConnectionStateChange(device: BluetoothDevice?, status: Int, newState: Int) {
+            outputText("In serverCallback")
             super.onConnectionStateChange(device, status, newState)
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 outputText("Device connected")
@@ -122,6 +131,26 @@ class Bluetooth(
                     bluetoothGattServer.sendResponse(
                         device, requestId, BluetoothGatt.GATT_SUCCESS, 0, "$getWifiInfo()".toByteArray()
                     )
+                    // TODO: if wifiInfo == "", getWifiInfo(). if that's not blank, set wifiInfo to it and set cursor to 0.
+                    //    if wifiInfo != "", read from cursor to packetSize or end. increment cursor by length read.
+                    //    if cursor == wifiInfo.size, write message terminator, and set cursor to 0 (redundant).
+//                    if (wifiInfo.isEmpty()) {
+//                        wifiInfo = getWifiInfo().toByteArray() // if we
+//                        cursor = 0
+//                    }
+//                    if (wifiInfo.isNotEmpty()) {
+//                        if (cursor == wifiInfo.size) {
+//                            bluetoothGattServer.sendResponse(
+//                                device, requestId, BluetoothGatt.GATT_SUCCESS, 0, messageTerminator
+//                            )
+//                            cursor = 0
+//                        }
+//                        val chunk = wifiInfo.slice(cursor until min(cursor + packetSize, wifiInfo.size))
+//                        bluetoothGattServer.sendResponse(
+//                            device, requestId, BluetoothGatt.GATT_SUCCESS, cursor, chunk.toByteArray() // TODO: should offset be cursor or 0?
+//                        )
+//                        cursor += chunk.size
+//                    }
                 }
                 else -> {
                     outputText("Invalid characteristic")
@@ -189,6 +218,13 @@ class Bluetooth(
                     return
                 }
             }
+            bluetoothGattServer.sendResponse(
+                device,
+                requestId,
+                BluetoothGatt.GATT_SUCCESS,
+                0,
+                null
+            )
         }
     }
 
@@ -364,6 +400,7 @@ class Bluetooth(
                         }
                         WIFI_CHARACTERISTIC_UUID -> {
                             // TODO: what to do here?
+                            outputText("Wrote WiFi details to peer")
                         }
                     }
                 }
@@ -427,7 +464,9 @@ class Bluetooth(
             }
         }
 
-        fun write(characteristicUuid: UUID, value: ByteArray) {
+        fun writeSinglePacket(characteristicUuid: UUID, value: ByteArray, waitForResponse: Boolean) {
+            outputText("Writing to $characteristicUuid")
+            val writeType = if (waitForResponse) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 return
             }
@@ -437,14 +476,14 @@ class Bluetooth(
                         bluetoothGatt?.writeCharacteristic(
                             osCharacteristic!!,
                             value,
-                            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                            writeType
                         )
                     }
                     WIFI_CHARACTERISTIC_UUID -> {
                         bluetoothGatt?.writeCharacteristic(
                             wifiCharacteristic!!,
                             value,
-                            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                            writeType
                         )
                     }
                 }
@@ -454,15 +493,29 @@ class Bluetooth(
                         // this takes place in the context of being a central. the peerDevice will have discoverable characteristics.
                         // we should've discovered them by this point?
                         osCharacteristic?.value = value
+                        wifiCharacteristic?.writeType = writeType
                         bluetoothGatt?.writeCharacteristic(osCharacteristic)
                     }
                     WIFI_CHARACTERISTIC_UUID -> {
                         wifiCharacteristic?.value = value
+                        wifiCharacteristic?.writeType = writeType
                         bluetoothGatt?.writeCharacteristic(wifiCharacteristic)
                     }
                 }
             }
         }
+
+        fun write(characteristicUuid: UUID, value: ByteArray) {
+            var cursor = 0
+            while (cursor < value.size) {
+                val chunk = value.slice(cursor until min(cursor + packetSize, value.size))
+                cursor += chunk.size
+                writeSinglePacket(characteristicUuid, chunk.toByteArray(), false)
+            }
+            writeSinglePacket(characteristicUuid, messageTerminator, true)
+        }
+
+        // fun read(characteristicUuid: UUID)
     }
 
 
