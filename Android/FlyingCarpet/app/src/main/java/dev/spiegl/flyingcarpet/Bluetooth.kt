@@ -34,21 +34,24 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import kotlinx.coroutines.Job
 import java.util.UUID
-import kotlin.math.min
 
 
 val SERVICE_UUID: UUID = UUID.fromString("A70BF3CA-F708-4314-8A0E-5E37C259BE5C")
 val OS_CHARACTERISTIC_UUID: UUID = UUID.fromString("BEE14848-CC55-4FDE-8E9D-2E0F9EC45946")
-val WIFI_CHARACTERISTIC_UUID: UUID = UUID.fromString("0D820768-A329-4ED4-8F53-BDF364EDAC75")
+val SSID_CHARACTERISTIC_UUID: UUID = UUID.fromString("0D820768-A329-4ED4-8F53-BDF364EDAC75")
+val PASSWORD_CHARACTERISTIC_UUID: UUID = UUID.fromString("E1FA8F66-CF88-4572-9527-D5125A2E0762")
 
-val messageTerminator = "DONE".toByteArray()
-const val packetSize = 15
+//val messageTerminator = "DONE".toByteArray()
+//const val packetSize = 15
+const val NO_SSID = "NONE"
 
 class Bluetooth(
     val application: Application,
     val gotPeer: (String) -> Unit,
-    val gotWifiInfo: (String, String, ByteArray) -> Unit,
-    val getWifiInfo: () -> String,
+    val gotSsid: (String) -> Unit,
+    val gotPassword: (String) -> Unit,
+    private val connectToPeer: () -> Unit,
+    val getWifiInfo: () -> Pair<String, String>,
     val outputText: (String) -> Job,
 ) {
 
@@ -56,12 +59,12 @@ class Bluetooth(
     lateinit var bluetoothGattServer: BluetoothGattServer
     private lateinit var service: BluetoothGattService
     lateinit var bluetoothLeScanner: BluetoothLeScanner
-    var bluetoothReceiver = BluetoothReceiver(application, null)
+    var bluetoothReceiver = BluetoothReceiver(application, null, gotPeer, gotSsid, gotPassword, connectToPeer, getWifiInfo, outputText)
     var active = false
 
     // keeping these values here to stream wifiInfo over bluetooth since max packet size is 20
-    var wifiInfo = byteArrayOf()
-    var cursor = 0
+    // var wifiInfo = byteArrayOf()
+    // var cursor = 0
 
     private var _status = MutableLiveData<Boolean>()
     val status: LiveData<Boolean>
@@ -79,18 +82,24 @@ class Bluetooth(
         bluetoothGattServer = bluetoothManager.openGattServer(application, serverCallback) ?: return false
 
         service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
-        val wifiCharacteristic = BluetoothGattCharacteristic(
-            WIFI_CHARACTERISTIC_UUID,
-            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE, // TODO: correct?
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
-        )
         val osCharacteristic = BluetoothGattCharacteristic(
             OS_CHARACTERISTIC_UUID,
-            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE, // TODO: correct?
+            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE,
             BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
         )
-        service.addCharacteristic(wifiCharacteristic)
+        val ssidCharacteristic = BluetoothGattCharacteristic(
+            SSID_CHARACTERISTIC_UUID,
+            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE,
+            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
+        )
+        val passwordCharacteristic = BluetoothGattCharacteristic(
+            PASSWORD_CHARACTERISTIC_UUID,
+            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE,
+            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
+        )
         service.addCharacteristic(osCharacteristic)
+        service.addCharacteristic(ssidCharacteristic)
+        service.addCharacteristic(passwordCharacteristic)
         bluetoothGattServer.addService(service)
         return true
     }
@@ -127,30 +136,17 @@ class Bluetooth(
                     )
                 }
                 // if we've started wifi hotspot, this will send the details. if not, it will send a blank string and the peer will need to wait and try again
-                WIFI_CHARACTERISTIC_UUID -> {
+                SSID_CHARACTERISTIC_UUID -> {
+                    val (ssid, _) = getWifiInfo()
                     bluetoothGattServer.sendResponse(
-                        device, requestId, BluetoothGatt.GATT_SUCCESS, 0, "$getWifiInfo()".toByteArray()
+                        device, requestId, BluetoothGatt.GATT_SUCCESS, 0, ssid.toByteArray()
                     )
-                    // TODO: if wifiInfo == "", getWifiInfo(). if that's not blank, set wifiInfo to it and set cursor to 0.
-                    //    if wifiInfo != "", read from cursor to packetSize or end. increment cursor by length read.
-                    //    if cursor == wifiInfo.size, write message terminator, and set cursor to 0 (redundant).
-//                    if (wifiInfo.isEmpty()) {
-//                        wifiInfo = getWifiInfo().toByteArray() // if we
-//                        cursor = 0
-//                    }
-//                    if (wifiInfo.isNotEmpty()) {
-//                        if (cursor == wifiInfo.size) {
-//                            bluetoothGattServer.sendResponse(
-//                                device, requestId, BluetoothGatt.GATT_SUCCESS, 0, messageTerminator
-//                            )
-//                            cursor = 0
-//                        }
-//                        val chunk = wifiInfo.slice(cursor until min(cursor + packetSize, wifiInfo.size))
-//                        bluetoothGattServer.sendResponse(
-//                            device, requestId, BluetoothGatt.GATT_SUCCESS, cursor, chunk.toByteArray() // TODO: should offset be cursor or 0?
-//                        )
-//                        cursor += chunk.size
-//                    }
+                }
+                PASSWORD_CHARACTERISTIC_UUID -> {
+                    val (_, password) = getWifiInfo()
+                    bluetoothGattServer.sendResponse(
+                        device, requestId, BluetoothGatt.GATT_SUCCESS, 0, password.toByteArray()
+                    )
                 }
                 else -> {
                     outputText("Invalid characteristic")
@@ -185,7 +181,7 @@ class Bluetooth(
                 value
             )
 
-            outputText("Central peer wrote something: ${value?.let {it.toString(Charsets.UTF_8)}}")
+            outputText("Central peer wrote something: \"${value?.toString(Charsets.UTF_8)}\"")
             if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 return
             }
@@ -199,11 +195,17 @@ class Bluetooth(
                     // happen till central writes wifi info
                     value?.let { gotPeer(it.toString(Charsets.UTF_8)) }
                 }
-                WIFI_CHARACTERISTIC_UUID -> {
-                    // parse value and set ssid and password
+                SSID_CHARACTERISTIC_UUID -> {
+                    // central has written ssid to us as peripheral. if they wrote an ssid, we need to store it.
+                    // if they didn't, we don't need to do anything, and just wait for them to write the password,
+                    // at which point we can calculate the ssid and key.
                     if (value != null) {
-                        val (ssid, password, key) = parseWifiInfo(value.toString(Charsets.UTF_8))
-                        gotWifiInfo(ssid, password, key)
+                        gotSsid(value.toString(Charsets.UTF_8))
+                    }
+                }
+                PASSWORD_CHARACTERISTIC_UUID -> {
+                    if (value != null) {
+                        gotPassword(value.toString(Charsets.UTF_8))
                     }
                 }
                 else -> {
@@ -325,18 +327,19 @@ class Bluetooth(
     class BluetoothReceiver(
         private val application: Application,
         var result: ScanResult?,
+        val gotPeer: (String) -> Unit,
+        val gotSsid: (String) -> Unit,
+        val gotPassword: (String) -> Unit,
+        val connectToPeer: () -> Unit,
+        val getWifiInfo: () -> Pair<String, String>,
+        val outputText: (String) -> Job,
     ): BroadcastReceiver() {
-
-        // TODO: does the signature of this class matter?
-        lateinit var gotPeer: (String) -> Unit
-        lateinit var gotWifiInfo: (String, String, ByteArray) -> Unit
-        lateinit var connectToPeer: () -> Unit
-        lateinit var outputText: (String) -> Job
 
         private var peerDevice: BluetoothDevice? = null
         var bluetoothGatt: BluetoothGatt? = null
         var osCharacteristic: BluetoothGattCharacteristic? = null
-        var wifiCharacteristic: BluetoothGattCharacteristic? = null
+        var ssidCharacteristic: BluetoothGattCharacteristic? = null
+        var passwordCharacteristic: BluetoothGattCharacteristic? = null
 
         override fun onReceive(context: Context?, intent: Intent?) {
             outputText("Action: ${intent?.action}")
@@ -345,9 +348,6 @@ class Bluetooth(
             } else {
                 intent?.getParcelableExtra(EXTRA_DEVICE)
             }
-//            if (device?.address != address) {
-//                return
-//            }
             val bondState = intent?.getIntExtra(EXTRA_BOND_STATE, -1)
             if (bondState != BOND_BONDED) {
                 outputText("Not bonded")
@@ -371,18 +371,23 @@ class Bluetooth(
                         OS_CHARACTERISTIC_UUID -> {
                             gotPeer(value.toString(Charsets.UTF_8))
                         }
-                        WIFI_CHARACTERISTIC_UUID -> {
-                            val info = value.toString(Charsets.UTF_8)
-                            if (info == "") {
-                                // kill a second, then read again, which will loop us back here
+                        SSID_CHARACTERISTIC_UUID -> {
+                            val ssid = value.toString(Charsets.UTF_8)
+                            if (ssid == "") {
+                                // peripheral hasn't stood up its hotspot yet, have to wait.
+                                // kill a second, then read again, which will loop us back here.
                                 outputText("Could not read peer's WiFi characteristic. trying again...")
                                 Thread.sleep(1000)
-                                read(WIFI_CHARACTERISTIC_UUID)
+                                read(SSID_CHARACTERISTIC_UUID)
                                 return
                             }
-                            val (ssid, password, key) = parseWifiInfo(info)
-                            gotWifiInfo(ssid, password, key)
+                            gotSsid(ssid)
+                            // doing this here instead of in gotSsid because if peripheral had SSID
+                            // written to it, we wouldn't need to call read
+                            // we read the SSID, now read the password.
+                            read(PASSWORD_CHARACTERISTIC_UUID)
                         }
+                        PASSWORD_CHARACTERISTIC_UUID -> gotPassword(value.toString(Charsets.UTF_8))
                     }
                 }
 
@@ -398,9 +403,15 @@ class Bluetooth(
                             outputText("Wrote OS to peer")
                             connectToPeer()
                         }
-                        WIFI_CHARACTERISTIC_UUID -> {
-                            // TODO: what to do here?
-                            outputText("Wrote WiFi details to peer")
+                        SSID_CHARACTERISTIC_UUID -> {
+                            outputText("Wrote SSID to peer")
+                            val (_, password) = getWifiInfo()
+                            outputText("Fetched password = $password")
+                            write(PASSWORD_CHARACTERISTIC_UUID, password.toByteArray())
+                        }
+                        PASSWORD_CHARACTERISTIC_UUID -> {
+                            outputText("Wrote password to peer")
+                            // we told the peripheral the password, now just have to wait for them to join the hotspot
                         }
                     }
                 }
@@ -417,8 +428,9 @@ class Bluetooth(
                     val service = gatt.getService(SERVICE_UUID) ?: return
                     outputText("Got service: $service")
                     osCharacteristic = service.getCharacteristic(OS_CHARACTERISTIC_UUID) ?: return
-                    wifiCharacteristic = service.getCharacteristic(WIFI_CHARACTERISTIC_UUID) ?: return
-                    outputText("Got characteristics: $osCharacteristic, $wifiCharacteristic")
+                    ssidCharacteristic = service.getCharacteristic(SSID_CHARACTERISTIC_UUID) ?: return
+                    passwordCharacteristic = service.getCharacteristic(PASSWORD_CHARACTERISTIC_UUID) ?: return
+                    outputText("Got characteristics: $osCharacteristic, $ssidCharacteristic, $passwordCharacteristic")
                     read(OS_CHARACTERISTIC_UUID)
                 }
 
@@ -452,7 +464,6 @@ class Bluetooth(
             result!!.device.connectGatt(application.applicationContext, false, gattCallback)
         }
 
-        // TODO: use read and write when receiving... we call scan, scan bonds, then BluetoothReceiver reads OS and kicks us off?
         // use to read peripheral's characteristic
         fun read(characteristicUuid: UUID) {
             if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
@@ -460,62 +471,52 @@ class Bluetooth(
             }
             when (characteristicUuid) {
                 OS_CHARACTERISTIC_UUID -> bluetoothGatt?.readCharacteristic(osCharacteristic)
-                WIFI_CHARACTERISTIC_UUID -> bluetoothGatt?.readCharacteristic(wifiCharacteristic)
+                SSID_CHARACTERISTIC_UUID -> bluetoothGatt?.readCharacteristic(ssidCharacteristic)
+                PASSWORD_CHARACTERISTIC_UUID -> bluetoothGatt?.readCharacteristic(passwordCharacteristic)
             }
         }
 
-        fun writeSinglePacket(characteristicUuid: UUID, value: ByteArray, waitForResponse: Boolean) {
+        // private fun writeSinglePacket(characteristicUuid: UUID, value: ByteArray, waitForResponse: Boolean) {
+        fun write(characteristicUuid: UUID, value: ByteArray) {
             outputText("Writing to $characteristicUuid")
-            val writeType = if (waitForResponse) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            // val writeType = if (waitForResponse) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            val writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
             if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 return
             }
+            val characteristic = when (characteristicUuid) {
+                OS_CHARACTERISTIC_UUID -> osCharacteristic
+                SSID_CHARACTERISTIC_UUID -> ssidCharacteristic
+                PASSWORD_CHARACTERISTIC_UUID -> passwordCharacteristic
+                else -> {
+                    outputText("Bad characteristic: $characteristicUuid")
+                    return
+                }
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                when (characteristicUuid) {
-                    OS_CHARACTERISTIC_UUID -> {
-                        bluetoothGatt?.writeCharacteristic(
-                            osCharacteristic!!,
-                            value,
-                            writeType
-                        )
-                    }
-                    WIFI_CHARACTERISTIC_UUID -> {
-                        bluetoothGatt?.writeCharacteristic(
-                            wifiCharacteristic!!,
-                            value,
-                            writeType
-                        )
-                    }
-                }
+                bluetoothGatt?.writeCharacteristic(
+                    characteristic!!,
+                    value,
+                    writeType
+                )
             } else {
-                when (characteristicUuid) {
-                    OS_CHARACTERISTIC_UUID -> {
-                        // this takes place in the context of being a central. the peerDevice will have discoverable characteristics.
-                        // we should've discovered them by this point?
-                        osCharacteristic?.value = value
-                        wifiCharacteristic?.writeType = writeType
-                        bluetoothGatt?.writeCharacteristic(osCharacteristic)
-                    }
-                    WIFI_CHARACTERISTIC_UUID -> {
-                        wifiCharacteristic?.value = value
-                        wifiCharacteristic?.writeType = writeType
-                        bluetoothGatt?.writeCharacteristic(wifiCharacteristic)
-                    }
-                }
+                characteristic?.value = value
+                characteristic?.writeType = writeType
+                bluetoothGatt?.writeCharacteristic(characteristic)
             }
         }
 
-        fun write(characteristicUuid: UUID, value: ByteArray) {
-            var cursor = 0
-            while (cursor < value.size) {
-                val chunk = value.slice(cursor until min(cursor + packetSize, value.size))
-                cursor += chunk.size
-                writeSinglePacket(characteristicUuid, chunk.toByteArray(), false)
-            }
-            writeSinglePacket(characteristicUuid, messageTerminator, true)
-        }
-
-        // fun read(characteristicUuid: UUID)
+        // going to split ssid and password into separate characteristics to avoid having to implement streaming,
+        // in the hope that android will never make hotspots with SSIDs or passwords longer than 20 characters
+//        fun write(characteristicUuid: UUID, value: ByteArray) {
+//            var cursor = 0
+//            while (cursor < value.size) {
+//                val chunk = value.slice(cursor until min(cursor + packetSize, value.size))
+//                cursor += chunk.size
+//                writeSinglePacket(characteristicUuid, chunk.toByteArray(), false)
+//            }
+//            writeSinglePacket(characteristicUuid, messageTerminator, true)
+//        }
     }
 
 

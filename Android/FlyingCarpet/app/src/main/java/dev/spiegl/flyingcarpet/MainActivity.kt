@@ -165,10 +165,18 @@ class MainActivity : AppCompatActivity() {
                 viewModel.outputText("Scan cancelled, exiting transfer.")
                 viewModel.cleanUpTransfer()
             } else {
-                val wifiInfo = parseWifiInfo(result.contents)
-                viewModel.ssid = wifiInfo.first
-                viewModel.password = wifiInfo.second
-                viewModel.key = wifiInfo.third
+                val ssidAndPassword = result.contents.split(';')
+                if (ssidAndPassword.count() > 1) {
+                    viewModel.ssid = ssidAndPassword[0]
+                    viewModel.password = ssidAndPassword[1]
+                    val (_, key) = getSsidAndKey(viewModel.password)
+                    viewModel.key = key
+                } else {
+                    viewModel.password = ssidAndPassword[0]
+                    val (ssid, key) = getSsidAndKey(viewModel.password)
+                    viewModel.ssid = ssid
+                    viewModel.key = key
+                }
                 // join hotspot
                 viewModel.joinHotspot()
             }
@@ -486,12 +494,6 @@ class MainActivity : AppCompatActivity() {
             bluetoothSwitch.isChecked = false
             bluetoothSwitch.isEnabled = false
         }
-
-        // TODO: this is ugly
-        viewModel.bluetooth.bluetoothReceiver.gotPeer = viewModel::gotPeer
-        viewModel.bluetooth.bluetoothReceiver.gotWifiInfo = viewModel::gotWifiInfo
-        viewModel.bluetooth.bluetoothReceiver.connectToPeer = viewModel::connectToPeer
-        viewModel.bluetooth.bluetoothReceiver.outputText = viewModel.outputText
     }
 
     private fun initializeBluetooth(): Boolean {
@@ -523,6 +525,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // TODO:
+//   try https://developer.android.com/reference/android/bluetooth/BluetoothGatt#requestMtu(int) first, windows probably supports large mtu, so does apple, need to check linux.
 //   mutex needed for wifi info?
 //   can't run advertiser more than once, have to quit app
 //   bluetooth permissions messed up on launch

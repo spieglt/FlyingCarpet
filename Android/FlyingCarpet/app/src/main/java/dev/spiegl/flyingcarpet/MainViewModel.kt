@@ -84,7 +84,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             _output.value = msg
         }
     }
-    val bluetooth = Bluetooth(application, ::gotPeer, ::gotWifiInfo, ::getWifiInfo, outputText) // TODO: better way to do these callbacks?
+    val bluetooth = Bluetooth(application, ::gotPeer, ::gotSsid, ::gotPassword, ::connectToPeer, ::getWifiInfo, outputText) // TODO: better way to do these callbacks?
     var qrBitmap: Bitmap? = null
 
     var progressBarMut = MutableLiveData(0)
@@ -175,7 +175,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         ssid = ""
         password = ""
         // if we're hosting, startHotspot() will write the wifi details over bluetooth or display the QR code
-        // if we're joining and using bluetooth, we read peer's wifi characteristic here, then bluetoothReceiver's gattCallback's onCharacteristicRead will call gotWifiInfo(), which will call joinHotspot()
+        // if we're joining and using bluetooth, we read peer's wifi characteristic here, then bluetoothReceiver's gattCallback's onCharacteristicRead will call gotSsid()
         // if we're joining and not using bluetooth, barcodeLauncher will call joinHotspot()
         // but who will call connectToPeer? file/folder pickers in MainActivity if not using bluetooth, or after we write OS if bluetooth
         if (isHosting()) {
@@ -183,11 +183,11 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         } else { // joining hotspot
             if (bluetooth.active) {
                 if (mode == Mode.Sending) {
-                    // we're peripheral, and we're joining, and already know peer's OS, so need to wait for central to write the hotspot details
-                    // so nothing to do here
+                    // we're peripheral, and we're joining, and already know peer's OS, so need to
+                    // wait for central to write the hotspot details. so nothing to do here.
                 } else {
                     // we're central, so read wifi details
-                    bluetooth.bluetoothReceiver.read(WIFI_CHARACTERISTIC_UUID)
+                    bluetooth.bluetoothReceiver.read(SSID_CHARACTERISTIC_UUID)
                 }
             } else {
                 // scan qr code
@@ -257,8 +257,8 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 } else {
                     // write the wifi details to peer
                     bluetooth.bluetoothReceiver.write(
-                        WIFI_CHARACTERISTIC_UUID,
-                        "$ssid;$password".toByteArray()
+                        SSID_CHARACTERISTIC_UUID,
+                        ssid.toByteArray()
                     )
                 }
             } else {
@@ -297,9 +297,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             requestPermissionLauncher.launch(requiredPermission)
-//            Log.e("FCLOGS", "Didn't have $requiredPermission")
         } else {
-//            Log.i("FCLOGS", "Had $requiredPermission")
             try {
                 wifiManager.startLocalOnlyHotspot(localOnlyHotspotCallback, handler)
                 outputText("Started hotspot.")
@@ -312,8 +310,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
     fun joinHotspot() {
         val callback = NetworkCallback()
-        outputText("Joining $ssid")
-        // outputText("Password ${password}")
+        outputText("Joining $ssid, password $password")
         val specifier = WifiNetworkSpecifier.Builder()
             .setSsid(ssid)
             .setWpa2Passphrase(password)
@@ -338,30 +335,37 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             "macos" -> Peer.macOS
             "windows" -> Peer.Windows
             else -> {
-                outputText("Error: peer sent an unsupported OS.")
+                outputText("Error: peer sent an unsupported OS.") // TODO: remove, as android devices write other characteristics to each other?
                 return
             }
         }
         if (mode == Mode.Sending) {
             connectToPeer()
         } else {
-            // TODO: this only makes sense if we're central. if we're peripheral, after we get peer,
             bluetooth.bluetoothReceiver.write(OS_CHARACTERISTIC_UUID, "android".toByteArray())
         }
     }
 
-    fun gotWifiInfo(ssid: String, password: String, key: ByteArray) {
-        this.ssid = ssid
+    fun gotSsid(ssid: String) {
+        this.ssid = if (ssid == NO_SSID) { "" } else ssid
+    }
+
+    private fun gotPassword(password: String) {
         this.password = password
+        val (ssid, key) = getSsidAndKey(password)
+        if (this.ssid == "") {
+            this.ssid = ssid
+        }
         this.key = key
         joinHotspot()
     }
 
-    private fun getWifiInfo(): String {
+    private fun getWifiInfo(): Pair<String, String> {
+        outputText("In getWifiInfo")
         if (ssid == "" || password == "") {
-            return ""
+            return Pair("", "")
         }
-        return "$ssid;$password"
+        return Pair(ssid, password)
     }
 
     private suspend fun startTCP() {
