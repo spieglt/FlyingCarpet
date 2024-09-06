@@ -1,5 +1,4 @@
 #[cfg_attr(target_os = "linux", path = "linux.rs")]
-#[cfg_attr(target_os = "macos", path = "mac.rs")]
 #[cfg_attr(target_os = "windows", path = "windows.rs")]
 pub mod network;
 mod receiving;
@@ -86,7 +85,6 @@ pub async fn start_transfer<T: UI>(
     mode: String,
     peer: String,
     password: String,
-    ssid: Option<String>, // only used if mac talking to android, getting android ssid from ui. otherwise compute.
     interface: WiFiInterface,
     file_list: Option<Vec<String>>,
     receive_dir: Option<String>,
@@ -113,8 +111,7 @@ pub async fn start_transfer<T: UI>(
     let mut hasher = Sha256::new();
     hasher.update(password.as_bytes());
     let key = hasher.finalize();
-    let _ssid = format!("flyingCarpet_{:02x}{:02x}", key[0], key[1]);
-    let ssid = ssid.or(Some(_ssid)).unwrap();
+    let ssid = format!("flyingCarpet_{:02x}{:02x}", key[0], key[1]);
 
     {
         let mut _state_ssid = state_ssid.lock().expect("Couldn't lock state_ssid");
@@ -401,7 +398,6 @@ async fn confirm_version(
 // hosted network stuff on windows?
 // send folder mode?
 // recreate directory structure if all submitted files are in same dir. taken for granted in gui? only problem for cli? not if dropping appends... only allow when using send-folder?
-// mac just times out after 200MB? no, just has to be kept awake? or cycles card if something tries to connect to internet? or if not plugged in? or it's just not happening now...
 // remove file selection box and replace start button with Choose Files/Choose Folder? gets in the way of drag and drop... so no?
 // optional password length?
 // move password length constant into rust, fetch in javascript

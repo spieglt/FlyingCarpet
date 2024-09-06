@@ -16,6 +16,8 @@ Or search the App Store for "Flying Carpet File Transfer".
 
 # Flying Carpet
 
+TODO: Bluetooth
+
 Send and receive files between Android, iOS, Linux, macOS, and Windows over ad hoc WiFi. No shared network or cell connection required, just two devices with WiFi chips in close range.
 
 Don't have a flash drive? Don't have access to a wireless network? Need to move a file larger than 2GB between different filesystems but don't want to set up a network share? Try it out!
@@ -39,8 +41,6 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 + Install [Rust](https://www.rust-lang.org/tools/install).
 
 + Run `cargo install tauri-cli` to install Tauri.
-
-+ Mac only: Install XCode. Open `FlyingCarpetMac/FlyingCarpetMac/FlyingCarpetMac.xcodeproj` and build it.
 
 + For Linux, install dependencies. Ubuntu 20 example:
 ```
@@ -66,8 +66,6 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 + Sometimes when the Cancel button is hit on the desktop platforms, it can take time for the OS to finish trying to join or create a hotspot. Please only click the Cancel button once and wait a few seconds. This sounds like it should be easy to fix, but last time I tried it was not.
 
 ## Planned Features
-
-+ Bluetooth for connection negotiation (instead of QR code scanning or manual entry)?
 
 + Add Flying Carpet shortcut to iOS Share menu.
 

@@ -4,7 +4,6 @@ import { QRCode } from './deps/qrcode.js'
 let aboutButton;
 let selectionBox;
 let outputBox;
-let ssidBox;
 let startButton;
 let cancelButton;
 let progressBar;
@@ -25,7 +24,6 @@ window.onunload = () => {
     output: outputBox.innerText,
     transferRunning: startButton.style.display === 'none',
     passwordBoxValue: passwordBox.value,
-    ssidBoxValue: ssidBox.value,
     progressBarValue: progressBar.value,
     progressBarVisible: progressBar.style.display !== 'none',
   };
@@ -46,19 +44,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   // about button
   aboutButton.onclick = () => {
     alert(aboutMessage);
-  }
-
-  // hide unnecessary buttons for macOS
-  if (await os.type() === 'Darwin') {
-    document.getElementById('iosSelector').style.display = 'none';
-    document.getElementById('macSelector').style.display = 'none';
-  }
-
-  ssidBox = document.getElementById('ssidBox');
-  ssidBox.onfocus = () => {
-    if (ssidBox.value == '') {
-      ssidBox.value = 'AndroidShare_';
-    }
   }
 
   // output handler
@@ -119,7 +104,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       }
     });
     passwordBox.value = uiState.passwordBoxValue;
-    ssidBox.value = uiState.ssidBoxValue;
     selectedFiles = uiState.selectedFiles;
     selectedFolder = uiState.selectedFolder;
     outputBox.innerText = uiState.output;
@@ -150,9 +134,8 @@ function makeQRCode(str) {
 
 async function startTransfer() {
   // handle password
-  let [needPassword, needSsid] = await needPasswordAndSsid();
   let password;
-  if (needPassword) {
+  if (await needPassword()) {
     password = document.getElementById('passwordBox').value;
     if (password.length < 8) {
       output('Must enter password from the other device.');
@@ -167,16 +150,6 @@ async function startTransfer() {
       output(`Password: ${password}`);
       alert(`\nStart the transfer on the other device and enter this password when prompted:\n${password}`);
     }
-  }
-
-  // handle SSID if we're macOS connecting to Android
-  let ssid = needSsid
-    ? ssidBox.value
-    : null;
-
-  if (needSsid && ssid == '') {
-    output('Must enter SSID. It will be displayed once you start the transfer on the Android device.');
-    return;
   }
 
   // make sure we have a wifi interface and prompt for which if more than one
@@ -213,7 +186,6 @@ async function startTransfer() {
     mode: selectedMode,
     peer: selectedPeer,
     password: password,
-    ssid: ssid,
     interface: wifiInterface,
     fileList: selectedFiles,
     receiveDir: selectedFolder,
@@ -300,46 +272,37 @@ let checkStatus = () => {
   updateSelectionBox();
   document.getElementById('filesButton').disabled = !selectedMode;
   document.getElementById('folderButton').disabled = !selectedMode;
-  showPasswordAndSsid();
+  showPassword();
   startButton.disabled = !(selectedMode && selectedPeer
     && (selectedFiles || selectedFolder));
 }
 
-let needPasswordAndSsid = async () => {
-  // if OS mac, always joining, always need password. also need ssid if peer == android.
+let needPassword = async () => {
   // if linux, joining windows, hosting mac/ios/android or linux if receiving.
   // if windows, always hosting unless windows and sending.
-  let showPassword, showSsid;
+  let showPassword;
   switch (await os.type()) {
     case 'Darwin':
       showPassword = true;
-      showSsid = selectedPeer === 'android';
       break;
     case 'Linux':
       showPassword = selectedPeer === 'windows' || (selectedPeer === 'linux' && selectedMode === 'send');
-      showSsid = false;
       break;
     case 'Windows_NT':
       showPassword = selectedPeer === 'windows' && selectedMode === 'send';
-      showSsid = false;
       break;
     default:
-      alert('Error in shouldShowPasswordAndSsid()');
+      alert('Error in needPassword()');
   }
-  return [showPassword, showSsid];
+  return showPassword;
 }
 
-let showPasswordAndSsid = async () => {
-  let [showPassword, showSsid] = await needPasswordAndSsid();
+let showPassword = async () => {
+  let showPassword = await needPassword();
   if (showPassword) {
     document.getElementById('passwordBox').style.display = '';
   } else {
     document.getElementById('passwordBox').style.display = 'none';
-  }
-  if (showSsid) {
-    ssidBox.style.display = '';
-  } else {
-    ssidBox.style.display = 'none';
   }
 }
 
@@ -353,9 +316,8 @@ let enableUi = async () => {
   for (let i in radioButtons) {
     document.getElementById(radioButtons[i]).disabled = false;
   }
-  // enable password and ssid boxes
+  // enable password box
   document.getElementById('passwordBox').disabled = false;
-  document.getElementById('ssidBox').disabled = false;
   // replace logo
   document.getElementById('qrcode').innerHTML = '<img src="assets/icon1024.png" style="width: 150px; height: 150px;">'
 }
@@ -370,9 +332,8 @@ let disableUi = async () => {
   for (let i in radioButtons) {
     document.getElementById(radioButtons[i]).disabled = true;
   }
-  // disable password and ssid boxes
+  // disable password box
   document.getElementById('passwordBox').disabled = true;
-  document.getElementById('ssidBox').disabled = true;
 }
 
 window.startTransfer = startTransfer;
@@ -388,6 +349,6 @@ theron@spiegl.dev
 Copyright (c) 2024, Theron Spiegl
 All rights reserved.
 
-Flying Carpet performs file transfers between two laptops or phones (Android, iOS, Linux, Mac, Windows) via ad hoc WiFi. No access point or network gear is required. Just select a file, whether each device is sending or receiving, and the operating system of the other device. For mobile versions, search for "Flying Carpet File Transfer" in the Apple App Store or Google Play Store.
+Flying Carpet performs file transfers between two laptops or phones (Android, iOS, Linux, macOS, Windows) via ad hoc WiFi. No access point or network gear is required. Just select a file, whether each device is sending or receiving, and the operating system of the other device. For mobile versions, search for "Flying Carpet File Transfer" in the Apple App Store or Google Play Store.
 
 Licensed under the GPL3: https://www.gnu.org/licenses/gpl-3.0.html#license-text`
