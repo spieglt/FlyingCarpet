@@ -1,6 +1,11 @@
-#[cfg_attr(target_os = "linux", path = "linux.rs")]
-#[cfg_attr(target_os = "windows", path = "windows.rs")]
+#[cfg_attr(target_os = "linux", path = "linux/network.rs")]
+#[cfg_attr(target_os = "windows", path = "windows/network.rs")]
 pub mod network;
+
+#[cfg_attr(target_os = "linux", path = "linux/bluetooth.rs")]
+#[cfg_attr(target_os = "windows", path = "windows/bluetooth.rs")]
+pub mod bluetooth;
+
 mod receiving;
 mod sending;
 pub mod utils;

@@ -28,4 +28,12 @@ features = [
     "Win32_NetworkManagement_IpHelper",
     "Win32_NetworkManagement_Ndis",
     "Win32_NetworkManagement_WiFi",
+    "Foundation",
+    "Foundation_Collections",
+    "implement",
+    "Devices_Bluetooth",
+    "Devices_Bluetooth_Advertisement",
+    "Devices_Bluetooth_GenericAttributeProfile",
+    "Devices_Enumeration",
+    "Storage_Streams",
 ]
