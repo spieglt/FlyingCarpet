@@ -32,7 +32,6 @@ import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import kotlinx.coroutines.Job
 import java.util.UUID
 
 
@@ -45,21 +44,22 @@ val PASSWORD_CHARACTERISTIC_UUID: UUID = UUID.fromString("E1FA8F66-CF88-4572-952
 //const val packetSize = 15
 const val NO_SSID = "NONE"
 
-class Bluetooth(
-    val application: Application,
-    val gotPeer: (String) -> Unit,
-    val gotSsid: (String) -> Unit,
-    val gotPassword: (String) -> Unit,
-    private val connectToPeer: () -> Unit,
-    val getWifiInfo: () -> Pair<String, String>,
-    val outputText: (String) -> Job,
-) {
+interface BluetoothDelegate {
+    fun gotPeer(peerOS: String)
+    fun gotSsid(ssid: String)
+    fun gotPassword(password: String)
+    fun connectToPeer()
+    fun getWifiInfo(): Pair<String, String>
+    fun outputText(msg: String)
+}
+
+class Bluetooth(val application: Application, val delegate: BluetoothDelegate): BluetoothDelegate by delegate {
 
     lateinit var bluetoothManager: BluetoothManager
     lateinit var bluetoothGattServer: BluetoothGattServer
     private lateinit var service: BluetoothGattService
     lateinit var bluetoothLeScanner: BluetoothLeScanner
-    var bluetoothReceiver = BluetoothReceiver(application, null, gotPeer, gotSsid, gotPassword, connectToPeer, getWifiInfo, outputText)
+    var bluetoothReceiver = BluetoothReceiver(application, null, delegate)
     var active = false
 
     // keeping these values here to stream wifiInfo over bluetooth since max packet size is 20
@@ -79,27 +79,22 @@ class Bluetooth(
         if (bluetoothManager.adapter == null) {
             return false
         }
-        bluetoothGattServer = bluetoothManager.openGattServer(application, serverCallback) ?: return false
 
+        // open server, create service
+        bluetoothGattServer = bluetoothManager.openGattServer(application, serverCallback) ?: return false
         service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
-        val osCharacteristic = BluetoothGattCharacteristic(
-            OS_CHARACTERISTIC_UUID,
-            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE,
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
-        )
-        val ssidCharacteristic = BluetoothGattCharacteristic(
-            SSID_CHARACTERISTIC_UUID,
-            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE,
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
-        )
-        val passwordCharacteristic = BluetoothGattCharacteristic(
-            PASSWORD_CHARACTERISTIC_UUID,
-            BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE,
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
-        )
-        service.addCharacteristic(osCharacteristic)
-        service.addCharacteristic(ssidCharacteristic)
-        service.addCharacteristic(passwordCharacteristic)
+
+        // add characteristics to service
+        for (characteristicUuid in arrayOf(OS_CHARACTERISTIC_UUID, SSID_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID)) {
+            val characteristic = BluetoothGattCharacteristic(
+                characteristicUuid,
+                BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE,
+                BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED_MITM or BluetoothGattCharacteristic.PERMISSION_WRITE_ENCRYPTED_MITM,
+            )
+            service.addCharacteristic(characteristic)
+        }
+
+        // add service to server
         bluetoothGattServer.addService(service)
         return true
     }
@@ -327,13 +322,8 @@ class Bluetooth(
     class BluetoothReceiver(
         private val application: Application,
         var result: ScanResult?,
-        val gotPeer: (String) -> Unit,
-        val gotSsid: (String) -> Unit,
-        val gotPassword: (String) -> Unit,
-        val connectToPeer: () -> Unit,
-        val getWifiInfo: () -> Pair<String, String>,
-        val outputText: (String) -> Job,
-    ): BroadcastReceiver() {
+        val delegate: BluetoothDelegate,
+    ): BroadcastReceiver(), BluetoothDelegate by delegate {
 
         private var peerDevice: BluetoothDevice? = null
         var bluetoothGatt: BluetoothGatt? = null

@@ -49,7 +49,7 @@ val one = byteArrayOf(0, 0, 0, 0, 0, 0, 0, 1) // meant to represent a 64-bit uns
 const val chunkSize = 5_000_000
 //fun ByteArray.toHex(): String = joinToString(separator = "") { eachByte -> "%02x".format(eachByte) }
 
-class MainViewModel(private val application: Application) : AndroidViewModel(application) {
+class MainViewModel(private val application: Application) : AndroidViewModel(application), BluetoothDelegate {
 
     lateinit var mode: Mode
     lateinit var peer: Peer
@@ -72,6 +72,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     lateinit var wifiManager: WifiManager
     lateinit var reservation: WifiManager.LocalOnlyHotspotReservation
     lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
+    val bluetooth = Bluetooth(application, this)
     lateinit var barcodeLauncher: ActivityResultLauncher<ScanOptions>
     lateinit var displayQrCode: (String, String) -> Unit
     lateinit var cleanUpUi: () -> Unit
@@ -79,12 +80,12 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     private var _output = MutableLiveData<String>()
     val output: LiveData<String>
         get() = _output
-    val outputText = { msg: String ->
+    override fun outputText(msg: String) {
         GlobalScope.launch(Dispatchers.Main) {
             _output.value = msg
         }
     }
-    val bluetooth = Bluetooth(application, ::gotPeer, ::gotSsid, ::gotPassword, ::connectToPeer, ::getWifiInfo, outputText) // TODO: better way to do these callbacks?
+
     var qrBitmap: Bitmap? = null
 
     var progressBarMut = MutableLiveData(0)
@@ -171,7 +172,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         cleanUpUi()
     }
 
-    fun connectToPeer() {
+    override fun connectToPeer() {
         ssid = ""
         password = ""
         // if we're hosting, startHotspot() will write the wifi details over bluetooth or display the QR code
@@ -256,10 +257,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                     // wifi characteristic. nothing to do here.
                 } else {
                     // write the wifi details to peer
-                    bluetooth.bluetoothReceiver.write(
-                        SSID_CHARACTERISTIC_UUID,
-                        ssid.toByteArray()
-                    )
+                    bluetooth.bluetoothReceiver.write(SSID_CHARACTERISTIC_UUID, ssid.toByteArray())
                 }
             } else {
                 // android generates ssid and password for us
@@ -327,7 +325,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         connectivityManager.requestNetwork(request, callback)
     }
 
-    fun gotPeer(peerOS: String) {
+    override fun gotPeer(peerOS: String) {
         peer = when (peerOS) {
             "android" -> Peer.Android
             "ios" -> Peer.iOS
@@ -346,11 +344,11 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         }
     }
 
-    fun gotSsid(ssid: String) {
+    override fun gotSsid(ssid: String) {
         this.ssid = if (ssid == NO_SSID) { "" } else ssid
     }
 
-    private fun gotPassword(password: String) {
+    override fun gotPassword(password: String) {
         this.password = password
         val (ssid, key) = getSsidAndKey(password)
         if (this.ssid == "") {
@@ -360,7 +358,8 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         joinHotspot()
     }
 
-    private fun getWifiInfo(): Pair<String, String> {
+    override fun getWifiInfo(): Pair<String, String> {
+        // TODO: put mutex around this? and when setting it?
         outputText("In getWifiInfo")
         if (ssid == "" || password == "") {
             return Pair("", "")
