@@ -43,7 +43,7 @@ pub async fn receive_file<T: UI>(
     let need_transfer = check_for_file(&full_path, file_size, stream).await?;
     if !need_transfer {
         ui.output("Recipient already has this file, skipping.");
-        return Ok(())
+        return Ok(());
     }
 
     // make parent directories if necessary
@@ -161,7 +161,11 @@ async fn receive_file_details(stream: &mut TcpStream) -> std::io::Result<(String
 }
 
 // returns Ok(true) if we need to perform the transfer
-async fn check_for_file(filename: &Path, size: u64, stream: &mut TcpStream) -> Result<bool, Box<dyn Error>> {
+async fn check_for_file(
+    filename: &Path,
+    size: u64,
+    stream: &mut TcpStream,
+) -> Result<bool, Box<dyn Error>> {
     // check if file by this name and size exists
     if filename.is_file() {
         // check size

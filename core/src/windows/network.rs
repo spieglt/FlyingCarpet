@@ -128,7 +128,10 @@ fn start_wifi_direct<T: UI>(
     }
 }
 
-pub fn stop_hotspot(peer_resource: Option<&PeerResource>, _ssid: Option<&str>) -> Result<(), Box<dyn Error>> {
+pub fn stop_hotspot(
+    peer_resource: Option<&PeerResource>,
+    _ssid: Option<&str>,
+) -> Result<(), Box<dyn Error>> {
     // if we're joining, not hosting, we don't need to do anything here. and on windows PeerResource should never be LinuxHotspot.
     match peer_resource {
         Some(PeerResource::WindowsHotspot(hotspot)) => hotspot._inner.stop()?,

@@ -88,10 +88,7 @@ fn cancel_transfer(window: Window, state: State<Transfer>) -> String {
         .lock()
         .expect("Couldn't lock state hotspot mutex.");
     let hotspot = &*hotspot;
-    let ssid = state
-        .ssid
-        .lock()
-        .expect("Couldn't lock state ssid mutex.");
+    let ssid = state.ssid.lock().expect("Couldn't lock state ssid mutex.");
     let ssid = &*ssid;
     match network::stop_hotspot(hotspot.as_ref(), ssid.as_deref()) {
         Err(e) => message += &format!("Error stopping hotspot: {} \n", e),

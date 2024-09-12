@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use std::{
     error::Error,
     net::SocketAddr,
-    path::{PathBuf, Path},
+    path::{Path, PathBuf},
     str::FromStr,
     sync::{Arc, Mutex},
 };
@@ -269,7 +269,11 @@ pub async fn clean_up_transfer<T: UI>(
     ui.enable_ui();
 }
 
-fn shut_down_hotspot<T: UI>(hotspot: &Arc<Mutex<Option<PeerResource>>>, ssid: &Arc<Mutex<Option<String>>>, ui: &T) {
+fn shut_down_hotspot<T: UI>(
+    hotspot: &Arc<Mutex<Option<PeerResource>>>,
+    ssid: &Arc<Mutex<Option<String>>>,
+    ui: &T,
+) {
     let peer_resource = hotspot.lock().expect("Couldn't lock hotspot mutex.");
     let peer_resource = peer_resource.as_ref();
     let ssid = ssid.lock().expect("Couldn't lock SSID mutex.");
@@ -388,10 +392,11 @@ async fn confirm_version(
 }
 
 // TODO:
+// bump windows-rs version, fix errors
 // folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh.
 // fix tests
 // code signing for windows?
-// fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux
+// fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux: have to get whatever is blocking on background thread?
 // update screenshots?
 // show qr code after refresh
 // test pulling wifi card, quitting program, etc.

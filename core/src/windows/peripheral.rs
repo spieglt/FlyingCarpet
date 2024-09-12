@@ -1,4 +1,4 @@
-use crate::bluetooth::{SSID_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID, SERVICE_UUID};
+use crate::bluetooth::{PASSWORD_CHARACTERISTIC_UUID, SERVICE_UUID, SSID_CHARACTERISTIC_UUID};
 use windows::{
     core::{Result, Vtable, GUID, HSTRING},
     Devices::Bluetooth::{
@@ -91,23 +91,23 @@ impl BluetoothPeripheral {
 
         // ssid write handler
         let ssid_write_callback =
-        TypedEventHandler::<GattLocalCharacteristic, GattWriteRequestedEventArgs>::new(
-            move |_gatt_local_characteristic, gatt_write_requested_event_args| {
-                let args = gatt_write_requested_event_args
-                    .as_ref()
-                    .expect("No args in read callback");
-                let request = args.GetRequestAsync()?.get()?;
-                // get value
-                unsafe {
-                    let data_reader = DataReader::from_raw(request.Value()?.as_raw());
-                    data_reader.SetUnicodeEncoding(UnicodeEncoding::Utf8)?;
-                    let ssid = data_reader.ReadString(request.Value()?.Length()?)?;
-                    got_ssid(ssid.to_string());
-                }
-                // deferral.Complete()?;
-                Ok(())
-            },
-        );
+            TypedEventHandler::<GattLocalCharacteristic, GattWriteRequestedEventArgs>::new(
+                move |_gatt_local_characteristic, gatt_write_requested_event_args| {
+                    let args = gatt_write_requested_event_args
+                        .as_ref()
+                        .expect("No args in read callback");
+                    let request = args.GetRequestAsync()?.get()?;
+                    // get value
+                    unsafe {
+                        let data_reader = DataReader::from_raw(request.Value()?.as_raw());
+                        data_reader.SetUnicodeEncoding(UnicodeEncoding::Utf8)?;
+                        let ssid = data_reader.ReadString(request.Value()?.Length()?)?;
+                        got_ssid(ssid.to_string());
+                    }
+                    // deferral.Complete()?;
+                    Ok(())
+                },
+            );
         ssid_characteristic.WriteRequested(&ssid_write_callback)?;
 
         Ok(true)

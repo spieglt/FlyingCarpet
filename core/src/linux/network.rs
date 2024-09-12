@@ -100,7 +100,10 @@ fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<
     Ok(())
 }
 
-pub fn stop_hotspot(_peer_resource: Option<&PeerResource>, ssid: Option<&str>) -> Result<(), Box<dyn Error>> {
+pub fn stop_hotspot(
+    _peer_resource: Option<&PeerResource>,
+    ssid: Option<&str>,
+) -> Result<(), Box<dyn Error>> {
     if ssid.is_some() {
         let options = Some(vec!["connection", "delete", ssid.unwrap()]);
         let command_output = run_command("nmcli", options)?;

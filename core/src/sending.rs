@@ -28,25 +28,17 @@ pub async fn send_file<T: UI>(
     ui.output(&format!("File size: {}", utils::make_size_readable(size)));
 
     // send file details
-    let mut filename = file
-        .strip_prefix(prefix)?
-        .to_string_lossy()
-        .to_string();
+    let mut filename = file.strip_prefix(prefix)?.to_string_lossy().to_string();
     if cfg!(windows) {
         filename = filename.replace("\\", "/");
     }
-    send_file_details(
-        &filename,
-        size,
-        stream,
-    )
-    .await?;
+    send_file_details(&filename, size, stream).await?;
 
     // check to see if receiving end already has the file
     let need_transfer = check_for_file(&file, stream).await?;
     if !need_transfer {
         ui.output("Recipient already has this file, skipping.");
-        return Ok(())
+        return Ok(());
     }
 
     // show progress bar
@@ -146,8 +138,6 @@ async fn check_for_file(filename: &Path, stream: &mut TcpStream) -> Result<bool,
         Ok(true)
     }
 }
-
-
 
 /*
 mod tests {

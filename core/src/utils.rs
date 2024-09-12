@@ -1,11 +1,10 @@
 use rand::Rng;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use std::{
     error::Error,
     ffi::{c_char, CString},
-    fs,
-    io,
-    path::{PathBuf, Path},
+    fs, io,
+    path::{Path, PathBuf},
     process,
 };
 
