@@ -102,7 +102,7 @@ impl BluetoothPeripheral {
                         let data_reader = DataReader::from_raw(request.Value()?.as_raw());
                         data_reader.SetUnicodeEncoding(UnicodeEncoding::Utf8)?;
                         let ssid = data_reader.ReadString(request.Value()?.Length()?)?;
-                        got_ssid(ssid.to_string());
+                        // got_ssid(ssid.to_string());
                     }
                     // deferral.Complete()?;
                     Ok(())

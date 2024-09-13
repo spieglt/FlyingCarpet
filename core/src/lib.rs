@@ -88,8 +88,8 @@ impl Transfer {
 
 pub async fn start_transfer<T: UI>(
     mode: String,
-    peer: String,
-    password: String,
+    peer: Option<String>,
+    password: Option<String>,
     interface: WiFiInterface,
     file_list: Option<Vec<String>>,
     receive_dir: Option<String>,
@@ -97,6 +97,10 @@ pub async fn start_transfer<T: UI>(
     hotspot: Arc<Mutex<Option<PeerResource>>>,
     state_ssid: Arc<Mutex<Option<String>>>,
 ) -> Option<TcpStream> {
+
+    // if bluetooth, make that connection here first
+
+
     let peer = Peer::from(peer.as_str());
 
     let mode = if mode == "send" {

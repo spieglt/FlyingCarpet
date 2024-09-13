@@ -52,8 +52,6 @@ impl Bluetooth {
         })
     }
 
-    fn initialize_peripheral() {}
-
     async fn initialize_bluetooth(&mut self) -> Result<(), Box<dyn Error>> {
         if !central::check_support()? {
             Err("Central role not supported")?;
@@ -71,11 +69,8 @@ impl Bluetooth {
         // _watcher.Stop()?;
 
 
-        bluetooth_peripheral.add_characteristic()?;
-        bluetooth_peripheral.start_advertising()?;
-
-        let mut user_input = String::new();
-        std::io::stdin().read_line(&mut user_input)?;
+        // bluetooth_peripheral.add_characteristic()?;
+        // bluetooth_peripheral.start_advertising()?;
 
         Ok(())
     }

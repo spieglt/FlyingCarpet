@@ -41,6 +41,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   appWindow = window.__TAURI__.window.appWindow;
 
+  // TODO: try to initialize bluetooth, set switch accordingly
+
   // about button
   aboutButton.onclick = () => {
     alert(aboutMessage);
