@@ -10,6 +10,7 @@ mod receiving;
 mod sending;
 pub mod utils;
 
+use bluetooth::Bluetooth;
 use sha2::{Digest, Sha256};
 use std::{
     error::Error,
@@ -88,6 +89,7 @@ impl Transfer {
 
 pub async fn start_transfer<T: UI>(
     mode: String,
+    using_bluetooth: bool,
     peer: Option<String>,
     password: Option<String>,
     interface: WiFiInterface,
@@ -99,9 +101,20 @@ pub async fn start_transfer<T: UI>(
 ) -> Option<TcpStream> {
 
     // if bluetooth, make that connection here first
+    // for windows and linux, the central/client api can read and write synchronously, and we always know the ssid before starting hotspot, so we can just do that here before connecting to peer?
+    // for servers/peripherals, does it matter? callbacks in both cases?
 
+    let mut bluetooth = None;
+    if using_bluetooth {
+        bluetooth = Some(Bluetooth::new());
+    }
 
-    let peer = Peer::from(peer.as_str());
+    let peer = if peer.is_some() {
+        Peer::from(peer.unwrap().as_str())
+    } else {
+        Peer::Linux // TODO
+    };
+    let password = password.unwrap(); // TODO
 
     let mode = if mode == "send" {
         let paths = file_list
@@ -118,7 +131,7 @@ pub async fn start_transfer<T: UI>(
     };
 
     let mut hasher = Sha256::new();
-    hasher.update(password.as_bytes());
+    hasher.update(password.as_bytes()); // TODO
     let key = hasher.finalize();
     let ssid = format!("flyingCarpet_{:02x}{:02x}", key[0], key[1]);
 

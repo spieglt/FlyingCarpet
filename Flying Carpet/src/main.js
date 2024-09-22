@@ -2,6 +2,7 @@ const { dialog, os, path, tauri } = window.__TAURI__;
 import { QRCode } from './deps/qrcode.js'
 
 let aboutButton;
+let usingBluetooth;
 let selectionBox;
 let outputBox;
 let startButton;
@@ -42,6 +43,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   appWindow = window.__TAURI__.window.appWindow;
 
   // TODO: try to initialize bluetooth, set switch accordingly
+  let error = tauri.invoke('check_support');
 
   // about button
   aboutButton.onclick = () => {
@@ -191,6 +193,7 @@ async function startTransfer() {
     interface: wifiInterface,
     fileList: selectedFiles,
     receiveDir: selectedFolder,
+    usingBluetooth: usingBluetooth,
     window: appWindow,
   });
 }
@@ -267,6 +270,7 @@ let modeChange = async (button) => {
 
 let peerChange = (button) => {
   selectedPeer = button;
+  console.log('selected peer:', selectedPeer);
   checkStatus();
 }
 

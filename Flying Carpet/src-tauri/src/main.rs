@@ -4,7 +4,7 @@
 )]
 
 use flying_carpet_core::{
-    clean_up_transfer, network, start_transfer, utils, Transfer, WiFiInterface, UI,
+    clean_up_transfer, network, start_transfer, utils, Transfer, WiFiInterface, UI, bluetooth,
 };
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -105,11 +105,12 @@ fn cancel_transfer(window: Window, state: State<Transfer>) -> String {
 fn start_async(
     state: State<Transfer>,
     mode: String,
-    peer: String,
-    password: String,
+    peer: Option<String>,
+    password: Option<String>,
     interface: WiFiInterface,
     file_list: Option<Vec<String>>,
     receive_dir: Option<String>,
+    using_bluetooth: bool,
     window: Window,
 ) {
     let thread_window = window.clone();
@@ -123,6 +124,7 @@ fn start_async(
     let cancel_handle = tokio::spawn(async move {
         let stream = start_transfer(
             mode,
+            using_bluetooth,
             peer,
             password,
             interface,
@@ -151,9 +153,17 @@ async fn main() {
             expand_files,
             generate_password,
             get_wifi_interfaces,
+            check_support,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+fn check_support() -> Option<String> {
+    bluetooth::check_support()
+        .map_err(|e| e.to_string())
+        .err()
 }
 
 #[tauri::command]

@@ -53,7 +53,7 @@ interface BluetoothDelegate {
     fun outputText(msg: String)
 }
 
-class Bluetooth(val application: Application, val delegate: BluetoothDelegate): BluetoothDelegate by delegate {
+class Bluetooth(val application: Application, private val delegate: BluetoothDelegate): BluetoothDelegate by delegate {
 
     lateinit var bluetoothManager: BluetoothManager
     lateinit var bluetoothGattServer: BluetoothGattServer
@@ -322,7 +322,7 @@ class Bluetooth(val application: Application, val delegate: BluetoothDelegate): 
     class BluetoothReceiver(
         private val application: Application,
         var result: ScanResult?,
-        val delegate: BluetoothDelegate,
+        private val delegate: BluetoothDelegate,
     ): BroadcastReceiver(), BluetoothDelegate by delegate {
 
         private var peerDevice: BluetoothDevice? = null

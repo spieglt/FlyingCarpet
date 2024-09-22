@@ -16,9 +16,7 @@ const SSID_CHARACTERISTIC_UUID: &str = "0D820768-A329-4ED4-8F53-BDF364EDAC75";
 const PASSWORD_CHARACTERISTIC_UUID: &str = "E1FA8F66-CF88-4572-9527-D5125A2E0762";
 const NO_SSID: &str = "NONE";
 
-struct Bluetooth {
-    ssid_wrote: Sender<Result<String, Box<dyn Error>>>,
-    password_wrote: Sender<Result<String, Box<dyn Error>>>,
+pub(crate) struct Bluetooth {
     central: BluetoothCentral,
     peripheral: BluetoothPeripheral,
 }
@@ -29,40 +27,42 @@ struct Bluetooth {
 // peripheral goes advertise, wait for bonding, wait for OS read, wait for OS write,
 // connectToPeer, start hotspot and wait for ssid/password to be read, or wait for ssid/pw writes and joinHotspot
 
+pub fn check_support() -> Result<(), Box<dyn Error>> {
+    if !central::check_support()? {
+        Err("Central role not supported")?;
+    }
+    println!("Central role is supported");
+    if !peripheral::check_support()? {
+        Err("Peripheral role not supported")?;
+    }
+    println!("Peripheral role is supported");
+    Ok(())
+}
+
 impl Bluetooth {
-    fn new(
-        ssid_wrote: Sender<Result<String, Box<dyn Error>>>,
-        password_wrote: Sender<Result<String, Box<dyn Error>>>,
-    ) -> Result<Self, Box<dyn Error>> {
-        if !peripheral::check_support()? {
+    pub fn new() -> Result<Self, String> { // returning Result<Self, Box<dyn Error>> here was throwing weird tokio errors so punting to string
+        let peripheral_support = peripheral::check_support()
+            .map_err(|e| format!("Error checking for peripheral support: {}", e))?;
+        if !peripheral_support {
             Err("Device does not support acting as a Bluetooth LE peripheral")?;
         }
-        let peripheral = BluetoothPeripheral::new()?;
+        let peripheral = BluetoothPeripheral::new().map_err(|e| e.to_string())?;
 
-        if !central::check_support()? {
+        let central_support = central::check_support()
+            .map_err(|e| format!("Error checking for central support: {}", e))?;
+        if !central_support {
             Err("Device does not support acting as a Bluetooth LE central.")?;
         }
-        let central = BluetoothCentral::new()?;
+        let central = BluetoothCentral::new().map_err(|e| e.to_string())?;
 
         Ok(Bluetooth {
-            ssid_wrote,
-            password_wrote,
             peripheral,
             central,
         })
     }
 
-    async fn initialize_bluetooth(&mut self) -> Result<(), Box<dyn Error>> {
-        if !central::check_support()? {
-            Err("Central role not supported")?;
-        }
-        println!("Central role is supported");
+    async fn initialize_bluetooth(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.central = BluetoothCentral::new()?;
-
-        if !peripheral::check_support()? {
-            Err("Peripheral role not supported")?;
-        }
-        println!("Peripheral role is supported");
         self.peripheral = BluetoothPeripheral::new()?;
 
         // stop watching for advertisements
