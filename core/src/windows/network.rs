@@ -8,13 +8,12 @@ use std::sync::mpsc;
 use std::time::Duration;
 use std::{process, thread};
 use wifidirect_legacy_ap::WlanHostedNetworkHelper;
-use windows::core::{GUID, HSTRING, PCSTR, PCWSTR, PSTR};
+use windows::core::{GUID, PCSTR, PCWSTR, PSTR};
 use windows::Win32::Foundation::{GetLastError, ERROR_SUCCESS, HANDLE, WIN32_ERROR};
 use windows::Win32::NetworkManagement::IpHelper;
 use windows::Win32::NetworkManagement::WiFi::{
     self, WLAN_INTERFACE_INFO, WLAN_INTERFACE_INFO_LIST,
 };
-use windows::Win32::Networking::WinSock;
 use windows::Win32::System::Com::CoInitialize;
 use windows::Win32::System::Diagnostics::Debug::{
     self, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_IGNORE_INSERTS,
@@ -151,13 +150,14 @@ fn run_shell_execute(
     let mode = rust_to_pcstr(if as_admin { "runas" } else { "open" });
     let program = rust_to_pcstr(program);
     let parameters = match parameters {
-        Some(p) => Some(rust_to_pcstr(p)),
-        None => None,
+        Some(p) => rust_to_pcstr(p),
+        None => PCSTR::null(),
     };
     unsafe {
         CoInitialize(None).unwrap();
         let res = ShellExecuteA(GetDesktopWindow(), mode, program, parameters, None, SW_HIDE);
-        if res.0 < 32 {
+        let res = res.0 as isize;
+        if res < 32 {
             let error_message = get_windows_error(GetLastError().0)?;
             Err(error_message)?;
         }
@@ -168,7 +168,7 @@ fn run_shell_execute(
 // returns Ok(Some(gateway)) if gateway found, Ok(None) if no gateway found but no error, and Err otherwise.
 fn find_gateway() -> Result<Option<String>, Box<dyn Error>> {
     let working_buffer_size = 15_000;
-    let family = WinSock::ADDRESS_FAMILY(2); // IPv4
+    let family = 2; // IPv4
     let flags = IpHelper::GAA_FLAG_INCLUDE_GATEWAYS;
     let mut ip_adapter_addresses_lh = vec![0u8; working_buffer_size];
     let mut pip_ip_adapter_addresses_lh =
@@ -198,7 +198,7 @@ fn find_gateway() -> Result<Option<String>, Box<dyn Error>> {
                     // TODO: do this properly? https://stackoverflow.com/questions/1276294/getting-ipv4-address-from-a-sockaddr-structure
                     let gateway = format!(
                         "{}.{}.{}.{}",
-                        sa_data[2].0, sa_data[3].0, sa_data[4].0, sa_data[5].0
+                        sa_data[2], sa_data[3], sa_data[4], sa_data[5]
                     );
                     return Ok(Some(gateway));
                 }
@@ -378,8 +378,11 @@ fn join_hotspot(
         + "		<enableRandomization>false</enableRandomization>\r\n"
         + "	</MacRandomization>\r\n"
         + "</WLANProfile>";
+    // TODO: double check
+    let mut xml_utf_16: Vec<u16> = xml.encode_utf16().collect();
+    xml_utf_16.push(0);
+    let str_profile = PCWSTR::from_raw(xml_utf_16.as_ptr());
 
-    let str_profile = HSTRING::from(xml);
     let mut uc_ssid = [0u8; 32];
     let ssid_chars = ssid.as_bytes().to_vec();
     for i in 0..ssid_chars.len() {
@@ -391,7 +394,7 @@ fn join_hotspot(
     };
     let parameters = WiFi::WLAN_CONNECTION_PARAMETERS {
         wlanConnectionMode: WiFi::wlan_connection_mode_temporary_profile,
-        strProfile: PCWSTR::from(&str_profile),
+        strProfile: str_profile,
         pDot11Ssid: &mut dot11_ssid,
         pDesiredBssidList: std::ptr::null_mut(),
         dot11BssType: WiFi::dot11_BSS_type_any,

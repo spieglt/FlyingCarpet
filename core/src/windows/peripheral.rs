@@ -1,8 +1,8 @@
 use crate::bluetooth::{PASSWORD_CHARACTERISTIC_UUID, SERVICE_UUID, SSID_CHARACTERISTIC_UUID};
 use windows::{
-    core::{Result, Vtable, GUID, HSTRING},
+    core::{Interface, Result, GUID, HSTRING},
     Devices::Bluetooth::{
-        BluetoothAdapter, BluetoothError,
+        BluetoothError,
         GenericAttributeProfile::{
             GattCharacteristicProperties, GattLocalCharacteristic,
             GattLocalCharacteristicParameters, GattProtectionLevel, GattReadRequestedEventArgs,
@@ -13,15 +13,6 @@ use windows::{
     Foundation::TypedEventHandler,
     Storage::Streams::{DataReader, DataWriter, UnicodeEncoding},
 };
-
-pub(crate) fn check_support() -> Result<bool> {
-    let local_adapter = BluetoothAdapter::GetDefaultAsync()?.get();
-    Ok(if local_adapter.is_ok() {
-        local_adapter.unwrap().IsPeripheralRoleSupported()?
-    } else {
-        false
-    })
-}
 
 pub(crate) struct BluetoothPeripheral {
     service_provider: GattServiceProvider,

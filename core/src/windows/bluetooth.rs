@@ -1,13 +1,12 @@
 mod central;
 mod peripheral;
 
-use std::{error::Error, sync::mpsc::Sender};
+use std::error::Error;
 
 use central::BluetoothCentral;
 use peripheral::BluetoothPeripheral;
 use windows::{
-    core::GUID,
-    Storage::Streams::{DataReader, UnicodeEncoding},
+    core::GUID, Devices::{Bluetooth::BluetoothAdapter, Radios::RadioState},
 };
 
 const SERVICE_UUID: &str = "A70BF3CA-F708-4314-8A0E-5E37C259BE5C";
@@ -28,12 +27,17 @@ pub(crate) struct Bluetooth {
 // connectToPeer, start hotspot and wait for ssid/password to be read, or wait for ssid/pw writes and joinHotspot
 
 pub fn check_support() -> Result<(), Box<dyn Error>> {
-    if !central::check_support()? {
-        Err("Central role not supported")?;
+    let adapter = BluetoothAdapter::GetDefaultAsync()?.get()?;
+    let radio = adapter.GetRadioAsync()?.get()?;
+    if radio.State()? != RadioState::On {
+        Err("radio is not on")?;
+    }
+    if !adapter.IsCentralRoleSupported()? {
+        Err("central role not supported")?;
     }
     println!("Central role is supported");
-    if !peripheral::check_support()? {
-        Err("Peripheral role not supported")?;
+    if !adapter.IsPeripheralRoleSupported()? {
+        Err("peripheral role not supported")?;
     }
     println!("Peripheral role is supported");
     Ok(())
@@ -41,38 +45,13 @@ pub fn check_support() -> Result<(), Box<dyn Error>> {
 
 impl Bluetooth {
     pub fn new() -> Result<Self, String> { // returning Result<Self, Box<dyn Error>> here was throwing weird tokio errors so punting to string
-        let peripheral_support = peripheral::check_support()
-            .map_err(|e| format!("Error checking for peripheral support: {}", e))?;
-        if !peripheral_support {
-            Err("Device does not support acting as a Bluetooth LE peripheral")?;
-        }
         let peripheral = BluetoothPeripheral::new().map_err(|e| e.to_string())?;
-
-        let central_support = central::check_support()
-            .map_err(|e| format!("Error checking for central support: {}", e))?;
-        if !central_support {
-            Err("Device does not support acting as a Bluetooth LE central.")?;
-        }
         let central = BluetoothCentral::new().map_err(|e| e.to_string())?;
 
         Ok(Bluetooth {
             peripheral,
             central,
         })
-    }
-
-    async fn initialize_bluetooth(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.central = BluetoothCentral::new()?;
-        self.peripheral = BluetoothPeripheral::new()?;
-
-        // stop watching for advertisements
-        // _watcher.Stop()?;
-
-
-        // bluetooth_peripheral.add_characteristic()?;
-        // bluetooth_peripheral.start_advertising()?;
-
-        Ok(())
     }
 }
 

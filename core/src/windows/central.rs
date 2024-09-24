@@ -10,7 +10,7 @@ use windows::{
             Advertisement::{
                 BluetoothLEAdvertisementReceivedEventArgs, BluetoothLEAdvertisementWatcher,
             },
-            BluetoothAdapter, BluetoothLEDevice,
+            BluetoothLEDevice,
         },
         Enumeration::{DeviceInformation, DevicePairingProtectionLevel, DevicePairingResultStatus},
     },
@@ -18,20 +18,6 @@ use windows::{
 };
 
 use crate::bluetooth::{SERVICE_UUID, SSID_CHARACTERISTIC_UUID};
-
-pub(crate) fn check_support() -> windows::core::Result<bool> {
-    let local_adapter = BluetoothAdapter::GetDefaultAsync()?.get();
-    Ok(if local_adapter.is_ok() {
-        println!(
-            "our address: {:12x}",
-            local_adapter.clone().unwrap().BluetoothAddress().unwrap()
-        );
-        local_adapter.unwrap().GetRadioAsync();
-        local_adapter.unwrap().IsCentralRoleSupported()?
-    } else {
-        false
-    })
-}
 
 pub(crate) struct BluetoothCentral {
     watcher: BluetoothLEAdvertisementWatcher,
@@ -137,7 +123,7 @@ impl BluetoothCentral {
         let device = device.as_ref().expect("Could not lock peer_device mutex");
         let device = device.as_ref().expect("Bluetooth central had no remote device");
 
-        let services = device.GetGattServicesAsync()?.await?.Services()?;
+        let services = device.GetGattServicesAsync()?.get()?.Services()?;
         for service in services {
             println!("UUID: {:?}", service.Uuid()?);
             if service.Uuid()? == GUID::from(SERVICE_UUID) {
@@ -147,11 +133,11 @@ impl BluetoothCentral {
                 // println!("requested access");
                 let characteristics = service
                     .GetCharacteristicsForUuidAsync(GUID::from(SSID_CHARACTERISTIC_UUID))?
-                    .await?
+                    .get()?
                     .Characteristics()?;
                 println!("got chars");
                 for characteristic in characteristics {
-                    let i_buffer = characteristic.ReadValueAsync().ok().unwrap().await?.Value();
+                    let i_buffer = characteristic.ReadValueAsync().ok().unwrap().get()?.Value();
                     if i_buffer.is_err() {
                         println!("nothing in buffer");
                         continue;

@@ -48,8 +48,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // TODO: try to initialize bluetooth, set switch accordingly
   let error = await tauri.invoke('check_support');
   if (error != null) {
-    output('Bluetooth not supported on this device. Disable the Bluetooth switch in Flying Carpet on the other device to run a transfer.');
-    output(error);
+    output(`Bluetooth initialization failed: ${error}. Disable the Bluetooth switch in Flying Carpet on the other device to run a transfer.`);
     bluetoothSwitch.disabled = true;
     bluetoothSwitch.checked = false;
   } else {

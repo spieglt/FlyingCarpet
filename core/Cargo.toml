@@ -14,7 +14,7 @@ tokio = { version = "1", features = ["full"] }
 wifidirect-legacy-ap = "0.4.0"
 
 [target.'cfg(windows)'.dependencies.windows]
-version = "0.42.0"
+version = "0.58.0"
 features = [
     "Data_Xml_Dom",
     "Win32_Foundation",
@@ -35,5 +35,6 @@ features = [
     "Devices_Bluetooth_Advertisement",
     "Devices_Bluetooth_GenericAttributeProfile",
     "Devices_Enumeration",
+    "Devices_Radios",
     "Storage_Streams",
 ]
