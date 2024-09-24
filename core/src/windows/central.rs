@@ -26,6 +26,7 @@ pub(crate) fn check_support() -> windows::core::Result<bool> {
             "our address: {:12x}",
             local_adapter.clone().unwrap().BluetoothAddress().unwrap()
         );
+        local_adapter.unwrap().GetRadioAsync();
         local_adapter.unwrap().IsCentralRoleSupported()?
     } else {
         false

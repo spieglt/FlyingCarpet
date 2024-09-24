@@ -3,6 +3,7 @@ import { QRCode } from './deps/qrcode.js'
 
 let aboutButton;
 let usingBluetooth;
+let bluetoothSwitch;
 let selectionBox;
 let outputBox;
 let startButton;
@@ -18,6 +19,7 @@ let selectedFolder;
 // save UI if user refreshes
 window.onunload = () => {
   let uiState = {
+    usingBluetooth: usingBluetooth,
     selectedMode: selectedMode,
     selectedPeer: selectedPeer,
     selectedFiles: selectedFiles,
@@ -39,11 +41,22 @@ window.addEventListener('DOMContentLoaded', async () => {
   startButton = document.getElementById('startButton');
   cancelButton = document.getElementById('cancelButton');
   progressBar = document.getElementById('progressBar');
+  bluetoothSwitch = document.getElementById('bluetoothSwitch');
 
   appWindow = window.__TAURI__.window.appWindow;
 
   // TODO: try to initialize bluetooth, set switch accordingly
-  let error = tauri.invoke('check_support');
+  let error = await tauri.invoke('check_support');
+  if (error != null) {
+    output('Bluetooth not supported on this device. Disable the Bluetooth switch in Flying Carpet on the other device to run a transfer.');
+    output(error);
+    bluetoothSwitch.disabled = true;
+    bluetoothSwitch.checked = false;
+  } else {
+    output('Bluetooth is supported.');
+    bluetoothSwitch.disabled = false;
+    bluetoothSwitch.checked = true;
+  }
 
   // about button
   aboutButton.onclick = () => {
@@ -94,6 +107,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // rehydrate UI if user refreshed
   let uiState = JSON.parse(sessionStorage.getItem('pageState'));
   if (uiState) {
+    bluetoothSwitch.checked = uiState.usingBluetooth;
     selectedMode = uiState.selectedMode;
     if (selectedMode === 'send') {
       document.getElementById('sendButton').checked = true;
@@ -244,6 +258,10 @@ let updateSelectionBox = () => {
     selectionBox.innerText = 'Drag and drop files/folders here or use button';
   }
   fileFolderBox.height = height + 'px';
+}
+
+let bluetoothChange = () => {
+  usingBluetooth = bluetoothSwitch.checked;
 }
 
 let modeChange = async (button) => {
