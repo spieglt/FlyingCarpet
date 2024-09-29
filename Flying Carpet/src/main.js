@@ -287,7 +287,6 @@ let modeChange = async (button) => {
 
 let peerChange = (button) => {
   selectedPeer = button;
-  console.log('selected peer:', selectedPeer);
   checkStatus();
 }
 
@@ -363,6 +362,7 @@ window.startTransfer = startTransfer;
 window.cancelTransfer = cancelTransfer;
 window.selectFiles = selectFiles;
 window.selectFolder = selectFolder;
+window.bluetoothChange = bluetoothChange;
 window.modeChange = modeChange;
 window.peerChange = peerChange;
 

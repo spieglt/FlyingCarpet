@@ -4,7 +4,7 @@
 )]
 
 use flying_carpet_core::{
-    clean_up_transfer, network, start_transfer, utils, Transfer, WiFiInterface, UI, bluetooth,
+    bluetooth, clean_up_transfer, network, start_transfer, utils, Transfer, WiFiInterface, UI,
 };
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -122,7 +122,7 @@ fn start_async(
     let transfer_ssid = state.ssid.clone();
 
     let cancel_handle = tokio::spawn(async move {
-        let stream = start_transfer(
+        let stream: std::option::Option<tokio::net::TcpStream> = start_transfer(
             mode,
             using_bluetooth,
             peer,
@@ -161,9 +161,7 @@ async fn main() {
 
 #[tauri::command]
 fn check_support() -> Option<String> {
-    bluetooth::check_support()
-        .map_err(|e| e.to_string())
-        .err()
+    bluetooth::check_support().map_err(|e| e.to_string()).err()
 }
 
 #[tauri::command]

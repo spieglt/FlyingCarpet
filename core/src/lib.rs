@@ -10,7 +10,7 @@ mod receiving;
 mod sending;
 pub mod utils;
 
-use bluetooth::Bluetooth;
+use bluetooth::{Bluetooth, BluetoothMessage};
 use sha2::{Digest, Sha256};
 use std::{
     error::Error,
@@ -22,6 +22,7 @@ use std::{
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
+    sync::mpsc,
 };
 
 const CHUNKSIZE: usize = 1_000_000; // 1 MB
@@ -99,21 +100,81 @@ pub async fn start_transfer<T: UI>(
     hotspot: Arc<Mutex<Option<PeerResource>>>,
     state_ssid: Arc<Mutex<Option<String>>>,
 ) -> Option<TcpStream> {
-
     // if bluetooth, make that connection here first
     // for windows and linux, the central/client api can read and write synchronously, and we always know the ssid before starting hotspot, so we can just do that here before connecting to peer?
     // for servers/peripherals, does it matter? callbacks in both cases?
 
     let mut bluetooth = None;
+    let mut bluetooth_peer = None;
+    let (tx, mut rx) = mpsc::channel(1);
     if using_bluetooth {
-        bluetooth = Some(Bluetooth::new());
+        bluetooth = match Bluetooth::new(tx) {
+            Ok(b) => Some(b),
+            Err(e) => {
+                ui.output(&format!("Could not use Bluetooth: {}", e));
+                return None;
+            }
+        };
+        if mode == "send" {
+            // TODO: peripheral
+        } else {
+            // scan for device advertising flying carpet service
+            let central = &mut bluetooth.as_mut().unwrap().central;
+            match central.scan() {
+                Ok(()) => ui.output("Scanning for Bluetooth peripherals..."),
+                Err(e) => {
+                    ui.output(&format!("Could not scan: {}", e));
+                    return None;
+                }
+            };
+            // wait for async reply from scanning callback that calls pair_device and returns result here
+            loop {
+                let msg = rx
+                    .recv()
+                    .await
+                    .expect("Bluetooth message channel unexpectedly closed.");
+                match msg {
+                    BluetoothMessage::PairSuccess => {
+                        ui.output("Paired successfully");
+                        break;
+                    }
+                    BluetoothMessage::PairFailure => {
+                        ui.output("Pairing failed.");
+                        return None;
+                    }
+                };
+            }
+
+            // discover service and characteristics once paired
+            if let Err(e) = central.get_services_and_characteristics().await {
+                ui.output(&format!(
+                    "Could not get peer's service and characteristics: {}",
+                    e
+                ));
+                return None;
+            }
+
+            // read peer's OS
+            bluetooth_peer = match central.read(bluetooth::OS_CHARACTERISTIC_UUID).await {
+                Ok(os) => Some(os),
+                Err(e) => {
+                    ui.output(&format!("Could not read characteristic from peer: {}", e));
+                    return None;
+                }
+            };
+            ui.output(&format!("Peer OS: {:?}", bluetooth_peer));
+
+            // write OS
+
+            // read or write ssid and password
+        }
     }
 
-    let peer = if peer.is_some() {
-        Peer::from(peer.unwrap().as_str())
-    } else {
-        Peer::Linux // TODO
-    };
+    let peer = Peer::from(
+        peer.or(bluetooth_peer)
+            .expect("Neither UI nor Bluetooth peer present.")
+            .as_str(),
+    );
     let password = password.unwrap(); // TODO
 
     let mode = if mode == "send" {
@@ -408,7 +469,24 @@ async fn confirm_version(
     Ok(())
 }
 
+// pub(crate) async fn receive_message(rx: &mpsc::Receiver<BluetoothMessage>) -> BluetoothMessage {
+//     // println!("Waiting for Bluetooth message...");
+//     loop {
+//         match rx.recv_timeout(time::Duration::from_secs(1)) {
+//             Ok(msg) => {
+//                 return msg;
+//             }
+//             Err(e) => {
+//                 println!("Error: {}. Waiting for Bluetooth peer to send OS...", e);
+//                 // allow user to cancel
+//                 tokio::task::yield_now().await;
+//             }
+//         };
+//     }
+// }
+
 // TODO:
+// make ui.output() variadic, replace &format!()s?
 // bump windows-rs version, fix errors
 // folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh.
 // fix tests

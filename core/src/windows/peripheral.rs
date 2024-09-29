@@ -1,3 +1,5 @@
+use tokio::sync::mpsc;
+
 use crate::bluetooth::{PASSWORD_CHARACTERISTIC_UUID, SERVICE_UUID, SSID_CHARACTERISTIC_UUID};
 use windows::{
     core::{Interface, Result, GUID, HSTRING},
@@ -14,13 +16,16 @@ use windows::{
     Storage::Streams::{DataReader, DataWriter, UnicodeEncoding},
 };
 
+use super::BluetoothMessage;
+
 pub(crate) struct BluetoothPeripheral {
+    tx: mpsc::Sender<BluetoothMessage>,
     service_provider: GattServiceProvider,
     _wifi_information: Option<String>,
 }
 
 impl BluetoothPeripheral {
-    pub fn new() -> Result<Self> {
+    pub fn new(tx: mpsc::Sender<BluetoothMessage>) -> Result<Self> {
         // create service provider
         let result = GattServiceProvider::CreateAsync(GUID::from(SERVICE_UUID))?.get()?;
         if result.Error()? != BluetoothError::Success {
@@ -32,6 +37,7 @@ impl BluetoothPeripheral {
         }
         let service_provider = result.ServiceProvider()?;
         Ok(BluetoothPeripheral {
+            tx,
             service_provider,
             _wifi_information: None,
         })
