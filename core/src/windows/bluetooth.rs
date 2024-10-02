@@ -20,9 +20,10 @@ const NO_SSID: &str = "NONE";
 // can just match and only look for the type of message we want each read,
 // and only need one rx channel?
 #[derive(Debug)]
-pub(crate) enum BluetoothMessage {
+pub enum BluetoothMessage {
     PairSuccess,
     PairFailure,
+    Pin(String),
 }
 
 unsafe impl Send for BluetoothMessage {}

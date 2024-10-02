@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::{fs, sync::Mutex};
 use tauri::{State, Window};
 use tokio;
+use tokio::sync::mpsc;
 
 #[derive(Clone, serde::Serialize)]
 struct Payload {
@@ -60,6 +61,19 @@ impl UI for GUI {
             .lock()
             .expect("Couldn't lock GUI mutex")
             .emit("enableUi", Progress { value: 0 })
+            .expect("could not emit event");
+    }
+    fn show_pin(&self, pin: &str) {
+        println!("showing pin");
+        self.window
+            .lock()
+            .expect("Couldn't lock GUI mutex")
+            .emit(
+                "showPin",
+                Payload {
+                    message: pin.to_string(),
+                },
+            )
             .expect("could not emit event");
     }
 }
@@ -121,6 +135,10 @@ fn start_async(
     let transfer_hotspot = state.hotspot.clone();
     let transfer_ssid = state.ssid.clone();
 
+    // used by windows because we have to implement our own UI for PIN confirmation in non-UWP apps.
+    // sends the user's choice of whether the bluetooth PINs match to know whether to pair.
+    let (ble_ui_tx, ble_ui_rx) = mpsc::channel(1);
+
     let cancel_handle = tokio::spawn(async move {
         let stream: std::option::Option<tokio::net::TcpStream> = start_transfer(
             mode,
@@ -133,12 +151,15 @@ fn start_async(
             &gui,
             transfer_hotspot.clone(),
             transfer_ssid.clone(),
+            ble_ui_rx,
         )
         .await;
         clean_up_transfer(stream, transfer_hotspot, transfer_ssid, &gui).await;
     });
     let mut state_cancel_handle = state.cancel_handle.lock().unwrap();
     *state_cancel_handle = Some(cancel_handle);
+    let mut state_ble_ui_tx = state.ble_ui_tx.lock().unwrap();
+    *state_ble_ui_tx = Some(ble_ui_tx);
 }
 
 #[tokio::main]
@@ -154,6 +175,7 @@ async fn main() {
             generate_password,
             get_wifi_interfaces,
             check_support,
+            user_bluetooth_pair,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -213,4 +235,23 @@ fn get_wifi_interfaces() -> Vec<WiFiInterface> {
         Ok(interfaces) => interfaces,
         Err(_e) => vec![], // if there was an error, just return empty list of interfaces and let javascript detect "no wifi card found"
     }
+}
+
+#[tauri::command]
+fn user_bluetooth_pair(choice: bool, state: State<Transfer>) {
+    println!("in user_bluetooth_pair");
+    let ble_ui_tx = state
+        .ble_ui_tx
+        .lock()
+        .expect("Could not lock ble_ui_tx mutex");
+    let ble_ui_tx = ble_ui_tx.as_ref().expect("State ble_ui_tx was None");
+    let ble_ui_tx = ble_ui_tx.clone();
+
+    tokio::spawn(async move {
+        ble_ui_tx
+            .send(choice)
+            .await
+            .expect("Could not send on ble_ui_tx");
+        println!("sent in user_bluetooth_pair");
+    });
 }

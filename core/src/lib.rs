@@ -33,6 +33,7 @@ pub trait UI: Clone + Send + 'static {
     fn show_progress_bar(&self);
     fn update_progress_bar(&self, percent: u8);
     fn enable_ui(&self);
+    fn show_pin(&self, pin: &str);
 }
 
 #[derive(Clone)]
@@ -76,6 +77,7 @@ pub struct Transfer {
     pub cancel_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub hotspot: Arc<Mutex<Option<PeerResource>>>,
     pub ssid: Arc<Mutex<Option<String>>>,
+    pub ble_ui_tx: Mutex<Option<mpsc::Sender<bool>>>,
 }
 
 impl Transfer {
@@ -84,6 +86,7 @@ impl Transfer {
             cancel_handle: Mutex::new(None),
             hotspot: Arc::new(Mutex::new(None)),
             ssid: Arc::new(Mutex::new(None)),
+            ble_ui_tx: Mutex::new(None),
         }
     }
 }
@@ -99,6 +102,7 @@ pub async fn start_transfer<T: UI>(
     ui: &T,
     hotspot: Arc<Mutex<Option<PeerResource>>>,
     state_ssid: Arc<Mutex<Option<String>>>,
+    ble_ui_rx: mpsc::Receiver<bool>,
 ) -> Option<TcpStream> {
     // if bluetooth, make that connection here first
     // for windows and linux, the central/client api can read and write synchronously, and we always know the ssid before starting hotspot, so we can just do that here before connecting to peer?
@@ -106,7 +110,13 @@ pub async fn start_transfer<T: UI>(
 
     let mut bluetooth = None;
     let mut bluetooth_peer = None;
+    // TODO: remove this, fetch these from state? pass these in from start_async()? or keep a separate channel in state for
+    // user pairing confirmation so we don't have to worry about order of operations: if scan fails, bluetooth code will write to tx,
+    // but if scan succeeds and pair initiates, front-end will write user's approval to tx. is that a problem?
+    // this file matches on failure vs user approval vs success? but should this file not be aware of user approval in the UI because linux won't have to be?
+    // in which case, two channels makes sense, and rx has to be passed to bluetooth?
     let (tx, mut rx) = mpsc::channel(1);
+    // let ble_ui_rx = Arc::new(Mutex::new(ble_ui_rx));
     if using_bluetooth {
         bluetooth = match Bluetooth::new(tx) {
             Ok(b) => Some(b),
@@ -120,7 +130,7 @@ pub async fn start_transfer<T: UI>(
         } else {
             // scan for device advertising flying carpet service
             let central = &mut bluetooth.as_mut().unwrap().central;
-            match central.scan() {
+            match central.scan(ble_ui_rx) {
                 Ok(()) => ui.output("Scanning for Bluetooth peripherals..."),
                 Err(e) => {
                     ui.output(&format!("Could not scan: {}", e));
@@ -128,22 +138,23 @@ pub async fn start_transfer<T: UI>(
                 }
             };
             // wait for async reply from scanning callback that calls pair_device and returns result here
-            loop {
-                let msg = rx
-                    .recv()
-                    .await
-                    .expect("Bluetooth message channel unexpectedly closed.");
-                match msg {
-                    BluetoothMessage::PairSuccess => {
-                        ui.output("Paired successfully");
-                        break;
-                    }
-                    BluetoothMessage::PairFailure => {
-                        ui.output("Pairing failed.");
-                        return None;
-                    }
-                };
-            }
+            // TODO: get PIN here, emit to js
+            println!("waiting for callback...");
+            let msg = rx
+                .recv()
+                .await
+                .expect("Bluetooth message channel unexpectedly closed.");
+            println!("received {:?}", msg);
+            match msg {
+                BluetoothMessage::Pin(pin) => ui.show_pin(&pin),
+                BluetoothMessage::PairSuccess => {
+                    ui.output("Paired successfully");
+                }
+                BluetoothMessage::PairFailure => {
+                    ui.output("Pairing failed.");
+                    return None;
+                }
+            };
 
             // discover service and characteristics once paired
             if let Err(e) = central.get_services_and_characteristics().await {
@@ -468,6 +479,8 @@ async fn confirm_version(
     } // otherwise, versions match, implicitly compatible
     Ok(())
 }
+
+fn negotiate_bluetooth() {}
 
 // pub(crate) async fn receive_message(rx: &mpsc::Receiver<BluetoothMessage>) -> BluetoothMessage {
 //     // println!("Waiting for Bluetooth message...");

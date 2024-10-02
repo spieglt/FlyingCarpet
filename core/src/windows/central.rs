@@ -1,5 +1,7 @@
 use std::{
-    collections::HashMap, error::Error, io::stdin, sync::{Arc, Mutex}
+    collections::HashMap,
+    error::Error,
+    sync::{Arc, Mutex},
 };
 use tokio::sync::mpsc;
 use windows::{
@@ -12,7 +14,11 @@ use windows::{
             BluetoothLEDevice,
             GenericAttributeProfile::{GattCharacteristic, GattDeviceService},
         },
-        Enumeration::{DeviceInformation, DeviceInformationCustomPairing, DevicePairingKinds, DevicePairingProtectionLevel, DevicePairingRequestedEventArgs, DevicePairingResultStatus},
+        Enumeration::{
+            DeviceInformation, DeviceInformationCustomPairing, DevicePairingKinds,
+            DevicePairingProtectionLevel, DevicePairingRequestedEventArgs,
+            DevicePairingResultStatus,
+        },
     },
     Foundation::TypedEventHandler,
     Storage::Streams::{DataReader, UnicodeEncoding},
@@ -46,7 +52,8 @@ impl BluetoothCentral {
     }
 
     // start thread to send on tx, return handle to thread and rx?
-    pub fn scan(&mut self) -> windows::core::Result<()> {
+    pub fn scan(&mut self, ble_ui_rx: mpsc::Receiver<bool>) -> windows::core::Result<()> {
+        let ble_ui_rx = Arc::new(Mutex::new(ble_ui_rx));
         let thread_peer_device = self.peer_device.clone();
         let thread_tx = self.tx.clone();
         let received_handler = TypedEventHandler::<
@@ -73,16 +80,16 @@ impl BluetoothCentral {
                         .lock()
                         .expect("Could not lock peer device mutex.");
                     *peer_device = Some(device);
-                    BluetoothCentral::pair_device(&info)?;
-                    thread_tx
-                        .blocking_send(BluetoothMessage::PairSuccess)
-                        .expect("Could not send scan/pair result from Windows callback.");
+                    BluetoothCentral::pair_device(&info, ble_ui_rx.clone(), thread_tx.clone())?;
                 }
             }
             Ok(())
         });
         self.watcher.Received(&received_handler)?;
         self.watcher.Start()?;
+        // TODO: ble_ui_rx.recv() here? we've started scan, which when we find a device will pair with it, which will send the PIN to js,
+        // which will tauri.invoke() the user's choice and send the result on ble_ui_tx... but if we never find a device, will we block here indefinitely?
+        // no, because it's a tokio channel? test. but this is not the right place to do this because we need to know javascript's answer before we accept the pair attempt.
         Ok(())
     }
 
@@ -91,7 +98,11 @@ impl BluetoothCentral {
     //     Ok(())
     // }
 
-    pub fn pair_device(device_info: &DeviceInformation) -> windows::core::Result<()> {
+    pub fn pair_device(
+        device_info: &DeviceInformation,
+        ble_ui_rx: Arc<Mutex<mpsc::Receiver<bool>>>,
+        tx: mpsc::Sender<BluetoothMessage>,
+    ) -> windows::core::Result<()> {
         println!("Pairing {}", device_info.Name()?);
         let pairing = device_info.Pairing()?;
 
@@ -99,20 +110,20 @@ impl BluetoothCentral {
         let pairing_handler = TypedEventHandler::<
             DeviceInformationCustomPairing,
             DevicePairingRequestedEventArgs,
-        >::new(|_custom_pairing, _event_args| {
+        >::new(move |_custom_pairing, _event_args| {
             println!("Custom pairing requested");
             let args = _event_args.clone().unwrap();
             let pin = args.Pin()?.to_string();
-            println!("Does this pin match? Y/N: {}", pin);
-            let mut user_input = String::new();
-            match stdin().read_line(&mut user_input) {
-                Ok(_n) => (),
-                Err(e) => {
-                    println!("Could not read input: {e}");
-                    return Ok(());
-                }
-            };
-            if user_input.chars().nth(0) == Some('Y') || user_input.chars().nth(0) == Some('y') {
+            // TODO: emit this pin to js
+            tx.blocking_send(BluetoothMessage::Pin(pin))
+                .expect("Could not send on Bluetooth tx");
+            // TODO: we need to receive javascript's answer here... which means we need ble_ui_rx here, which means we can't use it from the struct and clone it, which means we have to wrap it in an arc<mutex>?
+            let approved = ble_ui_rx
+                .lock()
+                .expect("Could not lock ble_ui_rx mutex.")
+                .blocking_recv()
+                .expect("ble_ui_rx reply from js was None");
+            if approved {
                 args.Accept()?;
             } else {
                 println!("nope");
@@ -121,20 +132,11 @@ impl BluetoothCentral {
         });
         let _reg_token = custom_pairing.PairingRequested(&pairing_handler)?;
         let result = custom_pairing
-            .PairAsync(DevicePairingKinds::ConfirmPinMatch)?
+            .PairWithProtectionLevelAsync(
+                DevicePairingKinds::ConfirmPinMatch,
+                DevicePairingProtectionLevel::EncryptionAndAuthentication,
+            )?
             .get()?;
-
-
-        // let result = pairing
-        //     .PairWithProtectionLevelAsync(
-        //         DevicePairingProtectionLevel::EncryptionAndAuthentication,
-        //     )?
-        //     .get()?;
-
-        let result = pairing.PairAsync()?.get()?;
-
-
-        println!("paired");
 
         let status = result.Status()?;
         let errors = HashMap::from(ERRORS);

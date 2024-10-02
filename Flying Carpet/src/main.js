@@ -51,10 +51,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     output(`Bluetooth initialization failed: ${error}. Disable the Bluetooth switch in Flying Carpet on the other device to run a transfer.`);
     bluetoothSwitch.disabled = true;
     bluetoothSwitch.checked = false;
+    usingBluetooth = false;
   } else {
     output('Bluetooth is supported.');
     bluetoothSwitch.disabled = false;
     bluetoothSwitch.checked = true;
+    usingBluetooth = true;
   }
 
   // about button
@@ -78,6 +80,17 @@ window.addEventListener('DOMContentLoaded', async () => {
   // enable UI when transfer finishes
   await appWindow.listen('enableUi', (_event) => {
     enableUi();
+  });
+
+  // show bluetooth PIN and allow user to choose whether to pair on windows
+  await appWindow.listen('showPin', async (event) => {
+    console.log(event);
+    let choice = await confirm(`Is this code displayed on the other device?: ${event.payload.message}. Click Ok to confirm and pair or Cancel if the codes don't match.`);
+    console.log('choice:', choice);
+    await tauri.invoke('user_bluetooth_pair', {
+      choice: choice,
+    });
+    console.log('invoked user_bluetooth_pair');
   });
 
   // handle drag and drop
@@ -352,7 +365,7 @@ let disableUi = async () => {
   // disable radio buttons, file/folder selection buttons
   let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton', 'filesButton', 'folderButton'];
   for (let i in radioButtons) {
-    document.getElementById(radioButtons[i]).disabled = true;
+    document.getElementById(radioButtons[i]).disabled = true; // TODO: this is throwing errors
   }
   // disable password box
   document.getElementById('passwordBox').disabled = true;
