@@ -11,19 +11,29 @@ use windows::{
     Devices::{Bluetooth::BluetoothAdapter, Radios::RadioState},
 };
 
+pub(crate) const OS: &str = "windows";
 const SERVICE_UUID: &str = "A70BF3CA-F708-4314-8A0E-5E37C259BE5C";
 pub(crate) const OS_CHARACTERISTIC_UUID: &str = "BEE14848-CC55-4FDE-8E9D-2E0F9EC45946";
 pub(crate) const SSID_CHARACTERISTIC_UUID: &str = "0D820768-A329-4ED4-8F53-BDF364EDAC75";
 pub(crate) const PASSWORD_CHARACTERISTIC_UUID: &str = "E1FA8F66-CF88-4572-9527-D5125A2E0762";
+// android uses "NONE" to say "the hotspot isn't up yet, so we don't know the SSID yet" because it's given by the android OS
+// do we need this on windows/linux? if we're hosting, we know the SSID because we generate the password.
+// do we need to delay reporting the OS until the hotspot is stood up? no, not necessarily.
+// but do we need this for communicating with android? not necessarily, because windows and linux will both host if communicating with android.
+// however, it might be good to future-proof and allow for this codebase to understand that signal from android,
+// in case hosting rules change, which would mean detecting this when reading ssid and delaying/retrying.
 const NO_SSID: &str = "NONE";
 
 // can just match and only look for the type of message we want each read,
 // and only need one rx channel?
 #[derive(Debug)]
 pub enum BluetoothMessage {
+    Pin(String),
     PairSuccess,
     PairFailure,
-    Pin(String),
+    AlreadyPaired,
+    UserCanceled,
+    Other(String),
 }
 
 unsafe impl Send for BluetoothMessage {}

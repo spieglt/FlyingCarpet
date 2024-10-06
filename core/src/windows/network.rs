@@ -33,7 +33,7 @@ pub async fn connect_to_peer<T: UI>(
     interface: WiFiInterface,
     ui: &T,
 ) -> Result<PeerResource, Box<dyn Error>> {
-    let hosting = is_hosting(peer, mode);
+    let hosting = is_hosting(&peer, &mode);
     if hosting {
         if !check_for_firewall_rule()? {
             // open firewall
@@ -491,7 +491,7 @@ unsafe fn get_windows_error(err: u32) -> Result<String, Box<dyn Error>> {
     Ok(error_message.to_string()?)
 }
 
-fn is_hosting(peer: Peer, mode: Mode) -> bool {
+pub(crate) fn is_hosting(peer: &Peer, mode: &Mode) -> bool {
     // we're windows, so we always host if mac, linux, ios, or android.
     match peer {
         Peer::Android | Peer::IOS | Peer::Linux | Peer::MacOS => true,

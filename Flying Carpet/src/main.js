@@ -85,7 +85,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // show bluetooth PIN and allow user to choose whether to pair on windows
   await appWindow.listen('showPin', async (event) => {
     console.log(event);
-    let choice = await confirm(`Is this code displayed on the other device?: ${event.payload.message}. Click Ok to confirm and pair or Cancel if the codes don't match.`);
+    let choice = await dialog.ask(`Is this code displayed on the other device?\n\n${event.payload.message}`, { title: 'Confirm Bluetooth PIN', type: 'info' });
     console.log('choice:', choice);
     await tauri.invoke('user_bluetooth_pair', {
       choice: choice,
@@ -317,9 +317,6 @@ let needPassword = async () => {
   // if windows, always hosting unless windows and sending.
   let showPassword;
   switch (await os.type()) {
-    case 'Darwin':
-      showPassword = true;
-      break;
     case 'Linux':
       showPassword = selectedPeer === 'windows' || (selectedPeer === 'linux' && selectedMode === 'send');
       break;

@@ -45,6 +45,14 @@ pub fn make_parent_directories(full_path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+pub fn get_key_and_ssid(password: &str) -> ([u8; 32], String) {
+    let mut hasher = Sha256::new();
+    hasher.update(password.as_bytes()); // TODO
+    let key = hasher.finalize();
+    let ssid = format!("flyingCarpet_{:02x}{:02x}", key[0], key[1]);
+    (key.into(), ssid)
+}
+
 pub fn hash_file(filename: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut file = fs::File::open(filename)?;
     let mut hasher = Sha256::new();

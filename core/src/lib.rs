@@ -24,6 +24,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
     sync::mpsc,
 };
+use utils::get_key_and_ssid;
 
 const CHUNKSIZE: usize = 1_000_000; // 1 MB
 const MAJOR_VERSION: u64 = 8;
@@ -42,6 +43,7 @@ pub enum Mode {
     Receive(PathBuf),
 }
 
+#[derive(Clone, Copy)]
 pub enum Peer {
     Android,
     IOS,
@@ -77,7 +79,7 @@ pub struct Transfer {
     pub cancel_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub hotspot: Arc<Mutex<Option<PeerResource>>>,
     pub ssid: Arc<Mutex<Option<String>>>,
-    pub ble_ui_tx: Mutex<Option<mpsc::Sender<bool>>>,
+    pub ble_ui_tx: Mutex<Option<mpsc::Sender<bool>>>, // used by javascript to report user's choice about whether to pair with bluetooth device to windows custom pairing callback.
 }
 
 impl Transfer {
@@ -94,8 +96,8 @@ impl Transfer {
 pub async fn start_transfer<T: UI>(
     mode: String,
     using_bluetooth: bool,
-    peer: Option<String>,
-    password: Option<String>,
+    mut peer: Option<String>,
+    mut password: Option<String>,
     interface: WiFiInterface,
     file_list: Option<Vec<String>>,
     receive_dir: Option<String>,
@@ -104,90 +106,7 @@ pub async fn start_transfer<T: UI>(
     state_ssid: Arc<Mutex<Option<String>>>,
     ble_ui_rx: mpsc::Receiver<bool>,
 ) -> Option<TcpStream> {
-    // if bluetooth, make that connection here first
-    // for windows and linux, the central/client api can read and write synchronously, and we always know the ssid before starting hotspot, so we can just do that here before connecting to peer?
-    // for servers/peripherals, does it matter? callbacks in both cases?
-
-    let mut bluetooth = None;
-    let mut bluetooth_peer = None;
-    // TODO: remove this, fetch these from state? pass these in from start_async()? or keep a separate channel in state for
-    // user pairing confirmation so we don't have to worry about order of operations: if scan fails, bluetooth code will write to tx,
-    // but if scan succeeds and pair initiates, front-end will write user's approval to tx. is that a problem?
-    // this file matches on failure vs user approval vs success? but should this file not be aware of user approval in the UI because linux won't have to be?
-    // in which case, two channels makes sense, and rx has to be passed to bluetooth?
-    let (tx, mut rx) = mpsc::channel(1);
-    // let ble_ui_rx = Arc::new(Mutex::new(ble_ui_rx));
-    if using_bluetooth {
-        bluetooth = match Bluetooth::new(tx) {
-            Ok(b) => Some(b),
-            Err(e) => {
-                ui.output(&format!("Could not use Bluetooth: {}", e));
-                return None;
-            }
-        };
-        if mode == "send" {
-            // TODO: peripheral
-        } else {
-            // scan for device advertising flying carpet service
-            let central = &mut bluetooth.as_mut().unwrap().central;
-            match central.scan(ble_ui_rx) {
-                Ok(()) => ui.output("Scanning for Bluetooth peripherals..."),
-                Err(e) => {
-                    ui.output(&format!("Could not scan: {}", e));
-                    return None;
-                }
-            };
-            // wait for async reply from scanning callback that calls pair_device and returns result here
-            // TODO: get PIN here, emit to js
-            println!("waiting for callback...");
-            let msg = rx
-                .recv()
-                .await
-                .expect("Bluetooth message channel unexpectedly closed.");
-            println!("received {:?}", msg);
-            match msg {
-                BluetoothMessage::Pin(pin) => ui.show_pin(&pin),
-                BluetoothMessage::PairSuccess => {
-                    ui.output("Paired successfully");
-                }
-                BluetoothMessage::PairFailure => {
-                    ui.output("Pairing failed.");
-                    return None;
-                }
-            };
-
-            // discover service and characteristics once paired
-            if let Err(e) = central.get_services_and_characteristics().await {
-                ui.output(&format!(
-                    "Could not get peer's service and characteristics: {}",
-                    e
-                ));
-                return None;
-            }
-
-            // read peer's OS
-            bluetooth_peer = match central.read(bluetooth::OS_CHARACTERISTIC_UUID).await {
-                Ok(os) => Some(os),
-                Err(e) => {
-                    ui.output(&format!("Could not read characteristic from peer: {}", e));
-                    return None;
-                }
-            };
-            ui.output(&format!("Peer OS: {:?}", bluetooth_peer));
-
-            // write OS
-
-            // read or write ssid and password
-        }
-    }
-
-    let peer = Peer::from(
-        peer.or(bluetooth_peer)
-            .expect("Neither UI nor Bluetooth peer present.")
-            .as_str(),
-    );
-    let password = password.unwrap(); // TODO
-
+    // get files or receive directory
     let mode = if mode == "send" {
         let paths = file_list
             .expect("Send mode selected but no files present.")
@@ -202,10 +121,32 @@ pub async fn start_transfer<T: UI>(
         panic!("Bad mode: {}", mode);
     };
 
-    let mut hasher = Sha256::new();
-    hasher.update(password.as_bytes()); // TODO
-    let key = hasher.finalize();
-    let ssid = format!("flyingCarpet_{:02x}{:02x}", key[0], key[1]);
+    // if bluetooth, make that connection here first
+    // for windows and linux, the central/client api can read and write synchronously, and we always know the ssid before starting hotspot, so we can just do that here before connecting to peer?
+    // for servers/peripherals, does it matter? callbacks in both cases?
+
+    if using_bluetooth {
+        match negotiate_bluetooth(&mode, &password, ble_ui_rx, ui).await {
+            Ok((p, ssid, pw)) => {
+                peer = Some(p);
+                if password.is_none() {
+                    password = Some(pw);
+                }
+            }
+            Err(e) => {
+                ui.output(&format!("Could not establish Bluetooth connection: {}", e));
+                return None;
+            }
+        }
+    }
+
+    let peer = Peer::from(
+        peer.expect("Neither UI nor Bluetooth peer present.")
+            .as_str(),
+    );
+    let password = password.unwrap(); // TODO
+
+    let (key, ssid) = get_key_and_ssid(&password);
 
     {
         let mut _state_ssid = state_ssid.lock().expect("Couldn't lock state_ssid");
@@ -480,36 +421,113 @@ async fn confirm_version(
     Ok(())
 }
 
-fn negotiate_bluetooth() {}
+async fn negotiate_bluetooth<T: UI>(
+    mode: &Mode,
+    password: &Option<String>,
+    ble_ui_rx: mpsc::Receiver<bool>,
+    ui: &T,
+) -> Result<(String, String, String), Box<dyn Error>> {
+    let (tx, mut rx) = mpsc::channel(1);
+    let mut bluetooth = Bluetooth::new(tx)?;
+    if let Mode::Send(_) = mode {
+        // TODO: peripheral
+        Ok((String::new(), String::new(), String::new()))
+    } else {
+        // scan for device advertising flying carpet service
+        ui.output("Scanning for Bluetooth peripherals...");
+        bluetooth.central.scan(ble_ui_rx)?;
+        // wait for async reply from scanning callback that calls pair_device and returns result here
+        // TODO: should the PIN retrieval move to windows central.rs? or does linux just need a PairSuccess to receive here instead?
+        println!("waiting for callback...");
 
-// pub(crate) async fn receive_message(rx: &mpsc::Receiver<BluetoothMessage>) -> BluetoothMessage {
-//     // println!("Waiting for Bluetooth message...");
-//     loop {
-//         match rx.recv_timeout(time::Duration::from_secs(1)) {
-//             Ok(msg) => {
-//                 return msg;
-//             }
-//             Err(e) => {
-//                 println!("Error: {}. Waiting for Bluetooth peer to send OS...", e);
-//                 // allow user to cancel
-//                 tokio::task::yield_now().await;
-//             }
-//         };
-//     }
-// }
+        // wait for result of scan. if PIN was shown, wait again for success or failure.
+        let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
+        if let BluetoothMessage::Pin(_) = msg {
+            process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
+        }
+
+        // discover service and characteristics once paired
+        bluetooth.central.get_services_and_characteristics().await?;
+
+        // read peer's OS
+        let peer = bluetooth
+            .central
+            .read(bluetooth::OS_CHARACTERISTIC_UUID)
+            .await?;
+        ui.output(&format!("Peer OS: {:?}", peer));
+
+        // write OS
+        bluetooth
+            .central
+            .write(bluetooth::OS_CHARACTERISTIC_UUID, bluetooth::OS)
+            .await?;
+
+        // read or write ssid and password
+        let (ssid, password) = if network::is_hosting(&Peer::from(peer.as_str()), mode) {
+            let password = password.clone().expect("Hosting but do not have password");
+            let (_, ssid) = get_key_and_ssid(&password);
+            bluetooth
+                .central
+                .write(bluetooth::SSID_CHARACTERISTIC_UUID, &ssid)
+                .await?;
+            bluetooth
+                .central
+                .write(bluetooth::PASSWORD_CHARACTERISTIC_UUID, &password)
+                .await?;
+            (ssid, password)
+        } else {
+            let ssid = bluetooth
+                .central
+                .read(bluetooth::SSID_CHARACTERISTIC_UUID)
+                .await?;
+            let password = bluetooth
+                .central
+                .read(bluetooth::PASSWORD_CHARACTERISTIC_UUID)
+                .await?;
+            (ssid, password)
+        };
+        Ok((peer, ssid, password))
+    }
+}
+
+async fn process_bluetooth_message<T: UI>(rx: &mut mpsc::Receiver<BluetoothMessage>, bluetooth: &Bluetooth, ui: &T) -> Result<BluetoothMessage, Box<dyn Error>> {
+    let msg = rx
+        .recv()
+        .await
+        .expect("Bluetooth message channel unexpectedly closed.");
+    println!("received {:?}", msg);
+    bluetooth.central.stop_watching()?;
+    println!("stopped watching");
+    match msg {
+        BluetoothMessage::Pin(ref pin) => {
+            ui.show_pin(pin);
+        }
+        BluetoothMessage::PairSuccess => {
+            // can use this to represent AlreadyPaired on windows? don't need to emit pin, just need to proceed.
+            // and nothing will be blocked in central because the pairing_handler won't be called.
+            ui.output("Successfully paired");
+        }
+        BluetoothMessage::PairFailure => Err("Pairing failed.")?,
+        BluetoothMessage::AlreadyPaired => {
+            ui.output("Already BLE paired with Bluetooth device");
+        }
+        BluetoothMessage::UserCanceled => Err("User canceled.")?,
+        BluetoothMessage::Other(ref s) => ui.output(&format!("Bluetooth peering result: {}", s)),
+    };
+    Ok(msg)
+}
 
 // TODO:
-// make ui.output() variadic, replace &format!()s?
-// bump windows-rs version, fix errors
+// does linux need any channels for bluetooth?
 // folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh.
 // fix tests
-// code signing for windows?
 // fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux: have to get whatever is blocking on background thread?
-// update screenshots?
+// update screenshots, version bump
 // show qr code after refresh
 // test pulling wifi card, quitting program, etc.
 
 // LATER MAYBE:
+// code signing for windows?
 // faster?
 // cli version?
 // move expand_files into utils and make tauri's version a wrapper for CLI version
