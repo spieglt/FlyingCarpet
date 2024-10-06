@@ -11,7 +11,6 @@ mod sending;
 pub mod utils;
 
 use bluetooth::{Bluetooth, BluetoothMessage};
-use sha2::{Digest, Sha256};
 use std::{
     error::Error,
     net::SocketAddr,
@@ -490,7 +489,11 @@ async fn negotiate_bluetooth<T: UI>(
     }
 }
 
-async fn process_bluetooth_message<T: UI>(rx: &mut mpsc::Receiver<BluetoothMessage>, bluetooth: &Bluetooth, ui: &T) -> Result<BluetoothMessage, Box<dyn Error>> {
+async fn process_bluetooth_message<T: UI>(
+    rx: &mut mpsc::Receiver<BluetoothMessage>,
+    bluetooth: &Bluetooth,
+    ui: &T,
+) -> Result<BluetoothMessage, Box<dyn Error>> {
     let msg = rx
         .recv()
         .await

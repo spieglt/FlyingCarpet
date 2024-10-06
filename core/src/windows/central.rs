@@ -9,7 +9,8 @@ use windows::{
     Devices::{
         Bluetooth::{
             Advertisement::{
-                BluetoothLEAdvertisementReceivedEventArgs, BluetoothLEAdvertisementWatcher, BluetoothLEAdvertisementWatcherStatus,
+                BluetoothLEAdvertisementReceivedEventArgs, BluetoothLEAdvertisementWatcher,
+                BluetoothLEAdvertisementWatcherStatus,
             },
             BluetoothLEDevice,
             GenericAttributeProfile::{
@@ -23,14 +24,15 @@ use windows::{
         },
     },
     Foundation::{EventRegistrationToken, TypedEventHandler},
-    Storage::Streams::{DataReader, DataWriter, IBuffer, UnicodeEncoding},
+    Storage::Streams::{DataReader, DataWriter, UnicodeEncoding},
 };
 
 use crate::bluetooth::{SERVICE_UUID, SSID_CHARACTERISTIC_UUID};
 
 use super::{BluetoothMessage, OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID};
 
-type ScanCallback = TypedEventHandler<BluetoothLEAdvertisementWatcher, BluetoothLEAdvertisementReceivedEventArgs>;
+type ScanCallback =
+    TypedEventHandler<BluetoothLEAdvertisementWatcher, BluetoothLEAdvertisementReceivedEventArgs>;
 
 pub(crate) struct BluetoothCentral {
     tx: mpsc::Sender<BluetoothMessage>,
@@ -90,11 +92,16 @@ impl BluetoothCentral {
                         .lock()
                         .expect("Could not lock peer device mutex.");
                     *peer_device = Some(device);
-                    let (custom_pairing, pair_callback_token) = BluetoothCentral::pair_device(&info, ble_ui_rx.clone(), thread_tx.clone())?;
+                    let (custom_pairing, pair_callback_token) =
+                        BluetoothCentral::pair_device(&info, ble_ui_rx.clone(), thread_tx.clone())?;
                     // TODO: pairing callback is running before these are set? pass thread_custom_pairing and thread_pair_callback_token in, set them there?
-                    let mut pairing = thread_custom_pairing.lock().expect("Couldn't lock custom pairing");
+                    let mut pairing = thread_custom_pairing
+                        .lock()
+                        .expect("Couldn't lock custom pairing");
                     *pairing = Some(custom_pairing);
-                    let mut token = thread_pair_callback_token.lock().expect("Couldn't lock callback token mutex");
+                    let mut token = thread_pair_callback_token
+                        .lock()
+                        .expect("Couldn't lock callback token mutex");
                     *token = Some(pair_callback_token);
                 }
             }
@@ -126,7 +133,8 @@ impl BluetoothCentral {
             let args = _event_args.clone().unwrap();
             let pin = args.Pin()?.to_string();
             // TODO: emit this pin to js
-            thread_tx.blocking_send(BluetoothMessage::Pin(pin))
+            thread_tx
+                .blocking_send(BluetoothMessage::Pin(pin))
                 .expect("Could not send on Bluetooth tx");
             // TODO: we need to receive javascript's answer here... which means we need ble_ui_rx here, which means we can't use it from the struct and clone it, which means we have to wrap it in an arc<mutex>?
             let approved = ble_ui_rx
@@ -136,10 +144,12 @@ impl BluetoothCentral {
                 .expect("ble_ui_rx reply from js was None");
             if approved {
                 args.Accept()?;
-                thread_tx.blocking_send(BluetoothMessage::PairSuccess)
+                thread_tx
+                    .blocking_send(BluetoothMessage::PairSuccess)
                     .expect("Could not send on Bluetooth tx");
             } else {
-                thread_tx.blocking_send(BluetoothMessage::UserCanceled)
+                thread_tx
+                    .blocking_send(BluetoothMessage::UserCanceled)
                     .expect("Could not send on Bluetooth tx");
             }
             Ok(())
@@ -154,7 +164,9 @@ impl BluetoothCentral {
 
         let status = result.Status()?;
         let errors = HashMap::from(ERRORS);
-        let error_msg = errors.get(&status.0).expect("Could not find status in error map");
+        let error_msg = errors
+            .get(&status.0)
+            .expect("Could not find status in error map");
         println!("Pairing result: {}", error_msg);
 
         let res = tx.blocking_send(if status == DevicePairingResultStatus::AlreadyPaired {
@@ -163,7 +175,10 @@ impl BluetoothCentral {
             BluetoothMessage::Other(error_msg.to_string())
         });
         if res.is_err() {
-            println!("pair_device() was called but transfer thread has stopped listening: {}", res.unwrap_err());
+            println!(
+                "pair_device() was called but transfer thread has stopped listening: {}",
+                res.unwrap_err()
+            );
         }
         Ok((custom_pairing, pair_callback_token))
     }
@@ -173,13 +188,19 @@ impl BluetoothCentral {
         if status == BluetoothLEAdvertisementWatcherStatus::Started {
             println!("stopping watcher");
             self.watcher.Stop()?;
-            let pairing = self.custom_pairing.lock().expect("Could not lock custom pairing mutex");
+            let pairing = self
+                .custom_pairing
+                .lock()
+                .expect("Could not lock custom pairing mutex");
             let pairing = pairing.as_ref();
             println!("pairing.as_ref(): {:?}", pairing);
             match pairing {
                 Some(custom_pairing) => {
                     println!("custom_pairing is Some");
-                    let pct = self.pair_callback_token.lock().expect("Could not lock callback mutex");
+                    let pct = self
+                        .pair_callback_token
+                        .lock()
+                        .expect("Could not lock callback mutex");
                     if let Some(pair_callback_token) = *pct {
                         println!("pair_callback_token is Some");
                         custom_pairing.RemovePairingRequested(pair_callback_token)?;
@@ -187,7 +208,7 @@ impl BluetoothCentral {
                 }
                 None => (),
             }
-            if let Some(scan_callback_token)  = self.scan_callback_token {
+            if let Some(scan_callback_token) = self.scan_callback_token {
                 println!("watcher is Some");
                 self.watcher.RemoveReceived(scan_callback_token)
             } else {

@@ -6,10 +6,7 @@ use std::error::Error;
 use central::BluetoothCentral;
 use peripheral::BluetoothPeripheral;
 use tokio::sync::mpsc;
-use windows::{
-    core::GUID,
-    Devices::{Bluetooth::BluetoothAdapter, Radios::RadioState},
-};
+use windows::Devices::{Bluetooth::BluetoothAdapter, Radios::RadioState};
 
 pub(crate) const OS: &str = "windows";
 const SERVICE_UUID: &str = "A70BF3CA-F708-4314-8A0E-5E37C259BE5C";
