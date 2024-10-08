@@ -92,17 +92,16 @@ impl BluetoothCentral {
                         .lock()
                         .expect("Could not lock peer device mutex.");
                     *peer_device = Some(device);
-                    let (custom_pairing, pair_callback_token) =
-                        BluetoothCentral::pair_device(&info, ble_ui_rx.clone(), thread_tx.clone())?;
+                    BluetoothCentral::pair_device(&info, ble_ui_rx.clone(), thread_tx.clone(), thread_custom_pairing.clone(), thread_pair_callback_token.clone())?;
                     // TODO: pairing callback is running before these are set? pass thread_custom_pairing and thread_pair_callback_token in, set them there?
-                    let mut pairing = thread_custom_pairing
-                        .lock()
-                        .expect("Couldn't lock custom pairing");
-                    *pairing = Some(custom_pairing);
-                    let mut token = thread_pair_callback_token
-                        .lock()
-                        .expect("Couldn't lock callback token mutex");
-                    *token = Some(pair_callback_token);
+                    // let mut pairing = thread_custom_pairing
+                    //     .lock()
+                    //     .expect("Couldn't lock custom pairing");
+                    // *pairing = Some(custom_pairing);
+                    // let mut token = thread_pair_callback_token
+                    //     .lock()
+                    //     .expect("Couldn't lock callback token mutex");
+                    // *token = Some(pair_callback_token);
                 }
             }
             Ok(())
@@ -120,11 +119,18 @@ impl BluetoothCentral {
         device_info: &DeviceInformation,
         ble_ui_rx: Arc<Mutex<mpsc::Receiver<bool>>>,
         tx: mpsc::Sender<BluetoothMessage>,
-    ) -> windows::core::Result<(DeviceInformationCustomPairing, EventRegistrationToken)> {
+        out_custom_pairing: Arc<Mutex<Option<DeviceInformationCustomPairing>>>,
+        out_pair_callback_token: Arc<Mutex<Option<EventRegistrationToken>>>,
+    ) -> windows::core::Result<()> {
         let thread_tx = tx.clone();
         println!("Pairing {}", device_info.Name()?);
         let pairing = device_info.Pairing()?;
         let custom_pairing = pairing.Custom()?;
+        {
+            // put this in braces so it doesn't hold the lock?
+            let mut out_custom_pairing = out_custom_pairing.lock().expect("Could not lock custom pairing mutex");
+            *out_custom_pairing = Some(custom_pairing.clone());
+        }
         let pairing_handler = TypedEventHandler::<
             DeviceInformationCustomPairing,
             DevicePairingRequestedEventArgs,
@@ -133,9 +139,10 @@ impl BluetoothCentral {
             let args = _event_args.clone().unwrap();
             let pin = args.Pin()?.to_string();
             // TODO: emit this pin to js
-            thread_tx
-                .blocking_send(BluetoothMessage::Pin(pin))
-                .expect("Could not send on Bluetooth tx");
+            match thread_tx.blocking_send(BluetoothMessage::Pin(pin)) {
+                Ok(()) => (),
+                Err(e) => println!("Could not send on Bluetooth tx: {}", e),
+            }
             // TODO: we need to receive javascript's answer here... which means we need ble_ui_rx here, which means we can't use it from the struct and clone it, which means we have to wrap it in an arc<mutex>?
             let approved = ble_ui_rx
                 .lock()
@@ -155,6 +162,11 @@ impl BluetoothCentral {
             Ok(())
         });
         let pair_callback_token = custom_pairing.PairingRequested(&pairing_handler)?;
+        {
+            // put this in braces so it doesn't hold the lock?
+            let mut out_pair_callback_token = out_pair_callback_token.lock().expect("Could not lock pair callback token mutex");
+            *out_pair_callback_token = Some(pair_callback_token);
+        }
         let result = custom_pairing
             .PairWithProtectionLevelAsync(
                 DevicePairingKinds::ConfirmPinMatch,
@@ -180,7 +192,7 @@ impl BluetoothCentral {
                 res.unwrap_err()
             );
         }
-        Ok((custom_pairing, pair_callback_token))
+        Ok(())
     }
 
     pub fn stop_watching(&self) -> windows::core::Result<()> {
@@ -188,9 +200,10 @@ impl BluetoothCentral {
         if status == BluetoothLEAdvertisementWatcherStatus::Started {
             println!("stopping watcher");
             self.watcher.Stop()?;
+            println!("watcher is stopped");
             let pairing = self
                 .custom_pairing
-                .lock()
+                .lock() // TODO: couldn't lock custom pairing because it's still open in pair_device()?
                 .expect("Could not lock custom pairing mutex");
             let pairing = pairing.as_ref();
             println!("pairing.as_ref(): {:?}", pairing);
@@ -227,34 +240,41 @@ impl BluetoothCentral {
             .as_ref()
             .expect("Bluetooth central had no remote device");
 
-        let services = device.GetGattServicesAsync()?.get()?.Services()?;
-        for service in services {
-            println!("UUID: {:?}", service.Uuid()?);
-            if service.Uuid()? == GUID::from(SERVICE_UUID) {
-                println!("found service");
-                // let x = device.RequestAccessAsync()?.await?;
-                // println!("{:?}", x);
-                // println!("requested access");
-                for characteristic in [
-                    OS_CHARACTERISTIC_UUID,
-                    SSID_CHARACTERISTIC_UUID,
-                    PASSWORD_CHARACTERISTIC_UUID,
-                ] {
-                    let characteristics = service
-                        .GetCharacteristicsForUuidAsync(GUID::from(characteristic))?
-                        .get()?
-                        .Characteristics()?;
-                    println!("got chars");
-                    for c in characteristics {
-                        if c.Uuid()? == GUID::from(characteristic) {
-                            self.characteristics
-                                .insert(characteristic.to_string(), Some(c));
+        'outer: loop {
+            let services = device.GetGattServicesAsync()?.get()?.Services()?;
+            for service in services {
+                println!("UUID: {:?}", service.Uuid()?);
+                if service.Uuid()? == GUID::from(SERVICE_UUID) {
+                    println!("found service");
+                    // let x = device.RequestAccessAsync()?.await?;
+                    // println!("{:?}", x);
+                    // println!("requested access");
+                    for characteristic in [
+                        OS_CHARACTERISTIC_UUID,
+                        SSID_CHARACTERISTIC_UUID,
+                        PASSWORD_CHARACTERISTIC_UUID,
+                    ] {
+                        let characteristics = service
+                            .GetCharacteristicsForUuidAsync(GUID::from(characteristic))?
+                            .get()?
+                            .Characteristics()?;
+                        println!("got chars");
+                        for c in characteristics {
+                            if c.Uuid()? == GUID::from(characteristic) {
+                                self.characteristics
+                                    .insert(characteristic.to_string(), Some(c));
+                            }
                         }
                     }
+                    self.peer_service = Some(service);
+                    break 'outer;
                 }
-                self.peer_service = Some(service);
             }
+            println!("did not find flying carpet service, trying again...");
+            std::thread::sleep(std::time::Duration::from_secs(2));
         }
+        // TODO: exiting this function without setting OS_CHARACTERISTIC_UUID
+        // loop until we have all 3?
         Ok(())
     }
 
@@ -263,11 +283,11 @@ impl BluetoothCentral {
             .as_ref()
             .expect(&format!("Missing characteristic {}", characteristic_uuid));
         let i_buffer = characteristic.ReadValueAsync()?.get()?.Value()?;
-        println!("IBuffer contents: {:?}", i_buffer);
         let size = i_buffer.Capacity()?;
         let data_reader = DataReader::FromBuffer(&i_buffer)?;
         data_reader.SetUnicodeEncoding(UnicodeEncoding::Utf8)?;
         let data_string = data_reader.ReadString(size)?.to_string();
+        println!("IBuffer contents: {:?}", data_string);
         Ok(data_string)
     }
 
