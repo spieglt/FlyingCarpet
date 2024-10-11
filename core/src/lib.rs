@@ -521,6 +521,7 @@ async fn process_bluetooth_message<T: UI>(
 }
 
 // TODO:
+// how did windows read OS "windows" from itself when acting as central but not peripheral?
 // does linux need any channels for bluetooth?
 // folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh.
 // fix tests

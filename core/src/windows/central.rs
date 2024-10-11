@@ -38,7 +38,7 @@ pub(crate) struct BluetoothCentral {
     tx: mpsc::Sender<BluetoothMessage>,
     watcher: BluetoothLEAdvertisementWatcher,
     custom_pairing: Arc<Mutex<Option<DeviceInformationCustomPairing>>>,
-    peer_device: Arc<Mutex<Option<BluetoothLEDevice>>>,
+    peer_device: Arc<tokio::sync::Mutex<Option<BluetoothLEDevice>>>,
     peer_service: Option<GattDeviceService>,
     characteristics: HashMap<String, Option<GattCharacteristic>>,
     scan_callback_token: Option<EventRegistrationToken>,
@@ -55,7 +55,7 @@ impl BluetoothCentral {
             tx,
             watcher: BluetoothLEAdvertisementWatcher::new()?,
             custom_pairing: Arc::new(Mutex::new(None)),
-            peer_device: Arc::new(Mutex::new(None)),
+            peer_device: Arc::new(tokio::sync::Mutex::new(None)),
             peer_service: None,
             characteristics,
             scan_callback_token: None,
@@ -89,8 +89,8 @@ impl BluetoothCentral {
                         .DeviceInformation()
                         .expect("Could not get DeviceInformation for peer peripheral.");
                     let mut peer_device = thread_peer_device
-                        .lock()
-                        .expect("Could not lock peer device mutex.");
+                        .blocking_lock();
+                        // .expect("Could not lock peer device mutex.");
                     *peer_device = Some(device);
                     BluetoothCentral::pair_device(&info, ble_ui_rx.clone(), thread_tx.clone(), thread_custom_pairing.clone(), thread_pair_callback_token.clone())?;
                     // TODO: pairing callback is running before these are set? pass thread_custom_pairing and thread_pair_callback_token in, set them there?
@@ -234,13 +234,11 @@ impl BluetoothCentral {
 
     pub async fn get_services_and_characteristics(&mut self) -> Result<(), Box<dyn Error>> {
         // read service
-        let device = self.peer_device.lock();
-        let device = device.as_ref().expect("Could not lock peer_device mutex");
-        let device = device
-            .as_ref()
-            .expect("Bluetooth central had no remote device");
+        let device = self.peer_device.blocking_lock();
+        let device = device.as_ref().expect("Bluetooth central had no remote device");
 
         'outer: loop {
+            tokio::task::yield_now().await;
             let services = device.GetGattServicesAsync()?.get()?.Services()?;
             for service in services {
                 println!("UUID: {:?}", service.Uuid()?);
@@ -275,6 +273,15 @@ impl BluetoothCentral {
         }
         // TODO: exiting this function without setting OS_CHARACTERISTIC_UUID
         // loop until we have all 3?
+
+        // problem where if we hit pair on iOS first, windows sees flying carpet service. but if windows pairs first, we don't: solved by adding service to peripheralManager when it's powered on on iOS?
+        // also required solving by removing the addition of the service from the central's poweredOn branch. if this was done first, before the peripheralManager was powered on, it would throw an API error and not advertise properly.
+        // this happened inconsistently, based on whether the iOS central or peripheral came up first, which made debugging confusing.
+
+        // next problem: we can't yield to a cancel in here because of "can't send MutexGuard<Option<windows::BluetoothLEDevice>>"-type errors.
+        // fixed by changing the peer_device from std::sync::Mutex to tokio::sync::Mutex and using .blocking_lock() in the windows callbacks that can't be async.
+        // is this loop totally necessary now that we've bug where iOS was setting the service on peripheralManager in the wrong place (in the central) and thus preventing the service from being advertised correctly?
+        // don't know, but might as well keep it, don't think a retry here hurts anything.
         Ok(())
     }
 
