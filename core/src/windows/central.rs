@@ -12,7 +12,7 @@ use windows::{
                 BluetoothLEAdvertisementReceivedEventArgs, BluetoothLEAdvertisementWatcher,
                 BluetoothLEAdvertisementWatcherStatus,
             },
-            BluetoothLEDevice,
+            BluetoothConnectionStatus, BluetoothLEDevice,
             GenericAttributeProfile::{
                 GattCharacteristic, GattCommunicationStatus, GattDeviceService, GattWriteOption,
             },
@@ -82,26 +82,35 @@ impl BluetoothCentral {
             let service_uuids = advertisement.ServiceUuids()?;
             for uuid in service_uuids {
                 if uuid == GUID::from(SERVICE_UUID) {
-                    // device is advertising flying carpet service, pair with it
+                    // device is advertising flying carpet service, we want to pair with it
                     println!("found bluetooth {:12x}", address);
                     let device = BluetoothLEDevice::FromBluetoothAddressAsync(address)?.get()?;
                     let info = device
                         .DeviceInformation()
                         .expect("Could not get DeviceInformation for peer peripheral.");
-                    let mut peer_device = thread_peer_device
-                        .blocking_lock();
-                        // .expect("Could not lock peer device mutex.");
-                    *peer_device = Some(device);
-                    BluetoothCentral::pair_device(&info, ble_ui_rx.clone(), thread_tx.clone(), thread_custom_pairing.clone(), thread_pair_callback_token.clone())?;
-                    // TODO: pairing callback is running before these are set? pass thread_custom_pairing and thread_pair_callback_token in, set them there?
-                    // let mut pairing = thread_custom_pairing
-                    //     .lock()
-                    //     .expect("Couldn't lock custom pairing");
-                    // *pairing = Some(custom_pairing);
-                    // let mut token = thread_pair_callback_token
-                    //     .lock()
-                    //     .expect("Couldn't lock callback token mutex");
-                    // *token = Some(pair_callback_token);
+                    let mut peer_device = thread_peer_device.blocking_lock();
+                    *peer_device = Some(device.clone());
+
+                    // determine if we're already paired
+                    let connection_status = device.ConnectionStatus()?;
+                    if connection_status == BluetoothConnectionStatus::Connected {
+                        let secure_connection_used = device.WasSecureConnectionUsedForPairing()?;
+                        if secure_connection_used {
+                            thread_tx
+                                .blocking_send(BluetoothMessage::AlreadyPaired)
+                                .expect("Could not send on Bluetooth tx");
+                            return Ok(());
+                        }
+                    }
+
+                    // if we weren't paired, do so
+                    BluetoothCentral::pair_device(
+                        &info,
+                        ble_ui_rx.clone(),
+                        thread_tx.clone(),
+                        thread_custom_pairing.clone(),
+                        thread_pair_callback_token.clone(),
+                    )?;
                 }
             }
             Ok(())
@@ -109,9 +118,6 @@ impl BluetoothCentral {
         let scan_callback_token = self.watcher.Received(&received_handler)?;
         self.scan_callback_token = Some(scan_callback_token);
         self.watcher.Start()?;
-        // TODO: ble_ui_rx.recv() here? we've started scan, which when we find a device will pair with it, which will send the PIN to js,
-        // which will tauri.invoke() the user's choice and send the result on ble_ui_tx... but if we never find a device, will we block here indefinitely?
-        // no, because it's a tokio channel? test. but this is not the right place to do this because we need to know javascript's answer before we accept the pair attempt.
         Ok(())
     }
 
@@ -127,8 +133,10 @@ impl BluetoothCentral {
         let pairing = device_info.Pairing()?;
         let custom_pairing = pairing.Custom()?;
         {
-            // put this in braces so it doesn't hold the lock?
-            let mut out_custom_pairing = out_custom_pairing.lock().expect("Could not lock custom pairing mutex");
+            // put this in braces so it doesn't hold the lock
+            let mut out_custom_pairing = out_custom_pairing
+                .lock()
+                .expect("Could not lock custom pairing mutex");
             *out_custom_pairing = Some(custom_pairing.clone());
         }
         let pairing_handler = TypedEventHandler::<
@@ -138,12 +146,12 @@ impl BluetoothCentral {
             println!("Custom pairing requested");
             let args = _event_args.clone().unwrap();
             let pin = args.Pin()?.to_string();
-            // TODO: emit this pin to js
+            // emit this pin to js
             match thread_tx.blocking_send(BluetoothMessage::Pin(pin)) {
                 Ok(()) => (),
                 Err(e) => println!("Could not send on Bluetooth tx: {}", e),
             }
-            // TODO: we need to receive javascript's answer here... which means we need ble_ui_rx here, which means we can't use it from the struct and clone it, which means we have to wrap it in an arc<mutex>?
+            // we need to receive javascript's answer here... which means we need ble_ui_rx here, which means we can't use it from the struct and clone it, which means we have to wrap it in an arc<mutex>?
             let approved = ble_ui_rx
                 .lock()
                 .expect("Could not lock ble_ui_rx mutex.")
@@ -163,8 +171,10 @@ impl BluetoothCentral {
         });
         let pair_callback_token = custom_pairing.PairingRequested(&pairing_handler)?;
         {
-            // put this in braces so it doesn't hold the lock?
-            let mut out_pair_callback_token = out_pair_callback_token.lock().expect("Could not lock pair callback token mutex");
+            // put this in braces so it doesn't hold the lock
+            let mut out_pair_callback_token = out_pair_callback_token
+                .lock()
+                .expect("Could not lock pair callback token mutex");
             *out_pair_callback_token = Some(pair_callback_token);
         }
         let result = custom_pairing
@@ -203,7 +213,7 @@ impl BluetoothCentral {
             println!("watcher is stopped");
             let pairing = self
                 .custom_pairing
-                .lock() // TODO: couldn't lock custom pairing because it's still open in pair_device()?
+                .lock() // had a deadlock here, couldn't lock custom pairing because it was still open in pair_device(), fixed by putting those locks in blocks
                 .expect("Could not lock custom pairing mutex");
             let pairing = pairing.as_ref();
             println!("pairing.as_ref(): {:?}", pairing);
@@ -235,7 +245,9 @@ impl BluetoothCentral {
     pub async fn get_services_and_characteristics(&mut self) -> Result<(), Box<dyn Error>> {
         // read service
         let device = self.peer_device.blocking_lock();
-        let device = device.as_ref().expect("Bluetooth central had no remote device");
+        let device = device
+            .as_ref()
+            .expect("Bluetooth central had no remote device");
 
         'outer: loop {
             tokio::task::yield_now().await;
@@ -271,13 +283,10 @@ impl BluetoothCentral {
             println!("did not find flying carpet service, trying again...");
             std::thread::sleep(std::time::Duration::from_secs(2));
         }
-        // TODO: exiting this function without setting OS_CHARACTERISTIC_UUID
-        // loop until we have all 3?
-
-        // problem where if we hit pair on iOS first, windows sees flying carpet service. but if windows pairs first, we don't: solved by adding service to peripheralManager when it's powered on on iOS?
+        // we had exited this function without setting OS_CHARACTERISTIC_UUID and panicked later.
+        // there was a problem where if we hit pair on iOS first, windows sees flying carpet service. but if windows pairs first, we don't: solved by adding service to peripheralManager when it's powered on on iOS?
         // also required solving by removing the addition of the service from the central's poweredOn branch. if this was done first, before the peripheralManager was powered on, it would throw an API error and not advertise properly.
         // this happened inconsistently, based on whether the iOS central or peripheral came up first, which made debugging confusing.
-
         // next problem: we can't yield to a cancel in here because of "can't send MutexGuard<Option<windows::BluetoothLEDevice>>"-type errors.
         // fixed by changing the peer_device from std::sync::Mutex to tokio::sync::Mutex and using .blocking_lock() in the windows callbacks that can't be async.
         // is this loop totally necessary now that we've bug where iOS was setting the service on peripheralManager in the wrong place (in the central) and thus preventing the service from being advertised correctly?

@@ -8,7 +8,8 @@ use windows::{
         GenericAttributeProfile::{
             GattCharacteristicProperties, GattLocalCharacteristic,
             GattLocalCharacteristicParameters, GattProtectionLevel, GattReadRequestedEventArgs,
-            GattServiceProvider, GattServiceProviderAdvertisementStatusChangedEventArgs,
+            GattServiceProvider, GattServiceProviderAdvertisementStatus,
+            GattServiceProviderAdvertisementStatusChangedEventArgs,
             GattServiceProviderAdvertisingParameters, GattWriteRequestedEventArgs,
         },
     },
@@ -43,7 +44,7 @@ impl BluetoothPeripheral {
         })
     }
 
-    pub fn add_characteristic(&mut self) -> Result<bool> {
+    pub fn add_characteristics(&mut self) -> Result<bool> {
         // create characteristics
         let gatt_operand_parameters = GattLocalCharacteristicParameters::new()?;
         gatt_operand_parameters.SetCharacteristicProperties(GattCharacteristicProperties::Read)?;
@@ -111,6 +112,9 @@ impl BluetoothPeripheral {
     }
 
     pub fn start_advertising(&mut self) -> Result<()> {
+        // get tx so we can tell main thread we've paired
+        let thread_tx = self.tx.clone();
+
         // make service connectable and discoverable
         let adv_parameters = GattServiceProviderAdvertisingParameters::new()?;
         adv_parameters.SetIsConnectable(true)?;
@@ -120,14 +124,33 @@ impl BluetoothPeripheral {
         let advertisement_status_changed_callback = TypedEventHandler::<
             GattServiceProvider,
             GattServiceProviderAdvertisementStatusChangedEventArgs,
-        >::new(|sender, _args| {
-            println!(
-                "Advertisement status: {:?}",
-                sender
-                    .as_ref()
-                    .expect("No sender in advertisement status changed callback")
-                    .AdvertisementStatus()
-            );
+        >::new(move |sender, _args| {
+            let advertisement_status = sender
+                .as_ref()
+                .expect("No sender in advertisement status changed callback")
+                .AdvertisementStatus()?;
+            println!("Advertisement status: {:?}", advertisement_status);
+            match advertisement_status {
+                GattServiceProviderAdvertisementStatus::Created => {
+                    println!("Advertisement created")
+                }
+                GattServiceProviderAdvertisementStatus::Started
+                | GattServiceProviderAdvertisementStatus::StartedWithoutAllAdvertisementData => { // TODO: have to worry about StartedWithoutAllAdvertisementData case?
+                    thread_tx
+                        .blocking_send(BluetoothMessage::StartedAdvertising)
+                        .expect("Could not send on Bluetooth tx");
+                }
+                GattServiceProviderAdvertisementStatus::Aborted => {
+                    println!("Advertisement aborted")
+                }
+                GattServiceProviderAdvertisementStatus::Stopped => {
+                    println!("Advertisement stopped")
+                }
+                _ => println!(
+                    "Invalid GattServiceProviderAdvertisementStatus: {}",
+                    advertisement_status.0
+                ),
+            }
             Ok(())
         });
         // TODO: save event registration token here, only used to deregister event later?

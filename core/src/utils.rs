@@ -47,7 +47,7 @@ pub fn make_parent_directories(full_path: &Path) -> io::Result<()> {
 
 pub fn get_key_and_ssid(password: &str) -> ([u8; 32], String) {
     let mut hasher = Sha256::new();
-    hasher.update(password.as_bytes()); // TODO
+    hasher.update(password.as_bytes());
     let key = hasher.finalize();
     let ssid = format!("flyingCarpet_{:02x}{:02x}", key[0], key[1]);
     (key.into(), ssid)

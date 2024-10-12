@@ -30,6 +30,10 @@ pub enum BluetoothMessage {
     PairFailure,
     AlreadyPaired,
     UserCanceled,
+    StartedAdvertising,
+    PeerOS(String),
+    SSID(String),
+    Password(String),
     Other(String),
 }
 

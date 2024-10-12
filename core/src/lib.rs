@@ -11,6 +11,7 @@ mod sending;
 pub mod utils;
 
 use bluetooth::{Bluetooth, BluetoothMessage};
+use network::is_hosting;
 use std::{
     error::Error,
     net::SocketAddr,
@@ -429,17 +430,77 @@ async fn negotiate_bluetooth<T: UI>(
     let (tx, mut rx) = mpsc::channel(1);
     let mut bluetooth = Bluetooth::new(tx)?;
     if let Mode::Send(_) = mode {
-        // TODO: peripheral
-        Ok((String::new(), String::new(), String::new()))
+        ui.output("Advertising Bluetooth service...");
+        bluetooth.peripheral.start_advertising()?;
+        // TODO: can we block here until we have os/ssid/password? same as central, receive on channels?
+        // if we're hosting, we will be receiving reads of our info: just pass references into start_advertising()?
+
+        let mut peer_mode = String::new();
+        let mut peer_os = String::new();
+        let mut peer_ssid = String::new();
+        let mut peer_password = String::new();
+
+        // TODO: do we need to wait to be notified that we've paired here, or just wait till central reads OS? don't think we get notification that central has paired with us in linux.
+        // wait to pair
+        // let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
+        // if let BluetoothMessage::PeerOS(os) = msg {
+        //     peer_os = os;
+        // } else {
+        //     // TODO: this isn't right because other types of message can come back?
+        //     Err(format!(
+        //         "Peripheral received incorrect BluetoothMessage: {:?}",
+        //         msg
+        //     ))?;
+        // }
+
+        // TODO: ensure that peer is using opposite mode
+
+        // get OS of peer
+        let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
+        if let BluetoothMessage::PeerOS(os) = msg {
+            peer_os = os;
+        } else {
+            Err(format!(
+                "Peripheral received incorrect BluetoothMessage. Expected peer OS, got {:?}",
+                msg
+            ))?;
+        }
+
+        // TODO: if hosting, we need to wait for reads to happen to know that peer received messages and when to start transfer?
+        if is_hosting(&Peer::from(peer_os.as_str()), mode) {
+
+            Ok((peer_os, ssid.clone().expect("Hosting but do not have SSID"), password.clone().expect("Hosting but do not have password")))
+        } else {
+            // if joining, receive writes
+            // receive ssid
+            let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
+            if let BluetoothMessage::SSID(ssid) = msg {
+                peer_ssid = ssid;
+            } else {
+                Err(format!(
+                    "Peripheral received incorrect BluetoothMessage. Expected SSID, got {:?}",
+                    msg
+                ))?;
+            }
+            // receive password
+            let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
+            if let BluetoothMessage::Password(password) = msg {
+                peer_password = password;
+            } else {
+                Err(format!(
+                    "Peripheral received incorrect BluetoothMessage. Expected password, got {:?}",
+                    msg
+                ))?;
+            }
+            Ok((peer_os, peer_ssid, peer_password))
+        }
     } else {
         // scan for device advertising flying carpet service
         ui.output("Scanning for Bluetooth peripherals...");
         bluetooth.central.scan(ble_ui_rx)?;
-        // wait for async reply from scanning callback that calls pair_device and returns result here
-        // TODO: should the PIN retrieval move to windows central.rs? or does linux just need a PairSuccess to receive here instead?
-        println!("waiting for callback...");
 
         // wait for result of scan. if PIN was shown, wait again for success or failure.
+        println!("waiting for callback...");
         let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
         if let BluetoothMessage::Pin(_) = msg {
             process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
@@ -515,12 +576,17 @@ async fn process_bluetooth_message<T: UI>(
             ui.output("Already BLE paired with Bluetooth device");
         }
         BluetoothMessage::UserCanceled => Err("User canceled.")?,
+        BluetoothMessage::StartedAdvertising => ui.output("Started advertising Bluetooth service"),
+        BluetoothMessage::PeerOS(ref os) => ui.output(&format!("Peer's OS is {}", os)),
+        BluetoothMessage::SSID(ref ssid) => ui.output(&format!("Peer's SSID is {}", ssid)),
+        BluetoothMessage::Password(ref password) => ui.output(&format!("Peer's password is {}", password)),
         BluetoothMessage::Other(ref s) => ui.output(&format!("Bluetooth peering result: {}", s)),
     };
     Ok(msg)
 }
 
 // TODO:
+// do we need to exchange mode over bluetooth first? yes, probably.
 // how did windows read OS "windows" from itself when acting as central but not peripheral?
 // does linux need any channels for bluetooth?
 // folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh.

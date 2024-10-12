@@ -34,41 +34,41 @@
       <!-- mode box -->
       <label style="margin-left: 10px">Step 1: Select Mode</label>
       <div class="btn-group" role="group" aria-label="Mode selector" id="modeBox" style="margin: 10px; margin-top: 0px;">
-        <input type="radio" class="btn-check" name="moderadio" id="btnradio6" autocomplete="off" onchange="modeChange('send')">
-        <label class="btn btn-outline-primary" for="btnradio6">Send</label>
+        <input type="radio" class="btn-check" name="moderadio" id="sendButton" autocomplete="off" onchange="modeChange('send')">
+        <label class="btn btn-outline-primary" for="sendButton">Send</label>
 
-        <input type="radio" class="btn-check" name="moderadio" id="btnradio7" autocomplete="off" onchange="modeChange('receive')">
-        <label class="btn btn-outline-primary" for="btnradio7">Receive</label>
+        <input type="radio" class="btn-check" name="moderadio" id="receiveButton" autocomplete="off" onchange="modeChange('receive')">
+        <label class="btn btn-outline-primary" for="receiveButton">Receive</label>
       </div>
 
       <!-- peer box -->
       <label style="margin-left: 10px">Step 2: Select Peer OS</label>
       <div class="btn-group" role="group" aria-label="Peer selector" id="peerBox" style="margin: 10px; margin-top: 0px;">
-        <input type="radio" class="btn-check" name="peerradio" id="btnradio1" autocomplete="off" onchange="peerChange('android')">
-        <label class="btn btn-outline-primary" for="btnradio1">Android</label>
+        <input type="radio" class="btn-check" name="peerradio" id="androidButton" autocomplete="off" onchange="peerChange('android')">
+        <label class="btn btn-outline-primary" for="androidButton">Android</label>
 
-        <input type="radio" class="btn-check" name="peerradio" id="btnradio2" autocomplete="off" onchange="peerChange('ios')">
-        <label class="btn btn-outline-primary" for="btnradio2">iOS</label>
+        <input type="radio" class="btn-check" name="peerradio" id="iosButton" autocomplete="off" onchange="peerChange('ios')">
+        <label class="btn btn-outline-primary" for="iosButton">iOS</label>
 
-        <input type="radio" class="btn-check" name="peerradio" id="btnradio3" autocomplete="off" onchange="peerChange('linux')">
-        <label class="btn btn-outline-primary" for="btnradio3">Linux</label>
+        <input type="radio" class="btn-check" name="peerradio" id="linuxButton" autocomplete="off" onchange="peerChange('linux')">
+        <label class="btn btn-outline-primary" for="linuxButton">Linux</label>
 
-        <input type="radio" class="btn-check" name="peerradio" id="btnradio4" autocomplete="off" onchange="peerChange('mac')">
-        <label class="btn btn-outline-primary" for="btnradio4">macOS</label>
+        <input type="radio" class="btn-check" name="peerradio" id="macButton" autocomplete="off" onchange="peerChange('mac')">
+        <label class="btn btn-outline-primary" for="macButton">macOS</label>
 
-        <input type="radio" class="btn-check" name="peerradio" id="btnradio5" autocomplete="off" onchange="peerChange('windows')">
-        <label class="btn btn-outline-primary" for="btnradio5">Windows</label>
+        <input type="radio" class="btn-check" name="peerradio" id="windowsButton" autocomplete="off" onchange="peerChange('windows')">
+        <label class="btn btn-outline-primary" for="windowsButton">Windows</label>
       </div>
 
       <!-- file/folder selection -->
-      <div id="fileFolderBox" style="display: flex; overflow-y: auto; resize: vertical; height: 80px; min-height: 80px; padding: 5px;">
+      <!-- <div id="fileFolderBox" style="display: flex; overflow-y: auto; resize: vertical; height: 80px; min-height: 80px; padding: 5px;">
         <fieldset class="horizontalContainer" style="flex-grow: 1; border: solid black;">
           <legend>Step 3: Select Files to Send or Destination Folder</legend>
           <button type="button" id="filesButton" onclick="selectFiles()">Select Files</button>
           <button type="button" id="folderButton" onclick="selectFolder()" style="display: none;">Select Folder</button>
           <div id="selectionBox" style="flex-grow: 1; overflow-y: auto; padding: 5px;"></div>
         </fieldset>
-      </div>
+      </div> -->
 
       <!-- password box -->
       <input type="text" placeholder="Password (start transfer on other end):" id="passwordBox" style="display: none; padding: 5px;" autocapitalize="off" autocorrect="off" spellcheck="false">

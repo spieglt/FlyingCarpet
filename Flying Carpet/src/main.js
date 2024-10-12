@@ -45,7 +45,6 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   appWindow = window.__TAURI__.window.appWindow;
 
-  // TODO: try to initialize bluetooth, set switch accordingly
   let error = await tauri.invoke('check_support');
   if (error != null) {
     output(`Bluetooth initialization failed: ${error}. Disable the Bluetooth switch in Flying Carpet on the other device to run a transfer.`);
@@ -140,7 +139,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     progressBar.style.display = uiState.progressBarVisible ? '' : 'none';
     progressBar.value = uiState.progressBarValue;
     modeChange(selectedMode);
-    updateSelectionBox();
+    // updateSelectionBox();
     if (uiState.transferRunning) {
       disableUi();
     }
@@ -208,6 +207,11 @@ async function startTransfer() {
       }
   }
 
+  // get files or folder
+  if (selectedMode == "send") {
+    
+  }
+
   // disable UI
   disableUi();
 
@@ -255,36 +259,37 @@ let selectFolder = async () => {
   checkStatus();
 }
 
-let updateSelectionBox = () => {
-  let fileFolderBox = document.getElementById('fileFolderBox');
-  let height = fileFolderBox.clientHeight;
-  if (selectedFiles) {
-    let s = '';
-    for (let i in selectedFiles) {
-      s += selectedFiles[i] + '\n';
-    }
-    selectionBox.innerText = 'Selected Files:\n' + s;
-  } else if (selectedFolder) {
-    selectionBox.innerText = 'Selected Folder:\n' + selectedFolder;
-  } else {
-    selectionBox.innerText = 'Drag and drop files/folders here or use button';
-  }
-  fileFolderBox.height = height + 'px';
-}
+// let updateSelectionBox = () => {
+//   let fileFolderBox = document.getElementById('fileFolderBox');
+//   let height = fileFolderBox.clientHeight;
+//   if (selectedFiles) {
+//     let s = '';
+//     for (let i in selectedFiles) {
+//       s += selectedFiles[i] + '\n';
+//     }
+//     selectionBox.innerText = 'Selected Files:\n' + s;
+//   } else if (selectedFolder) {
+//     selectionBox.innerText = 'Selected Folder:\n' + selectedFolder;
+//   } else {
+//     selectionBox.innerText = 'Drag and drop files/folders here or use button';
+//   }
+//   fileFolderBox.height = height + 'px';
+// }
 
 let bluetoothChange = () => {
   usingBluetooth = bluetoothSwitch.checked;
+  checkStatus();
 }
 
 let modeChange = async (button) => {
   // make proper button visible depending on mode. leave "Select Files" button visible if no mode selected on refresh.
-  if (button === 'receive') {
-    document.getElementById('filesButton').style.display = 'none';
-    document.getElementById('folderButton').style.display = '';
-  } else {
-    document.getElementById('filesButton').style.display = '';
-    document.getElementById('folderButton').style.display = 'none';
-  }
+  // if (button === 'receive') {
+  //   document.getElementById('filesButton').style.display = 'none';
+  //   document.getElementById('folderButton').style.display = '';
+  // } else {
+  //   document.getElementById('filesButton').style.display = '';
+  //   document.getElementById('folderButton').style.display = 'none';
+  // }
   // only reset files/folder if mode was changed
   if (selectedMode != button) {
     selectedFiles = null;
@@ -304,17 +309,21 @@ let peerChange = (button) => {
 }
 
 let checkStatus = () => {
-  updateSelectionBox();
-  document.getElementById('filesButton').disabled = !selectedMode;
-  document.getElementById('folderButton').disabled = !selectedMode;
+  // updateSelectionBox();
+  // document.getElementById('filesButton').disabled = !selectedMode;
+  // document.getElementById('folderButton').disabled = !selectedMode;
   showPassword();
   startButton.disabled = !(selectedMode && selectedPeer
-    && (selectedFiles || selectedFolder));
+    // && (selectedFiles || selectedFolder)
+  );
 }
 
 let needPassword = async () => {
   // if linux, joining windows, hosting mac/ios/android or linux if receiving.
   // if windows, always hosting unless windows and sending.
+  if (usingBluetooth) {
+    return false;
+  }
   let showPassword;
   switch (await os.type()) {
     case 'Linux':
