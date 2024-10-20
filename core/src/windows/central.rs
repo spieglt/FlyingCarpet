@@ -96,9 +96,12 @@ impl BluetoothCentral {
                     if connection_status == BluetoothConnectionStatus::Connected {
                         let secure_connection_used = device.WasSecureConnectionUsedForPairing()?;
                         if secure_connection_used {
-                            thread_tx
+                            if thread_tx
                                 .blocking_send(BluetoothMessage::AlreadyPaired)
-                                .expect("Could not send on Bluetooth tx");
+                                .is_err()
+                            {
+                                println!("Could not send on Bluetooth tx");
+                            }
                             return Ok(());
                         }
                     }
@@ -244,7 +247,7 @@ impl BluetoothCentral {
 
     pub async fn get_services_and_characteristics(&mut self) -> Result<(), Box<dyn Error>> {
         // read service
-        let device = self.peer_device.blocking_lock();
+        let device = self.peer_device.lock().await;
         let device = device
             .as_ref()
             .expect("Bluetooth central had no remote device");

@@ -42,7 +42,7 @@
       </div>
 
       <!-- peer box -->
-      <label style="margin-left: 10px">Step 2: Select Peer OS</label>
+      <label id="peerLabel" style="margin-left: 10px">Step 2: Select Peer OS</label>
       <div class="btn-group" role="group" aria-label="Peer selector" id="peerBox" style="margin: 10px; margin-top: 0px;">
         <input type="radio" class="btn-check" name="peerradio" id="androidButton" autocomplete="off" onchange="peerChange('android')">
         <label class="btn btn-outline-primary" for="androidButton">Android</label>
@@ -74,12 +74,12 @@
       <input type="text" placeholder="Password (start transfer on other end):" id="passwordBox" style="display: none; padding: 5px;" autocapitalize="off" autocorrect="off" spellcheck="false">
 
       <!-- start/cancel buttons -->
-      <button type="button" id="startButton" onclick="startTransfer()" style="padding: 5px; min-height: 25px;" disabled>Start Transfer</button>
+      <button type="button" id="startButton" onclick="startTransfer(false)" style="padding: 5px; min-height: 25px;" disabled>Select Files</button>
       <button type="button" id="cancelButton" onclick="cancelTransfer()" style="display: none; padding: 5px; min-height: 25px;">Cancel Transfer</button>
 
       <!-- output box -->
       <div id="outputBox" class="horizontalContainer" style="flex-grow: 9; flex-shrink: 9; overflow-y: auto; padding: 5px; margin-top: 5px;">
-        Welcome to Flying Carpet!
+        Welcome to Flying Carpet!<br>Once other options are selected, drag and drop can be used to send a folder.
       </div>
 
       <!-- progress bar -->

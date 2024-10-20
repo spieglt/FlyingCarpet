@@ -435,7 +435,7 @@ async fn negotiate_bluetooth<T: UI>(
         // TODO: can we block here until we have os/ssid/password? same as central, receive on channels?
         // if we're hosting, we will be receiving reads of our info: just pass references into start_advertising()?
 
-        let mut peer_mode = String::new();
+        // let mut peer_mode = String::new();
         let mut peer_os = String::new();
         let mut peer_ssid = String::new();
         let mut peer_password = String::new();
@@ -453,7 +453,14 @@ async fn negotiate_bluetooth<T: UI>(
         //     ))?;
         // }
 
-        // TODO: ensure that peer is using opposite mode
+        // TODO: ensure that peer is using opposite mode? no. we wouldn't have paired if we had the same mode.
+        // have to test what happens if we were already paired.
+
+        // ensure we started advertising
+        let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
+        if msg != BluetoothMessage::StartedAdvertising {
+            Err(format!("Peripheral received incorrect BluetoothMessage. Expected StartedAdvertising, got {:?}", msg))?;
+        }
 
         // get OS of peer
         let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
@@ -468,8 +475,13 @@ async fn negotiate_bluetooth<T: UI>(
 
         // TODO: if hosting, we need to wait for reads to happen to know that peer received messages and when to start transfer?
         if is_hosting(&Peer::from(peer_os.as_str()), mode) {
-
-            Ok((peer_os, ssid.clone().expect("Hosting but do not have SSID"), password.clone().expect("Hosting but do not have password")))
+            let (_, ssid) =
+                get_key_and_ssid(password.as_ref().expect("Hosting but do not have password"));
+            Ok((
+                peer_os,
+                ssid.clone(),
+                password.clone().expect("Hosting but do not have password"),
+            ))
         } else {
             // if joining, receive writes
             // receive ssid
@@ -579,14 +591,20 @@ async fn process_bluetooth_message<T: UI>(
         BluetoothMessage::StartedAdvertising => ui.output("Started advertising Bluetooth service"),
         BluetoothMessage::PeerOS(ref os) => ui.output(&format!("Peer's OS is {}", os)),
         BluetoothMessage::SSID(ref ssid) => ui.output(&format!("Peer's SSID is {}", ssid)),
-        BluetoothMessage::Password(ref password) => ui.output(&format!("Peer's password is {}", password)),
+        BluetoothMessage::Password(ref password) => {
+            ui.output(&format!("Peer's password is {}", password))
+        }
         BluetoothMessage::Other(ref s) => ui.output(&format!("Bluetooth peering result: {}", s)),
     };
     Ok(msg)
 }
 
 // TODO:
-// do we need to exchange mode over bluetooth first? yes, probably.
+// test multiple transfers back to back, windows central unpaired but ios peripheral still paired
+// why is ios looking for ip address for a long time?
+// test switching os...
+// "send mode selected but no files present"
+// hide os buttons when using bluetooth
 // how did windows read OS "windows" from itself when acting as central but not peripheral?
 // does linux need any channels for bluetooth?
 // folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh.

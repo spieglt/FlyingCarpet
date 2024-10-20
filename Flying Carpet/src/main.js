@@ -5,6 +5,8 @@ let aboutButton;
 let usingBluetooth;
 let bluetoothSwitch;
 let selectionBox;
+let peerLabel;
+let peerBox;
 let outputBox;
 let startButton;
 let cancelButton;
@@ -37,6 +39,8 @@ window.onunload = () => {
 window.addEventListener('DOMContentLoaded', async () => {
   aboutButton = document.getElementById('aboutButton');
   selectionBox = document.getElementById('selectionBox');
+  peerLabel = document.getElementById('peerLabel');
+  peerBox = document.getElementById('peerBox');
   outputBox = document.getElementById('outputBox');
   startButton = document.getElementById('startButton');
   cancelButton = document.getElementById('cancelButton');
@@ -45,6 +49,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   appWindow = window.__TAURI__.window.appWindow;
 
+  // check for bluetooth support
   let error = await tauri.invoke('check_support');
   if (error != null) {
     output(`Bluetooth initialization failed: ${error}. Disable the Bluetooth switch in Flying Carpet on the other device to run a transfer.`);
@@ -96,6 +101,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   await appWindow.listen('tauri://file-drop', async event => {
     if (selectedMode === 'send') {
       selectedFiles = await tauri.invoke('expand_files', { paths: event.payload });
+      startTransfer(true);
     } else if (selectedMode === 'receive') {
       if (event.payload.length !== 1) {
         output('Error: if receiving, must drop only one destination folder.');
@@ -107,6 +113,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       } else {
         output('Error: if receiving, must select folder as destination.');
       }
+      startTransfer(true);
     } else {
       output('Error: must select whether sending or receiving before dropping files or folder.');
     }
@@ -161,8 +168,9 @@ function makeQRCode(str) {
   });
 }
 
-async function startTransfer() {
-  // handle password
+async function startTransfer(filesSelected) {
+
+  // if we need password, make sure we have it before prompting for files/folder
   let password;
   if (await needPassword()) {
     password = document.getElementById('passwordBox').value;
@@ -170,14 +178,25 @@ async function startTransfer() {
       output('Must enter password from the other device.');
       return;
     }
-  } else {
-    password = await tauri.invoke('generate_password');
-    if (selectedPeer === 'ios' || selectedPeer === 'android') {
-      output('\nStart the transfer on the other device and scan the QR code when prompted.');
-      makeQRCode(password);
+  }
+  
+  // get files or folder
+  if (!filesSelected) {
+    if (selectedMode == 'send') {
+      await selectFiles();
+      if (!selectedFiles) {
+        output('User cancelled.');
+        return;
+      }
+    } else if (selectedMode == 'receive') {
+      await selectFolder();
+      if (!selectedFolder) {
+        output('User cancelled.');
+        return;
+      }
     } else {
-      output(`Password: ${password}`);
-      alert(`\nStart the transfer on the other device and enter this password when prompted:\n${password}`);
+      output('Must select whether this device is sending or receiving.');
+      return;
     }
   }
 
@@ -206,10 +225,17 @@ async function startTransfer() {
         return;
       }
   }
-
-  // get files or folder
-  if (selectedMode == "send") {
-    
+  
+  // if we're hosting, generate and display the password
+  if (!await needPassword()) {
+    password = await tauri.invoke('generate_password');
+    if (selectedPeer === 'ios' || selectedPeer === 'android') {
+      output('\nStart the transfer on the other device and scan the QR code when prompted.');
+      makeQRCode(password);
+    } else {
+      output(`Password: ${password}`);
+      alert(`\nStart the transfer on the other device and enter this password when prompted:\n${password}`);
+    }
   }
 
   // disable UI
@@ -229,52 +255,24 @@ async function startTransfer() {
 }
 
 async function cancelTransfer() {
-  // let startState = startButton.disabled;
-  // startButton.disabled = true;
-  // cancelButton.disabled = true;
   output(await tauri.invoke('cancel_transfer'));
-  // startButton.disabled = startState;
-  // cancelButton.disabled = false;
 }
 
 let selectFiles = async () => {
-  let _selectedFiles = await dialog.open({
+  selectedFiles = await dialog.open({
     multiple: true,
     directory: false,
   });
-  if (_selectedFiles) { // don't let cancel clear selection
-    selectedFiles = _selectedFiles;
-  }
   checkStatus();
 }
 
 let selectFolder = async () => {
-  let _selectedFolder = await dialog.open({
+  selectedFolder = await dialog.open({
     multiple: false,
     directory: true,
   });
-  if (_selectedFolder) { // don't let cancel clear selection
-    selectedFolder = _selectedFolder;
-  }
   checkStatus();
 }
-
-// let updateSelectionBox = () => {
-//   let fileFolderBox = document.getElementById('fileFolderBox');
-//   let height = fileFolderBox.clientHeight;
-//   if (selectedFiles) {
-//     let s = '';
-//     for (let i in selectedFiles) {
-//       s += selectedFiles[i] + '\n';
-//     }
-//     selectionBox.innerText = 'Selected Files:\n' + s;
-//   } else if (selectedFolder) {
-//     selectionBox.innerText = 'Selected Folder:\n' + selectedFolder;
-//   } else {
-//     selectionBox.innerText = 'Drag and drop files/folders here or use button';
-//   }
-//   fileFolderBox.height = height + 'px';
-// }
 
 let bluetoothChange = () => {
   usingBluetooth = bluetoothSwitch.checked;
@@ -282,23 +280,7 @@ let bluetoothChange = () => {
 }
 
 let modeChange = async (button) => {
-  // make proper button visible depending on mode. leave "Select Files" button visible if no mode selected on refresh.
-  // if (button === 'receive') {
-  //   document.getElementById('filesButton').style.display = 'none';
-  //   document.getElementById('folderButton').style.display = '';
-  // } else {
-  //   document.getElementById('filesButton').style.display = '';
-  //   document.getElementById('folderButton').style.display = 'none';
-  // }
-  // only reset files/folder if mode was changed
-  if (selectedMode != button) {
-    selectedFiles = null;
-    if (button === 'send') {
-      selectedFolder = null;
-    } else {
-      selectedFolder = await path.desktopDir();
-    }
-  }
+  startButton.innerText = button === 'receive' ? 'Select Folder' : 'Select Files';
   selectedMode = button;
   checkStatus();
 }
@@ -309,13 +291,16 @@ let peerChange = (button) => {
 }
 
 let checkStatus = () => {
-  // updateSelectionBox();
-  // document.getElementById('filesButton').disabled = !selectedMode;
-  // document.getElementById('folderButton').disabled = !selectedMode;
   showPassword();
-  startButton.disabled = !(selectedMode && selectedPeer
-    // && (selectedFiles || selectedFolder)
-  );
+  if (usingBluetooth) {
+    peerLabel.style.display = 'none';
+    peerBox.style.display = 'none';
+    startButton.disabled = !selectedMode;
+  } else {
+    peerLabel.style.display = '';
+    peerBox.style.display = '';
+    startButton.disabled = !(selectedMode && selectedPeer);
+  }
 }
 
 let needPassword = async () => {

@@ -135,7 +135,8 @@ impl BluetoothPeripheral {
                     println!("Advertisement created")
                 }
                 GattServiceProviderAdvertisementStatus::Started
-                | GattServiceProviderAdvertisementStatus::StartedWithoutAllAdvertisementData => { // TODO: have to worry about StartedWithoutAllAdvertisementData case?
+                | GattServiceProviderAdvertisementStatus::StartedWithoutAllAdvertisementData => {
+                    // TODO: have to worry about StartedWithoutAllAdvertisementData case?
                     thread_tx
                         .blocking_send(BluetoothMessage::StartedAdvertising)
                         .expect("Could not send on Bluetooth tx");

@@ -23,7 +23,7 @@ const NO_SSID: &str = "NONE";
 
 // can just match and only look for the type of message we want each read,
 // and only need one rx channel?
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum BluetoothMessage {
     Pin(String),
     PairSuccess,
