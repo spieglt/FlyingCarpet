@@ -6,7 +6,11 @@ use std::error::Error;
 use central::BluetoothCentral;
 use peripheral::BluetoothPeripheral;
 use tokio::sync::mpsc;
-use windows::Devices::{Bluetooth::BluetoothAdapter, Radios::RadioState};
+use windows::{
+    core::HSTRING,
+    Devices::{Bluetooth::BluetoothAdapter, Radios::RadioState},
+    Storage::Streams::{DataReader, DataWriter, IBuffer, UnicodeEncoding},
+};
 
 pub(crate) const OS: &str = "windows";
 const SERVICE_UUID: &str = "A70BF3CA-F708-4314-8A0E-5E37C259BE5C";
@@ -90,6 +94,20 @@ impl Bluetooth {
 
 async fn _connect_to_device(_address: u64) -> Result<(), Box<dyn Error>> {
     Ok(())
+}
+
+fn ibuffer_to_string(ibuffer: IBuffer) -> windows::core::Result<String> {
+    let size = ibuffer.Capacity()?;
+    let data_reader = DataReader::FromBuffer(&ibuffer)?;
+    data_reader.SetUnicodeEncoding(UnicodeEncoding::Utf8)?;
+    Ok(data_reader.ReadString(size)?.to_string())
+}
+
+fn str_to_ibuffer(s: &str) -> windows::core::Result<IBuffer> {
+    let data_writer = DataWriter::new()?;
+    let bytes_written = data_writer.WriteString(&HSTRING::from(s))?; // TODO: is this utf-8? WriteBytes instead?
+    println!("bytes written: {}", bytes_written);
+    Ok(data_writer.DetachBuffer()?)
 }
 
 // https://stackoverflow.com/a/38704180/9242143

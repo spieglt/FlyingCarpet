@@ -27,7 +27,7 @@ use windows::{
     Storage::Streams::{DataReader, DataWriter, UnicodeEncoding},
 };
 
-use crate::bluetooth::{SERVICE_UUID, SSID_CHARACTERISTIC_UUID};
+use crate::bluetooth::{ibuffer_to_string, str_to_ibuffer, SERVICE_UUID, SSID_CHARACTERISTIC_UUID};
 
 use super::{BluetoothMessage, OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID};
 
@@ -150,9 +150,8 @@ impl BluetoothCentral {
             let args = _event_args.clone().unwrap();
             let pin = args.Pin()?.to_string();
             // emit this pin to js
-            match thread_tx.blocking_send(BluetoothMessage::Pin(pin)) {
-                Ok(()) => (),
-                Err(e) => println!("Could not send on Bluetooth tx: {}", e),
+            if let Err(e) = thread_tx.blocking_send(BluetoothMessage::Pin(pin)) {
+                println!("Could not send on Bluetooth tx: {}", e);
             }
             // we need to receive javascript's answer here... which means we need ble_ui_rx here, which means we can't use it from the struct and clone it, which means we have to wrap it in an arc<mutex>?
             let approved = ble_ui_rx
@@ -301,11 +300,8 @@ impl BluetoothCentral {
         let characteristic = self.characteristics[characteristic_uuid]
             .as_ref()
             .expect(&format!("Missing characteristic {}", characteristic_uuid));
-        let i_buffer = characteristic.ReadValueAsync()?.get()?.Value()?;
-        let size = i_buffer.Capacity()?;
-        let data_reader = DataReader::FromBuffer(&i_buffer)?;
-        data_reader.SetUnicodeEncoding(UnicodeEncoding::Utf8)?;
-        let data_string = data_reader.ReadString(size)?.to_string();
+        let ibuffer = characteristic.ReadValueAsync()?.get()?.Value()?;
+        let data_string = ibuffer_to_string(ibuffer)?;
         println!("IBuffer contents: {:?}", data_string);
         Ok(data_string)
     }
@@ -320,12 +316,9 @@ impl BluetoothCentral {
             .as_ref()
             .expect(&format!("Missing characteristic {}", characteristic_uuid));
         let write_option = GattWriteOption::WriteWithResponse;
-        let data_writer = DataWriter::new()?;
-        let bytes_written = data_writer.WriteString(&HSTRING::from(value))?; // TODO: is this utf-8? WriteBytes instead?
-        println!("bytes written: {}", bytes_written);
-        let i_buffer = data_writer.DetachBuffer()?;
+        let ibuffer = str_to_ibuffer(value)?;
         let status = characteristic
-            .WriteValueWithOptionAsync(&i_buffer, write_option)?
+            .WriteValueWithOptionAsync(&ibuffer, write_option)?
             .get()?;
         if status != GattCommunicationStatus::Success {
             Err(format!(

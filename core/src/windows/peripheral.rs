@@ -1,6 +1,10 @@
-use tokio::sync::mpsc;
+use std::sync::Arc;
 
-use crate::bluetooth::{PASSWORD_CHARACTERISTIC_UUID, SERVICE_UUID, SSID_CHARACTERISTIC_UUID};
+use tokio::sync::{mpsc, Mutex};
+
+use crate::bluetooth::{
+    OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID, SERVICE_UUID, SSID_CHARACTERISTIC_UUID,
+};
 use windows::{
     core::{Interface, Result, GUID, HSTRING},
     Devices::Bluetooth::{
@@ -17,12 +21,21 @@ use windows::{
     Storage::Streams::{DataReader, DataWriter, UnicodeEncoding},
 };
 
-use super::BluetoothMessage;
+use super::{ibuffer_to_string, BluetoothMessage, NO_SSID};
+
+type CharacteristicReadHandler =
+    TypedEventHandler<GattLocalCharacteristic, GattReadRequestedEventArgs>;
+type CharacteristicWriteHandler =
+    TypedEventHandler<GattLocalCharacteristic, GattWriteRequestedEventArgs>;
 
 pub(crate) struct BluetoothPeripheral {
     tx: mpsc::Sender<BluetoothMessage>,
     service_provider: GattServiceProvider,
-    _wifi_information: Option<String>,
+    // ssid and password fields are set by main thread if we're hosting, so peer can read these.
+    // if we're joining and peer is writing wifi info to us, we'll write those details back to
+    // the main thread with tx.
+    pub ssid: Arc<Mutex<Option<String>>>,
+    pub password: Arc<Mutex<Option<String>>>,
 }
 
 impl BluetoothPeripheral {
@@ -40,75 +53,169 @@ impl BluetoothPeripheral {
         Ok(BluetoothPeripheral {
             tx,
             service_provider,
-            _wifi_information: None,
+            ssid: Arc::new(Mutex::new(None)),
+            password: Arc::new(Mutex::new(None)),
         })
     }
 
-    pub fn add_characteristics(&mut self) -> Result<bool> {
+    pub fn add_characteristics(&mut self) -> std::result::Result<(), Box<dyn std::error::Error>> {
         // create characteristics
         let gatt_operand_parameters = GattLocalCharacteristicParameters::new()?;
         gatt_operand_parameters.SetCharacteristicProperties(GattCharacteristicProperties::Read)?;
         gatt_operand_parameters.SetCharacteristicProperties(GattCharacteristicProperties::Write)?;
         gatt_operand_parameters
             .SetReadProtectionLevel(GattProtectionLevel::EncryptionAndAuthenticationRequired)?;
-        gatt_operand_parameters.SetUserDescription(&HSTRING::from("Flying Carpet"))?;
+        gatt_operand_parameters.SetUserDescription(&HSTRING::from("Flying Carpet"))?; // TODO: set this for each characteristic?
 
-        // make ssid characteristic
-        // for characteristic in (SSID_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID) {
-        let result = self
-            .service_provider
-            .Service()?
+        let local_service = self.service_provider.Service()?;
+
+        // make OS characteristic
+        let result = local_service
+            .CreateCharacteristicAsync(OS_CHARACTERISTIC_UUID.into(), &gatt_operand_parameters)?
+            .get()?;
+        let e = result.Error()?;
+        if e != BluetoothError::Success {
+            Err(format!("Error creating characteristic: {:?}", e))?;
+        }
+        let os_characteristic = result.Characteristic()?;
+
+        // make SSID characteristic
+        let result = local_service
             .CreateCharacteristicAsync(SSID_CHARACTERISTIC_UUID.into(), &gatt_operand_parameters)?
             .get()?;
-        if result.Error()? != BluetoothError::Success {
-            println!(
-                "Failed to create GattLocalCharacteristic: {:?}",
-                result.Error()?
-            );
-            return Ok(false);
+        let e = result.Error()?;
+        if e != BluetoothError::Success {
+            Err(format!("Error creating characteristic: {:?}", e))?;
         }
         let ssid_characteristic = result.Characteristic()?;
 
+        // make password characteristic
+        let result = local_service
+            .CreateCharacteristicAsync(
+                PASSWORD_CHARACTERISTIC_UUID.into(),
+                &gatt_operand_parameters,
+            )?
+            .get()?;
+        let e = result.Error()?;
+        if e != BluetoothError::Success {
+            Err(format!("Error creating characteristic: {:?}", e))?;
+        }
+        let password_characteristic = result.Characteristic()?;
+
+        // OS read handler: write "windows" to peer
+        let os_read_callback = CharacteristicReadHandler::new(
+            move |_gatt_local_characteristic, gatt_read_requested_event_args| {
+                let args = gatt_read_requested_event_args
+                    .as_ref()
+                    .expect("No args in read callback");
+                let request = args.GetRequestAsync()?.get()?;
+                let writer = DataWriter::new()?;
+                writer.WriteBytes(b"windows")?;
+                request.RespondWithValue(&writer.DetachBuffer()?)?;
+                Ok(())
+            },
+        );
+        os_characteristic.ReadRequested(&os_read_callback)?;
+
+        // OS write handler: send peer's OS back to main thread so that it can decide if we're starting or joining hotspot
+        let os_write_tx = self.tx.clone();
+        let os_write_callback = CharacteristicWriteHandler::new(
+            move |_gatt_local_characteristic, gatt_write_requested_event_args| {
+                let args = gatt_write_requested_event_args
+                    .as_ref()
+                    .expect("No args in write callback");
+                let request = args.GetRequestAsync()?.get()?;
+                let ibuffer = request.Value()?;
+                let peer_os = ibuffer_to_string(ibuffer)?;
+                if let Err(e) = os_write_tx.blocking_send(BluetoothMessage::PeerOS(peer_os)) {
+                    println!("Could not send on Bluetooth tx: {}", e);
+                };
+                Ok(())
+            },
+        );
+        os_characteristic.WriteRequested(&os_write_callback)?;
+
         // ssid read handler
-        let ssid_read_callback =
-            TypedEventHandler::<GattLocalCharacteristic, GattReadRequestedEventArgs>::new(
-                move |_gatt_local_characteristic, gatt_read_requested_event_args| {
-                    let args = gatt_read_requested_event_args
-                        .as_ref()
-                        .expect("No args in read callback");
-                    // let deferral = args.GetDeferral()?;
-                    let request = args.GetRequestAsync()?.get()?;
-                    let writer = DataWriter::new()?;
-                    writer.WriteBytes(b"oh yeah")?;
-                    request.RespondWithValue(&writer.DetachBuffer()?)?;
-                    // deferral.Complete()?;
-                    Ok(())
-                },
-            );
+        let callback_ssid = self.ssid.clone();
+        let ssid_read_callback = CharacteristicReadHandler::new(
+            move |_gatt_local_characteristic, gatt_read_requested_event_args| {
+                let args = gatt_read_requested_event_args
+                    .as_ref()
+                    .expect("No args in read callback");
+                let request = args.GetRequestAsync()?.get()?;
+                let writer = DataWriter::new()?;
+                let callback_ssid = callback_ssid.blocking_lock();
+                let ssid = match callback_ssid.as_ref() {
+                    Some(_ssid) => _ssid.to_string(),
+                    None => NO_SSID.to_string(),
+                };
+                writer.WriteBytes(ssid.as_bytes())?;
+                request.RespondWithValue(&writer.DetachBuffer()?)?;
+                Ok(())
+            },
+        );
         ssid_characteristic.ReadRequested(&ssid_read_callback)?;
 
         // ssid write handler
-        let ssid_write_callback =
-            TypedEventHandler::<GattLocalCharacteristic, GattWriteRequestedEventArgs>::new(
-                move |_gatt_local_characteristic, gatt_write_requested_event_args| {
-                    let args = gatt_write_requested_event_args
-                        .as_ref()
-                        .expect("No args in read callback");
-                    let request = args.GetRequestAsync()?.get()?;
-                    // get value
-                    unsafe {
-                        let data_reader = DataReader::from_raw(request.Value()?.as_raw());
-                        data_reader.SetUnicodeEncoding(UnicodeEncoding::Utf8)?;
-                        let ssid = data_reader.ReadString(request.Value()?.Length()?)?;
-                        // got_ssid(ssid.to_string());
-                    }
-                    // deferral.Complete()?;
-                    Ok(())
-                },
-            );
+        let callback_tx = self.tx.clone();
+        let ssid_write_callback = CharacteristicWriteHandler::new(
+            move |_gatt_local_characteristic, gatt_write_requested_event_args| {
+                let args = gatt_write_requested_event_args
+                    .as_ref()
+                    .expect("No args in read callback");
+                let request = args.GetRequestAsync()?.get()?;
+                // get value
+                let ibuffer = request.Value()?;
+                let ssid = ibuffer_to_string(ibuffer)?;
+                callback_tx
+                    .blocking_send(BluetoothMessage::SSID(ssid.to_string()))
+                    .expect("Could not send to main thread from SSID write handler");
+                Ok(())
+            },
+        );
         ssid_characteristic.WriteRequested(&ssid_write_callback)?;
 
-        Ok(true)
+        // password read handler
+        let callback_password = self.password.clone();
+        let password_read_callback = CharacteristicReadHandler::new(
+            move |_gatt_local_characteristic, gatt_read_requested_event_args| {
+                let args = gatt_read_requested_event_args
+                    .as_ref()
+                    .expect("No args in read callback");
+                let request = args.GetRequestAsync()?.get()?;
+                let writer = DataWriter::new()?;
+                let callback_password = callback_password.blocking_lock();
+                let callback_password = match callback_password.as_ref() {
+                    Some(p) => p,
+                    None => &"".to_string(), // bizarre
+                };
+                writer.WriteBytes(callback_password.as_bytes())?;
+                request.RespondWithValue(&writer.DetachBuffer()?)?;
+                Ok(())
+            },
+        );
+        password_characteristic.ReadRequested(&password_read_callback)?;
+
+        // password write handler
+        let callback_tx = self.tx.clone();
+        let password_write_callback = CharacteristicWriteHandler::new(
+            move |_gatt_local_characteristic, gatt_write_requested_event_args| {
+                let args = gatt_write_requested_event_args
+                    .as_ref()
+                    .expect("No args in read callback");
+                let request = args.GetRequestAsync()?.get()?;
+                // get value
+                let ibuffer = request.Value()?;
+                let password = ibuffer_to_string(ibuffer)?;
+                callback_tx
+                    .blocking_send(BluetoothMessage::Password(password.to_string()))
+                    .expect("Could not send to main thread from password write handler");
+                Ok(())
+            },
+        );
+        password_characteristic.WriteRequested(&password_write_callback)?;
+
+        Ok(())
     }
 
     pub fn start_advertising(&mut self) -> Result<()> {

@@ -431,6 +431,7 @@ async fn negotiate_bluetooth<T: UI>(
     let mut bluetooth = Bluetooth::new(tx)?;
     if let Mode::Send(_) = mode {
         ui.output("Advertising Bluetooth service...");
+        bluetooth.peripheral.add_characteristics()?;
         bluetooth.peripheral.start_advertising()?;
         // TODO: can we block here until we have os/ssid/password? same as central, receive on channels?
         // if we're hosting, we will be receiving reads of our info: just pass references into start_advertising()?
@@ -477,6 +478,11 @@ async fn negotiate_bluetooth<T: UI>(
         if is_hosting(&Peer::from(peer_os.as_str()), mode) {
             let (_, ssid) =
                 get_key_and_ssid(password.as_ref().expect("Hosting but do not have password"));
+            let mut peripheral_ssid = bluetooth.peripheral.ssid.lock().await;
+            *peripheral_ssid = Some(ssid.clone());
+            let mut peripheral_password = bluetooth.peripheral.password.lock().await;
+            *peripheral_password =
+                Some(password.clone().expect("Hosting but do not have password"));
             Ok((
                 peer_os,
                 ssid.clone(),
@@ -600,17 +606,16 @@ async fn process_bluetooth_message<T: UI>(
 }
 
 // TODO:
+// ui bug: disable bluetooth and refresh
 // test multiple transfers back to back, windows central unpaired but ios peripheral still paired
 // why is ios looking for ip address for a long time?
 // test switching os...
 // "send mode selected but no files present"
-// hide os buttons when using bluetooth
 // how did windows read OS "windows" from itself when acting as central but not peripheral?
 // does linux need any channels for bluetooth?
 // folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh.
 // fix tests
 // fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux: have to get whatever is blocking on background thread?
-// update screenshots, version bump
 // show qr code after refresh
 // test pulling wifi card, quitting program, etc.
 
