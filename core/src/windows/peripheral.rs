@@ -61,16 +61,19 @@ impl BluetoothPeripheral {
     pub fn add_characteristics(&mut self) -> std::result::Result<(), Box<dyn std::error::Error>> {
         // create characteristics
         let gatt_operand_parameters = GattLocalCharacteristicParameters::new()?;
-        gatt_operand_parameters.SetCharacteristicProperties(GattCharacteristicProperties::Read)?;
-        gatt_operand_parameters.SetCharacteristicProperties(GattCharacteristicProperties::Write)?;
+        gatt_operand_parameters.SetCharacteristicProperties(GattCharacteristicProperties::Read | GattCharacteristicProperties::Write)?;
         gatt_operand_parameters
             .SetReadProtectionLevel(GattProtectionLevel::EncryptionAndAuthenticationRequired)?;
+        gatt_operand_parameters
+            .SetWriteProtectionLevel(GattProtectionLevel::EncryptionAndAuthenticationRequired)?;
         gatt_operand_parameters.SetUserDescription(&HSTRING::from("Flying Carpet"))?; // TODO: set this for each characteristic?
 
-        let local_service = self.service_provider.Service()?;
+        // let local_service = self.service_provider.Service()?;
 
         // make OS characteristic
-        let result = local_service
+        let result = self
+            .service_provider
+            .Service()?
             .CreateCharacteristicAsync(OS_CHARACTERISTIC_UUID.into(), &gatt_operand_parameters)?
             .get()?;
         let e = result.Error()?;
@@ -80,7 +83,9 @@ impl BluetoothPeripheral {
         let os_characteristic = result.Characteristic()?;
 
         // make SSID characteristic
-        let result = local_service
+        let result = self
+            .service_provider
+            .Service()?
             .CreateCharacteristicAsync(SSID_CHARACTERISTIC_UUID.into(), &gatt_operand_parameters)?
             .get()?;
         let e = result.Error()?;
@@ -90,7 +95,9 @@ impl BluetoothPeripheral {
         let ssid_characteristic = result.Characteristic()?;
 
         // make password characteristic
-        let result = local_service
+        let result = self
+            .service_provider
+            .Service()?
             .CreateCharacteristicAsync(
                 PASSWORD_CHARACTERISTIC_UUID.into(),
                 &gatt_operand_parameters,
@@ -105,13 +112,16 @@ impl BluetoothPeripheral {
         // OS read handler: write "windows" to peer
         let os_read_callback = CharacteristicReadHandler::new(
             move |_gatt_local_characteristic, gatt_read_requested_event_args| {
+                println!("received os read request");
                 let args = gatt_read_requested_event_args
                     .as_ref()
                     .expect("No args in read callback");
+                let deferral = args.GetDeferral()?;
                 let request = args.GetRequestAsync()?.get()?;
                 let writer = DataWriter::new()?;
                 writer.WriteBytes(b"windows")?;
                 request.RespondWithValue(&writer.DetachBuffer()?)?;
+                deferral.Complete()?;
                 Ok(())
             },
         );
