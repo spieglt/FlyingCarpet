@@ -203,7 +203,7 @@ async function startTransfer(filesSelected) {
   // make sure we have a wifi interface and prompt for which if more than one
   let wifiInterface;
   let interfaces = await tauri.invoke('get_wifi_interfaces');
-  console.log('interfaces:', interfaces);
+  // console.log('interfaces:', interfaces);
   switch (interfaces.length) {
     case 0:
       output('No WiFi interfaces found. Flying Carpet only works over WiFi.');
@@ -337,8 +337,10 @@ let enableUi = async () => {
   startButton.style.display = '';
   // hide cancel button
   cancelButton.style.display = 'none';
+  // enable bluetooth switch
+  document.getElementById('bluetoothSwitch').disabled = false;
   // enable radio buttons, file/folder selection buttons
-  let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton', 'filesButton', 'folderButton'];
+  let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton'];
   for (let i in radioButtons) {
     document.getElementById(radioButtons[i]).disabled = false;
   }
@@ -353,10 +355,12 @@ let disableUi = async () => {
   startButton.style.display = 'none';
   // show cancel button
   cancelButton.style.display = '';
+  // disable bluetooth switch
+  document.getElementById('bluetoothSwitch').disabled = true;
   // disable radio buttons, file/folder selection buttons
-  let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton', 'filesButton', 'folderButton'];
+  let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton'];
   for (let i in radioButtons) {
-    document.getElementById(radioButtons[i]).disabled = true; // TODO: this is throwing errors
+    document.getElementById(radioButtons[i]).disabled = true;
   }
   // disable password box
   document.getElementById('passwordBox').disabled = true;

@@ -6,7 +6,7 @@ use crate::bluetooth::{
     OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID, SERVICE_UUID, SSID_CHARACTERISTIC_UUID,
 };
 use windows::{
-    core::{Interface, Result, GUID, HSTRING},
+    core::{Result, GUID, HSTRING},
     Devices::Bluetooth::{
         BluetoothError,
         GenericAttributeProfile::{
@@ -18,7 +18,7 @@ use windows::{
         },
     },
     Foundation::TypedEventHandler,
-    Storage::Streams::{DataReader, DataWriter, UnicodeEncoding},
+    Storage::Streams::DataWriter,
 };
 
 use super::{ibuffer_to_string, BluetoothMessage, NO_SSID};
@@ -116,7 +116,7 @@ impl BluetoothPeripheral {
                 let args = gatt_read_requested_event_args
                     .as_ref()
                     .expect("No args in read callback");
-                let deferral = args.GetDeferral()?;
+                let deferral = args.GetDeferral()?; // TODO: copy this to other read handlers. write handlers?
                 let request = args.GetRequestAsync()?.get()?;
                 let writer = DataWriter::new()?;
                 writer.WriteBytes(b"windows")?;
@@ -131,6 +131,7 @@ impl BluetoothPeripheral {
         let os_write_tx = self.tx.clone();
         let os_write_callback = CharacteristicWriteHandler::new(
             move |_gatt_local_characteristic, gatt_write_requested_event_args| {
+                println!("received os write request");
                 let args = gatt_write_requested_event_args
                     .as_ref()
                     .expect("No args in write callback");
@@ -147,8 +148,10 @@ impl BluetoothPeripheral {
 
         // ssid read handler
         let callback_ssid = self.ssid.clone();
+        let callback_tx = self.tx.clone();
         let ssid_read_callback = CharacteristicReadHandler::new(
             move |_gatt_local_characteristic, gatt_read_requested_event_args| {
+                println!("received ssid read request");
                 let args = gatt_read_requested_event_args
                     .as_ref()
                     .expect("No args in read callback");
@@ -161,6 +164,10 @@ impl BluetoothPeripheral {
                 };
                 writer.WriteBytes(ssid.as_bytes())?;
                 request.RespondWithValue(&writer.DetachBuffer()?)?;
+                println!("peer read our ssid: {}", ssid);
+                if let Err(e) = callback_tx.blocking_send(BluetoothMessage::PeerReadSsid) {
+                    println!("Could not send on Bluetooth tx: {}", e);
+                };
                 Ok(())
             },
         );
@@ -170,9 +177,10 @@ impl BluetoothPeripheral {
         let callback_tx = self.tx.clone();
         let ssid_write_callback = CharacteristicWriteHandler::new(
             move |_gatt_local_characteristic, gatt_write_requested_event_args| {
+                println!("received ssid write request");
                 let args = gatt_write_requested_event_args
                     .as_ref()
-                    .expect("No args in read callback");
+                    .expect("No args in write callback");
                 let request = args.GetRequestAsync()?.get()?;
                 // get value
                 let ibuffer = request.Value()?;
@@ -187,8 +195,10 @@ impl BluetoothPeripheral {
 
         // password read handler
         let callback_password = self.password.clone();
+        let callback_tx = self.tx.clone();
         let password_read_callback = CharacteristicReadHandler::new(
             move |_gatt_local_characteristic, gatt_read_requested_event_args| {
+                println!("received password read request");
                 let args = gatt_read_requested_event_args
                     .as_ref()
                     .expect("No args in read callback");
@@ -201,6 +211,10 @@ impl BluetoothPeripheral {
                 };
                 writer.WriteBytes(callback_password.as_bytes())?;
                 request.RespondWithValue(&writer.DetachBuffer()?)?;
+                println!("peer read our password: {}", callback_password);
+                if let Err(e) = callback_tx.blocking_send(BluetoothMessage::PeerReadPassword) {
+                    println!("Could not send on Bluetooth tx: {}", e);
+                };
                 Ok(())
             },
         );
@@ -210,9 +224,10 @@ impl BluetoothPeripheral {
         let callback_tx = self.tx.clone();
         let password_write_callback = CharacteristicWriteHandler::new(
             move |_gatt_local_characteristic, gatt_write_requested_event_args| {
+                println!("received password write request");
                 let args = gatt_write_requested_event_args
                     .as_ref()
-                    .expect("No args in read callback");
+                    .expect("No args in write callback");
                 let request = args.GetRequestAsync()?.get()?;
                 // get value
                 let ibuffer = request.Value()?;

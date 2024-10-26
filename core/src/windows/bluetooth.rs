@@ -38,6 +38,8 @@ pub enum BluetoothMessage {
     PeerOS(String),
     SSID(String),
     Password(String),
+    PeerReadSsid,
+    PeerReadPassword,
     Other(String),
 }
 

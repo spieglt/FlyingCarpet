@@ -127,7 +127,7 @@ pub async fn start_transfer<T: UI>(
 
     if using_bluetooth {
         match negotiate_bluetooth(&mode, &password, ble_ui_rx, ui).await {
-            Ok((p, ssid, pw)) => {
+            Ok((p, _ssid, pw)) => {
                 peer = Some(p);
                 if password.is_none() {
                     password = Some(pw);
@@ -433,8 +433,6 @@ async fn negotiate_bluetooth<T: UI>(
         ui.output("Advertising Bluetooth service...");
         bluetooth.peripheral.add_characteristics()?;
         bluetooth.peripheral.start_advertising()?;
-        // TODO: can we block here until we have os/ssid/password? same as central, receive on channels?
-        // if we're hosting, we will be receiving reads of our info: just pass references into start_advertising()?
 
         // let mut peer_mode = String::new();
         let mut peer_os = String::new();
@@ -442,6 +440,7 @@ async fn negotiate_bluetooth<T: UI>(
         let mut peer_password = String::new();
 
         // TODO: do we need to wait to be notified that we've paired here, or just wait till central reads OS? don't think we get notification that central has paired with us in linux.
+        // but if we don't, how will we know if user hit cancel on pairing dialog?
         // wait to pair
         // let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
         // if let BluetoothMessage::PeerOS(os) = msg {
@@ -476,13 +475,31 @@ async fn negotiate_bluetooth<T: UI>(
 
         // TODO: if hosting, we need to wait for reads to happen to know that peer received messages and when to start transfer?
         if is_hosting(&Peer::from(peer_os.as_str()), mode) {
+            // TODO: race condition here, if peer reads from our SSID characteristic before we've set it?
+            // then we'll write NONE, peer will wait a second and read again, so tx will get another PeerReadSSID message,
+            // making the "waiting for password" BluetoothMessage panic? only send PeerReadSSID if we sent a real one?
+            // or pass the info in earlier so we're guaranteed to have it? but can we do this safely before we've exchanged
+            // OS and know if we're hosting? doesn't hurt to have the data set even if we're not hosting maybe, but it's ugly.
             let (_, ssid) =
                 get_key_and_ssid(password.as_ref().expect("Hosting but do not have password"));
-            let mut peripheral_ssid = bluetooth.peripheral.ssid.lock().await;
-            *peripheral_ssid = Some(ssid.clone());
-            let mut peripheral_password = bluetooth.peripheral.password.lock().await;
-            *peripheral_password =
-                Some(password.clone().expect("Hosting but do not have password"));
+            {
+                let mut peripheral_ssid = bluetooth.peripheral.ssid.lock().await;
+                *peripheral_ssid = Some(ssid.clone());
+                let mut peripheral_password = bluetooth.peripheral.password.lock().await;
+                *peripheral_password =
+                    Some(password.clone().expect("Hosting but do not have password"));
+            }
+            println!("set peripheral ssid and password");
+            println!("waiting for ssid to be read...");
+            let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
+            if msg != BluetoothMessage::PeerReadSsid  {
+                Err(format!("Peripheral received incorrect BluetoothMessage. Expected PeerReadSsid, got {:?}", msg))?;
+            }
+            println!("waiting for password to be read...");
+            let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
+            if msg != BluetoothMessage::PeerReadPassword  {
+                Err(format!("Peripheral received incorrect BluetoothMessage. Expected PeerReadPassword, got {:?}", msg))?;
+            }
             Ok((
                 peer_os,
                 ssid.clone(),
@@ -578,8 +595,8 @@ async fn process_bluetooth_message<T: UI>(
         .await
         .expect("Bluetooth message channel unexpectedly closed.");
     println!("received {:?}", msg);
-    bluetooth.central.stop_watching()?;
-    println!("stopped watching");
+    // bluetooth.central.stop_watching()?;
+    // println!("stopped watching");
     match msg {
         BluetoothMessage::Pin(ref pin) => {
             ui.show_pin(pin);
@@ -600,6 +617,8 @@ async fn process_bluetooth_message<T: UI>(
         BluetoothMessage::Password(ref password) => {
             ui.output(&format!("Peer's password is {}", password))
         }
+        BluetoothMessage::PeerReadSsid => ui.output("Peer read our SSID"),
+        BluetoothMessage::PeerReadPassword => ui.output("Peer read our password"),
         BluetoothMessage::Other(ref s) => ui.output(&format!("Bluetooth peering result: {}", s)),
     };
     Ok(msg)
