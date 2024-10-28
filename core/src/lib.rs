@@ -434,27 +434,9 @@ async fn negotiate_bluetooth<T: UI>(
         bluetooth.peripheral.add_characteristics()?;
         bluetooth.peripheral.start_advertising()?;
 
-        // let mut peer_mode = String::new();
         let mut peer_os = String::new();
         let mut peer_ssid = String::new();
         let mut peer_password = String::new();
-
-        // TODO: do we need to wait to be notified that we've paired here, or just wait till central reads OS? don't think we get notification that central has paired with us in linux.
-        // but if we don't, how will we know if user hit cancel on pairing dialog?
-        // wait to pair
-        // let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
-        // if let BluetoothMessage::PeerOS(os) = msg {
-        //     peer_os = os;
-        // } else {
-        //     // TODO: this isn't right because other types of message can come back?
-        //     Err(format!(
-        //         "Peripheral received incorrect BluetoothMessage: {:?}",
-        //         msg
-        //     ))?;
-        // }
-
-        // TODO: ensure that peer is using opposite mode? no. we wouldn't have paired if we had the same mode.
-        // have to test what happens if we were already paired.
 
         // ensure we started advertising
         let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
@@ -540,10 +522,28 @@ async fn negotiate_bluetooth<T: UI>(
         if let BluetoothMessage::Pin(_) = msg {
             process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
         }
+        
+        bluetooth.central.stop_watching()?;
+        println!("stopped watching");
 
+        
+        // TODO: do we need to wait to be notified that we've paired here, or just wait till central reads OS? don't think we get notification that central has paired with us in linux.
+        // but if we don't, how will we know if user hit cancel on pairing dialog?
+        // wait to pair
+        let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
+        if msg != BluetoothMessage::PairSuccess {
+            Err(format!(
+                "Expected PairSuccess, got: {:?}",
+                msg
+            ))?;
+        }
+
+        println!("before get_services_and_characteristics");
         // discover service and characteristics once paired
         bluetooth.central.get_services_and_characteristics().await?;
+        println!("after get_services_and_characteristics");
 
+        ui.output("Reading peer's OS");
         // read peer's OS
         let peer = bluetooth
             .central
@@ -595,8 +595,6 @@ async fn process_bluetooth_message<T: UI>(
         .await
         .expect("Bluetooth message channel unexpectedly closed.");
     println!("received {:?}", msg);
-    // bluetooth.central.stop_watching()?;
-    // println!("stopped watching");
     match msg {
         BluetoothMessage::Pin(ref pin) => {
             ui.show_pin(pin);
@@ -626,7 +624,7 @@ async fn process_bluetooth_message<T: UI>(
 
 // TODO:
 // ui bug: disable bluetooth and refresh
-// test multiple transfers back to back, windows central unpaired but ios peripheral still paired
+// test multiple transfers back to back, windows central unpaired but ios peripheral still paired, already paired but switched mode
 // why is ios looking for ip address for a long time?
 // test switching os...
 // "send mode selected but no files present"

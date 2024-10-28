@@ -456,7 +456,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
 
         // use to read peripheral's characteristic
         fun read(characteristicUuid: UUID) {
+            outputText("Reading $characteristicUuid")
             if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                outputText("No permission")
                 return
             }
             when (characteristicUuid) {
@@ -464,6 +466,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 SSID_CHARACTERISTIC_UUID -> bluetoothGatt?.readCharacteristic(ssidCharacteristic)
                 PASSWORD_CHARACTERISTIC_UUID -> bluetoothGatt?.readCharacteristic(passwordCharacteristic)
             }
+            outputText("Exiting read")
         }
 
         // private fun writeSinglePacket(characteristicUuid: UUID, value: ByteArray, waitForResponse: Boolean) {

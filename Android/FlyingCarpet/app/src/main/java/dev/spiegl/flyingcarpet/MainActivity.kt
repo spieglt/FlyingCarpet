@@ -502,16 +502,17 @@ class MainActivity : AppCompatActivity() {
             bluetoothRequestPermissionLauncher.launch(permissions)
             return false
         }
-        var initialized = true
+        var initialized = false
         try {
             // TODO: undo after testing
-            if (!viewModel.bluetooth.initializePeripheral(this)) {
+            val initializedPeripheral = viewModel.bluetooth.initializePeripheral(this)
+            val initializedCentral = viewModel.bluetooth.initializeCentral()
+            if (!initializedPeripheral) {
                 Log.e("Bluetooth", "Device cannot act as a Bluetooth peripheral")
-                 initialized = false
-            }
-            if (!viewModel.bluetooth.initializeCentral()) {
+            } else if (!initializedCentral) {
                 Log.e("Bluetooth", "Device cannot act as a Bluetooth central")
-                initialized = false
+            } else {
+                initialized = true
             }
         } catch (e: Exception) {
             Log.e("Bluetooth", "Could not initialize Bluetooth: $e")
@@ -525,7 +526,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // TODO:
-//   try https://developer.android.com/reference/android/bluetooth/BluetoothGatt#requestMtu(int) first, windows probably supports large mtu, so does apple, need to check linux.
+//   send mode before OS over bluetooth? necessary?
 //   mutex needed for wifi info?
 //   can't run advertiser more than once, have to quit app
 //   bluetooth permissions messed up on launch

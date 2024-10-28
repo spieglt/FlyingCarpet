@@ -240,6 +240,7 @@ impl BluetoothCentral {
                 Ok(())
             }
         } else {
+            println!("watcher wasn't started. status: {:?}", status);
             Ok(())
         }
     }
@@ -266,11 +267,15 @@ impl BluetoothCentral {
                         SSID_CHARACTERISTIC_UUID,
                         PASSWORD_CHARACTERISTIC_UUID,
                     ] {
+                        println!("trying to get characteristics for service");
+                        // TODO: is this performing an implicit read?
+                        // or are we not waiting for pairing confirmation?
+                        // find out where the "could not send on bluetooth tx"es are coming from
                         let characteristics = service
                             .GetCharacteristicsForUuidAsync(GUID::from(characteristic))?
                             .get()?
                             .Characteristics()?;
-                        println!("got chars");
+                        println!("got characteristics");
                         for c in characteristics {
                             if c.Uuid()? == GUID::from(characteristic) {
                                 self.characteristics
@@ -297,6 +302,7 @@ impl BluetoothCentral {
     }
 
     pub async fn read(&mut self, characteristic_uuid: &str) -> windows::core::Result<String> {
+        println!("reading {}", characteristic_uuid);
         let characteristic = self.characteristics[characteristic_uuid]
             .as_ref()
             .expect(&format!("Missing characteristic {}", characteristic_uuid));
