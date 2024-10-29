@@ -3,6 +3,11 @@ mod peripheral;
 
 use std::error::Error;
 
+use crate::{
+    network::{self, is_hosting},
+    utils::get_key_and_ssid,
+    Mode, Peer, UI,
+};
 use central::BluetoothCentral;
 use peripheral::BluetoothPeripheral;
 use tokio::sync::mpsc;
@@ -94,8 +99,191 @@ impl Bluetooth {
     }
 }
 
-async fn _connect_to_device(_address: u64) -> Result<(), Box<dyn Error>> {
-    Ok(())
+pub async fn negotiate_bluetooth<T: UI>(
+    mode: &Mode,
+    password: &Option<String>,
+    ble_ui_rx: mpsc::Receiver<bool>,
+    ui: &T,
+) -> Result<(String, String, String), Box<dyn Error>> {
+    let (tx, mut rx) = mpsc::channel(1);
+    let mut bluetooth = Bluetooth::new(tx)?;
+    if let Mode::Send(_) = mode {
+        ui.output("Advertising Bluetooth service...");
+        bluetooth.peripheral.add_characteristics()?;
+        bluetooth.peripheral.start_advertising()?;
+
+        let mut peer_os = String::new();
+        let mut peer_ssid = String::new();
+        let mut peer_password = String::new();
+
+        // ensure we started advertising
+        process_bluetooth_message(BluetoothMessage::StartedAdvertising, &mut rx, ui).await?;
+
+        // get OS of peer
+        let msg =
+            process_bluetooth_message(BluetoothMessage::PeerOS(String::new()), &mut rx, ui).await?;
+        if let BluetoothMessage::PeerOS(os) = msg {
+            peer_os = os;
+        } else {
+            Err(format!(
+                "Peripheral received incorrect BluetoothMessage. Expected peer OS, got {:?}",
+                msg
+            ))?;
+        }
+
+        // TODO: if hosting, we need to wait for reads to happen to know that peer received messages and when to start transfer?
+        if is_hosting(&Peer::from(peer_os.as_str()), mode) {
+            // TODO: race condition here, if peer reads from our SSID characteristic before we've set it?
+            // then we'll write NONE, peer will wait a second and read again, so tx will get another PeerReadSSID message,
+            // making the "waiting for password" BluetoothMessage panic? only send PeerReadSSID if we sent a real one?
+            // or pass the info in earlier so we're guaranteed to have it? but can we do this safely before we've exchanged
+            // OS and know if we're hosting? doesn't hurt to have the data set even if we're not hosting maybe, but it's ugly.
+            let (_, ssid) =
+                get_key_and_ssid(password.as_ref().expect("Hosting but do not have password"));
+            {
+                let mut peripheral_ssid = bluetooth.peripheral.ssid.lock().await;
+                *peripheral_ssid = Some(ssid.clone());
+                let mut peripheral_password = bluetooth.peripheral.password.lock().await;
+                *peripheral_password =
+                    Some(password.clone().expect("Hosting but do not have password"));
+            }
+            println!("set peripheral ssid and password");
+            println!("waiting for ssid to be read...");
+            process_bluetooth_message(BluetoothMessage::PeerReadSsid, &mut rx, ui).await?;
+            println!("waiting for password to be read...");
+            process_bluetooth_message(BluetoothMessage::PeerReadPassword, &mut rx, ui).await?;
+            Ok((
+                peer_os,
+                ssid.clone(),
+                password.clone().expect("Hosting but do not have password"),
+            ))
+        } else {
+            // if joining, receive writes
+            // receive ssid
+            let msg = process_bluetooth_message(BluetoothMessage::SSID(String::new()), &mut rx, ui)
+                .await?;
+            if let BluetoothMessage::SSID(ssid) = msg {
+                peer_ssid = ssid;
+            } else {
+                Err(format!(
+                    "Peripheral received incorrect BluetoothMessage. Expected SSID, got {:?}",
+                    msg
+                ))?;
+            }
+            // receive password
+            let msg =
+                process_bluetooth_message(BluetoothMessage::Password(String::new()), &mut rx, ui)
+                    .await?;
+            if let BluetoothMessage::Password(password) = msg {
+                peer_password = password;
+            } else {
+                Err(format!(
+                    "Peripheral received incorrect BluetoothMessage. Expected password, got {:?}",
+                    msg
+                ))?;
+            }
+            Ok((peer_os, peer_ssid, peer_password))
+        }
+    } else {
+        // scan for device advertising flying carpet service
+        ui.output("Scanning for Bluetooth peripherals...");
+        bluetooth.central.scan(ble_ui_rx)?;
+
+        // wait for result of scan. if PIN was shown, wait again for success or failure.
+        // TODO: don't need to wait for PIN, just result of scan? we don't do anything with the PIN here. can just have process_bluetooth_message() print that we received it.
+        println!("waiting for callback...");
+        // let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
+        // if let BluetoothMessage::Pin(_) = msg {
+        //     process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
+        // }
+
+        bluetooth.central.stop_watching()?;
+        println!("stopped watching");
+
+        // TODO: do we need to wait to be notified that we've paired here, or just wait till central reads OS? don't think we get notification that central has paired with us in linux.
+        // but if we don't, how will we know if user hit cancel on pairing dialog?
+        // wait to pair
+        process_bluetooth_message(BluetoothMessage::PairSuccess, &mut rx, ui).await?;
+
+        println!("before get_services_and_characteristics");
+        // discover service and characteristics once paired
+        bluetooth.central.get_services_and_characteristics().await?;
+        println!("after get_services_and_characteristics");
+
+        ui.output("Reading peer's OS");
+        // read peer's OS
+        let peer = bluetooth.central.read(OS_CHARACTERISTIC_UUID).await?;
+        ui.output(&format!("Peer OS: {:?}", peer));
+
+        // write OS
+        bluetooth.central.write(OS_CHARACTERISTIC_UUID, OS).await?;
+
+        // read or write ssid and password
+        let (ssid, password) = if network::is_hosting(&Peer::from(peer.as_str()), mode) {
+            let password = password.clone().expect("Hosting but do not have password");
+            let (_, ssid) = get_key_and_ssid(&password);
+            bluetooth
+                .central
+                .write(SSID_CHARACTERISTIC_UUID, &ssid)
+                .await?;
+            bluetooth
+                .central
+                .write(PASSWORD_CHARACTERISTIC_UUID, &password)
+                .await?;
+            (ssid, password)
+        } else {
+            let ssid = bluetooth.central.read(SSID_CHARACTERISTIC_UUID).await?;
+            let password = bluetooth.central.read(PASSWORD_CHARACTERISTIC_UUID).await?;
+            (ssid, password)
+        };
+        Ok((peer, ssid, password))
+    }
+}
+
+pub async fn process_bluetooth_message<T: UI>(
+    _looking_for: BluetoothMessage,
+    rx: &mut mpsc::Receiver<BluetoothMessage>,
+    ui: &T,
+) -> Result<BluetoothMessage, Box<dyn Error>> {
+    loop {
+        println!("waiting for bluetooth message...");
+        let msg = rx
+            .recv()
+            .await
+            .expect("Bluetooth message channel unexpectedly closed.");
+        println!("received {:?}", msg);
+        match msg {
+            BluetoothMessage::Pin(ref pin) => {
+                ui.show_pin(pin);
+            }
+            BluetoothMessage::PairSuccess => {
+                // can use this to represent AlreadyPaired on windows? don't need to emit pin, just need to proceed.
+                // and nothing will be blocked in central because the pairing_handler won't be called.
+                ui.output("Successfully paired");
+            }
+            BluetoothMessage::PairFailure => Err("Pairing failed.")?,
+            BluetoothMessage::AlreadyPaired => {
+                ui.output("Already BLE paired with Bluetooth device");
+            }
+            BluetoothMessage::UserCanceled => Err("User canceled.")?,
+            BluetoothMessage::StartedAdvertising => {
+                ui.output("Started advertising Bluetooth service")
+            }
+            BluetoothMessage::PeerOS(ref os) => ui.output(&format!("Peer's OS is {}", os)),
+            BluetoothMessage::SSID(ref ssid) => ui.output(&format!("Peer's SSID is {}", ssid)),
+            BluetoothMessage::Password(ref password) => {
+                ui.output(&format!("Peer's password is {}", password))
+            }
+            BluetoothMessage::PeerReadSsid => ui.output("Peer read our SSID"),
+            BluetoothMessage::PeerReadPassword => ui.output("Peer read our password"),
+            BluetoothMessage::Other(ref s) => {
+                ui.output(&format!("Bluetooth peering result: {}", s))
+            }
+        };
+        if matches!(&msg, _looking_for) {
+            return Ok(msg);
+        }
+    }
 }
 
 fn ibuffer_to_string(ibuffer: IBuffer) -> windows::core::Result<String> {

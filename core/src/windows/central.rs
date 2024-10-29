@@ -5,7 +5,7 @@ use std::{
 };
 use tokio::sync::mpsc;
 use windows::{
-    core::{GUID, HSTRING},
+    core::GUID,
     Devices::{
         Bluetooth::{
             Advertisement::{
@@ -24,7 +24,6 @@ use windows::{
         },
     },
     Foundation::{EventRegistrationToken, TypedEventHandler},
-    Storage::Streams::{DataReader, DataWriter, UnicodeEncoding},
 };
 
 use crate::bluetooth::{ibuffer_to_string, str_to_ibuffer, SERVICE_UUID, SSID_CHARACTERISTIC_UUID};

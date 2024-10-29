@@ -61,7 +61,9 @@ impl BluetoothPeripheral {
     pub fn add_characteristics(&mut self) -> std::result::Result<(), Box<dyn std::error::Error>> {
         // create characteristics
         let gatt_operand_parameters = GattLocalCharacteristicParameters::new()?;
-        gatt_operand_parameters.SetCharacteristicProperties(GattCharacteristicProperties::Read | GattCharacteristicProperties::Write)?;
+        gatt_operand_parameters.SetCharacteristicProperties(
+            GattCharacteristicProperties::Read | GattCharacteristicProperties::Write,
+        )?;
         gatt_operand_parameters
             .SetReadProtectionLevel(GattProtectionLevel::EncryptionAndAuthenticationRequired)?;
         gatt_operand_parameters
