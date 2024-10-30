@@ -121,6 +121,7 @@ impl BluetoothCentral {
         });
         let scan_callback_token = self.watcher.Received(&received_handler)?;
         self.scan_callback_token = Some(scan_callback_token);
+        println!("self.scan_callback_token is set");
         self.watcher.Start()?;
         Ok(())
     }
@@ -162,7 +163,7 @@ impl BluetoothCentral {
                 .expect("ble_ui_rx reply from js was None");
             if approved {
                 args.Accept()?;
-                if thread_tx.blocking_send(BluetoothMessage::PairSuccess).is_err() {
+                if thread_tx.blocking_send(BluetoothMessage::PairApproved).is_err() {
                     println!("Could not send on Bluetooth tx in pairing callback");
                 };
             } else {
@@ -194,11 +195,12 @@ impl BluetoothCentral {
             .expect("Could not find status in error map");
         println!("Pairing result: {}", error_msg);
 
-        let res = tx.blocking_send(if status == DevicePairingResultStatus::AlreadyPaired {
-            BluetoothMessage::AlreadyPaired
-        } else {
-            BluetoothMessage::Other(error_msg.to_string())
-        });
+        let msg = match status {
+            DevicePairingResultStatus::AlreadyPaired => BluetoothMessage::AlreadyPaired,
+            DevicePairingResultStatus::Paired => BluetoothMessage::PairSuccess,
+            _ => BluetoothMessage::Other(error_msg.to_string()), // TODO: should this be OtherError?
+        };
+        let res = tx.blocking_send(msg);
         if res.is_err() {
             println!(
                 "pair_device() was called but transfer thread has stopped listening: {}",
@@ -235,9 +237,10 @@ impl BluetoothCentral {
                 None => (),
             }
             if let Some(scan_callback_token) = self.scan_callback_token {
-                println!("watcher is Some");
+                println!("self.scan_callback_token is Some");
                 self.watcher.RemoveReceived(scan_callback_token)
             } else {
+                println!("self.scan_callback_token was None");
                 Ok(())
             }
         } else {
@@ -271,7 +274,6 @@ impl BluetoothCentral {
                         SSID_CHARACTERISTIC_UUID,
                         PASSWORD_CHARACTERISTIC_UUID,
                     ] {
-                        println!("trying to get characteristics for service");
                         // TODO: is this performing an implicit read?
                         // or are we not waiting for pairing confirmation?
                         let characteristics = service

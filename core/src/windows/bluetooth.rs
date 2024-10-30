@@ -35,6 +35,7 @@ const NO_SSID: &str = "NONE";
 #[derive(Debug, PartialEq)]
 pub enum BluetoothMessage {
     Pin(String),
+    PairApproved,
     PairSuccess,
     PairFailure,
     AlreadyPaired,
@@ -193,6 +194,8 @@ pub async fn negotiate_bluetooth<T: UI>(
         // TODO: don't need to wait for PIN, just result of scan? we don't do anything with the PIN here. can just have process_bluetooth_message() print that we received it.
         // no, do need to wait for the result of the pin so we don't move on till user has made their choice.
         // how to handle this on linux? just send a dummy?
+        // problem: we don't need to just wait for the user to hit yes on the pin dialog. we need to wait till we actually pair.
+        // if we hit yes but peer doesn't, we'll try to read characteristics that are still encrypted.
         println!("waiting for callback...");
         process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui).await?;
 
@@ -255,6 +258,7 @@ pub async fn process_bluetooth_message<T: UI>(
             BluetoothMessage::Pin(ref pin) => {
                 ui.show_pin(pin);
             }
+            BluetoothMessage::PairApproved => ui.output("Pairing approved."),
             BluetoothMessage::PairSuccess => {
                 // can use this to represent AlreadyPaired on windows? don't need to emit pin, just need to proceed.
                 // and nothing will be blocked in central because the pairing_handler won't be called.
