@@ -138,12 +138,15 @@ impl BluetoothPeripheral {
                 let args = gatt_write_requested_event_args
                     .as_ref()
                     .expect("No args in write callback");
+                let deferral = args.GetDeferral()?;
                 let request = args.GetRequestAsync()?.get()?;
                 let ibuffer = request.Value()?;
                 let peer_os = ibuffer_to_string(ibuffer)?;
                 if let Err(e) = os_write_tx.blocking_send(BluetoothMessage::PeerOS(peer_os)) {
                     println!("Could not send on Bluetooth tx: {}", e);
                 };
+                request.Respond()?;
+                deferral.Complete()?;
                 Ok(())
             },
         );
@@ -158,6 +161,7 @@ impl BluetoothPeripheral {
                 let args = gatt_read_requested_event_args
                     .as_ref()
                     .expect("No args in read callback");
+                let deferral = args.GetDeferral()?;
                 let request = args.GetRequestAsync()?.get()?;
                 let writer = DataWriter::new()?;
                 let callback_ssid = callback_ssid.blocking_lock();
@@ -171,6 +175,7 @@ impl BluetoothPeripheral {
                 if let Err(e) = callback_tx.blocking_send(BluetoothMessage::PeerReadSsid) {
                     println!("Could not send on Bluetooth tx: {}", e);
                 };
+                deferral.Complete()?;
                 Ok(())
             },
         );
@@ -184,6 +189,7 @@ impl BluetoothPeripheral {
                 let args = gatt_write_requested_event_args
                     .as_ref()
                     .expect("No args in write callback");
+                let deferral = args.GetDeferral()?;
                 let request = args.GetRequestAsync()?.get()?;
                 // get value
                 let ibuffer = request.Value()?;
@@ -191,6 +197,8 @@ impl BluetoothPeripheral {
                 callback_tx
                     .blocking_send(BluetoothMessage::SSID(ssid.to_string()))
                     .expect("Could not send to main thread from SSID write handler");
+                request.Respond()?;
+                deferral.Complete()?;
                 Ok(())
             },
         );
@@ -205,6 +213,7 @@ impl BluetoothPeripheral {
                 let args = gatt_read_requested_event_args
                     .as_ref()
                     .expect("No args in read callback");
+                let deferral = args.GetDeferral()?;
                 let request = args.GetRequestAsync()?.get()?;
                 let writer = DataWriter::new()?;
                 let callback_password = callback_password.blocking_lock();
@@ -218,6 +227,7 @@ impl BluetoothPeripheral {
                 if let Err(e) = callback_tx.blocking_send(BluetoothMessage::PeerReadPassword) {
                     println!("Could not send on Bluetooth tx: {}", e);
                 };
+                deferral.Complete()?;
                 Ok(())
             },
         );
@@ -231,6 +241,7 @@ impl BluetoothPeripheral {
                 let args = gatt_write_requested_event_args
                     .as_ref()
                     .expect("No args in write callback");
+                let deferral = args.GetDeferral()?;
                 let request = args.GetRequestAsync()?.get()?;
                 // get value
                 let ibuffer = request.Value()?;
@@ -238,6 +249,8 @@ impl BluetoothPeripheral {
                 callback_tx
                     .blocking_send(BluetoothMessage::Password(password.to_string()))
                     .expect("Could not send to main thread from password write handler");
+                request.Respond()?;
+                deferral.Complete()?;
                 Ok(())
             },
         );

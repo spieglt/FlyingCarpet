@@ -229,12 +229,14 @@ async function startTransfer(filesSelected) {
   // if we're hosting, generate and display the password
   if (!await needPassword()) {
     password = await tauri.invoke('generate_password');
-    if (selectedPeer === 'ios' || selectedPeer === 'android') {
-      output('\nStart the transfer on the other device and scan the QR code when prompted.');
-      makeQRCode(password);
-    } else {
-      output(`Password: ${password}`);
-      alert(`\nStart the transfer on the other device and enter this password when prompted:\n${password}`);
+    if (!usingBluetooth) {
+      if (selectedPeer === 'ios' || selectedPeer === 'android') {
+        output('\nStart the transfer on the other device and scan the QR code when prompted.');
+        makeQRCode(password);
+      } else {
+        output(`Password: ${password}`);
+        alert(`\nStart the transfer on the other device and enter this password when prompted:\n${password}`);
+      }
     }
   }
 
