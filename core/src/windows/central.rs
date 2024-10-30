@@ -87,9 +87,11 @@ impl BluetoothCentral {
                     let info = device
                         .DeviceInformation()
                         .expect("Could not get DeviceInformation for peer peripheral.");
-                    let mut peer_device = thread_peer_device.blocking_lock();
-                    *peer_device = Some(device.clone());
-
+                    {
+                        // drop this lock once we've stored the device
+                        let mut peer_device = thread_peer_device.blocking_lock();
+                        *peer_device = Some(device.clone());
+                    }
                     // determine if we're already paired
                     let connection_status = device.ConnectionStatus()?;
                     if connection_status == BluetoothConnectionStatus::Connected {
@@ -99,7 +101,7 @@ impl BluetoothCentral {
                                 .blocking_send(BluetoothMessage::AlreadyPaired)
                                 .is_err()
                             {
-                                println!("Could not send on Bluetooth tx");
+                                println!("Could not send on Bluetooth tx when we've already paired");
                             }
                             return Ok(());
                         }
@@ -150,7 +152,7 @@ impl BluetoothCentral {
             let pin = args.Pin()?.to_string();
             // emit this pin to js
             if let Err(e) = thread_tx.blocking_send(BluetoothMessage::Pin(pin)) {
-                println!("Could not send on Bluetooth tx: {}", e);
+                println!("Could not send on Bluetooth tx when PIN was generated: {}", e);
             }
             // we need to receive javascript's answer here... which means we need ble_ui_rx here, which means we can't use it from the struct and clone it, which means we have to wrap it in an arc<mutex>?
             let approved = ble_ui_rx
@@ -160,13 +162,13 @@ impl BluetoothCentral {
                 .expect("ble_ui_rx reply from js was None");
             if approved {
                 args.Accept()?;
-                thread_tx
-                    .blocking_send(BluetoothMessage::PairSuccess)
-                    .expect("Could not send on Bluetooth tx");
+                if thread_tx.blocking_send(BluetoothMessage::PairSuccess).is_err() {
+                    println!("Could not send on Bluetooth tx in pairing callback");
+                };
             } else {
-                thread_tx
-                    .blocking_send(BluetoothMessage::UserCanceled)
-                    .expect("Could not send on Bluetooth tx");
+                if thread_tx.blocking_send(BluetoothMessage::UserCanceled).is_err() {
+                    println!("Could not send on Bluetooth tx in pairing callback");
+                };
             }
             Ok(())
         });
@@ -245,15 +247,18 @@ impl BluetoothCentral {
     }
 
     pub async fn get_services_and_characteristics(&mut self) -> Result<(), Box<dyn Error>> {
+        println!("locking device");
         // read service
         let device = self.peer_device.lock().await;
         let device = device
             .as_ref()
             .expect("Bluetooth central had no remote device");
-
+        println!("locked");
         'outer: loop {
+            println!("loop, getting services");
             tokio::task::yield_now().await;
             let services = device.GetGattServicesAsync()?.get()?.Services()?;
+            println!("got services");
             for service in services {
                 println!("UUID: {:?}", service.Uuid()?);
                 if service.Uuid()? == GUID::from(SERVICE_UUID) {
@@ -269,7 +274,6 @@ impl BluetoothCentral {
                         println!("trying to get characteristics for service");
                         // TODO: is this performing an implicit read?
                         // or are we not waiting for pairing confirmation?
-                        // find out where the "could not send on bluetooth tx"es are coming from
                         let characteristics = service
                             .GetCharacteristicsForUuidAsync(GUID::from(characteristic))?
                             .get()?
@@ -305,7 +309,18 @@ impl BluetoothCentral {
         let characteristic = self.characteristics[characteristic_uuid]
             .as_ref()
             .expect(&format!("Missing characteristic {}", characteristic_uuid));
-        let ibuffer = characteristic.ReadValueAsync()?.get()?.Value()?;
+        println!("before ReadValueAsync");
+        let res = characteristic.ReadValueAsync()?.get()?.Value();
+        if let Err(e) = &res {
+            println!("Code: {}, message: {}", e.code(), e.message());
+            return if e.code().is_err() {
+                Err(e.clone())
+            } else {
+                Ok("".to_string()) // Code: 0x00000000, message: The operation completed successfully.
+            };
+        }
+        let ibuffer = res.unwrap();
+        println!("before ibuffer_to_string");
         let data_string = ibuffer_to_string(ibuffer)?;
         println!("IBuffer contents: {:?}", data_string);
         Ok(data_string)

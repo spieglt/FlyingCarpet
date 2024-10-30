@@ -124,6 +124,7 @@ impl BluetoothPeripheral {
                 writer.WriteBytes(b"windows")?;
                 request.RespondWithValue(&writer.DetachBuffer()?)?;
                 deferral.Complete()?;
+                println!("wrote OS to central");
                 Ok(())
             },
         );

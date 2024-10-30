@@ -1,7 +1,7 @@
 mod central;
 mod peripheral;
 
-use std::error::Error;
+use std::{error::Error, mem::discriminant};
 
 use crate::{
     network::{self, is_hosting},
@@ -191,11 +191,10 @@ pub async fn negotiate_bluetooth<T: UI>(
 
         // wait for result of scan. if PIN was shown, wait again for success or failure.
         // TODO: don't need to wait for PIN, just result of scan? we don't do anything with the PIN here. can just have process_bluetooth_message() print that we received it.
+        // no, do need to wait for the result of the pin so we don't move on till user has made their choice.
+        // how to handle this on linux? just send a dummy?
         println!("waiting for callback...");
-        // let msg = process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
-        // if let BluetoothMessage::Pin(_) = msg {
-        //     process_bluetooth_message(&mut rx, &bluetooth, ui).await?;
-        // }
+        process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui).await?;
 
         bluetooth.central.stop_watching()?;
         println!("stopped watching");
@@ -241,7 +240,7 @@ pub async fn negotiate_bluetooth<T: UI>(
 }
 
 pub async fn process_bluetooth_message<T: UI>(
-    _looking_for: BluetoothMessage,
+    looking_for: BluetoothMessage,
     rx: &mut mpsc::Receiver<BluetoothMessage>,
     ui: &T,
 ) -> Result<BluetoothMessage, Box<dyn Error>> {
@@ -280,7 +279,7 @@ pub async fn process_bluetooth_message<T: UI>(
                 ui.output(&format!("Bluetooth peering result: {}", s))
             }
         };
-        if matches!(&msg, _looking_for) {
+        if discriminant(&msg) == discriminant(&looking_for) {
             return Ok(msg);
         }
     }

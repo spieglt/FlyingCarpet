@@ -134,6 +134,7 @@ pub async fn start_transfer<T: UI>(
             }
             Err(e) => {
                 ui.output(&format!("Could not establish Bluetooth connection: {}", e));
+                println!("Could not establish Bluetooth connection: {}", e);
                 return None;
             }
         }
