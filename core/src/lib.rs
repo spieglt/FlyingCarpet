@@ -125,7 +125,7 @@ pub async fn start_transfer<T: UI>(
     // for servers/peripherals, does it matter? callbacks in both cases?
 
     if using_bluetooth {
-        match negotiate_bluetooth(&mode, &password, ble_ui_rx, ui).await {
+        match negotiate_bluetooth(&mode, ble_ui_rx, ui).await {
             Ok((p, _ssid, pw)) => {
                 peer = Some(p);
                 if password.is_none() {

@@ -5,7 +5,7 @@ use std::{error::Error, mem::discriminant};
 
 use crate::{
     network::{self, is_hosting},
-    utils::get_key_and_ssid,
+    utils::{generate_password, get_key_and_ssid},
     Mode, Peer, UI,
 };
 use central::BluetoothCentral;
@@ -102,7 +102,6 @@ impl Bluetooth {
 
 pub async fn negotiate_bluetooth<T: UI>(
     mode: &Mode,
-    password: &Option<String>,
     ble_ui_rx: mpsc::Receiver<bool>,
     ui: &T,
 ) -> Result<(String, String, String), Box<dyn Error>> {
@@ -133,30 +132,25 @@ pub async fn negotiate_bluetooth<T: UI>(
         }
 
         if is_hosting(&Peer::from(peer_os.as_str()), mode) {
+            let password = generate_password();
             // TODO: race condition here, if peer reads from our SSID characteristic before we've set it?
             // then we'll write NONE, peer will wait a second and read again, so tx will get another PeerReadSSID message,
             // making the "waiting for password" BluetoothMessage panic? only send PeerReadSSID if we sent a real one?
             // or pass the info in earlier so we're guaranteed to have it? but can we do this safely before we've exchanged
             // OS and know if we're hosting? doesn't hurt to have the data set even if we're not hosting maybe, but it's ugly.
-            let (_, ssid) =
-                get_key_and_ssid(password.as_ref().expect("Hosting but do not have password"));
+            let (_, ssid) = get_key_and_ssid(&password);
             {
                 let mut peripheral_ssid = bluetooth.peripheral.ssid.lock().await;
                 *peripheral_ssid = Some(ssid.clone());
                 let mut peripheral_password = bluetooth.peripheral.password.lock().await;
-                *peripheral_password =
-                    Some(password.clone().expect("Hosting but do not have password"));
+                *peripheral_password = Some(password.clone());
             }
             println!("set peripheral ssid and password");
             println!("waiting for ssid to be read...");
             process_bluetooth_message(BluetoothMessage::PeerReadSsid, &mut rx, ui).await?;
             println!("waiting for password to be read...");
             process_bluetooth_message(BluetoothMessage::PeerReadPassword, &mut rx, ui).await?;
-            Ok((
-                peer_os,
-                ssid.clone(),
-                password.clone().expect("Hosting but do not have password"),
-            ))
+            Ok((peer_os, ssid.clone(), password))
         } else {
             // if joining, receive writes
             // receive ssid
@@ -196,7 +190,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         // problem: we don't need to just wait for the user to hit yes on the pin dialog. we need to wait till we actually pair.
         // if we hit yes but peer doesn't, we'll try to read characteristics that are still encrypted.
         println!("waiting for callback...");
-        process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui).await?;
+        let msg = process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui).await?;
 
         bluetooth.central.stop_watching()?;
         println!("stopped watching");
@@ -204,7 +198,9 @@ pub async fn negotiate_bluetooth<T: UI>(
         // TODO: do we need to wait to be notified that we've paired here, or just wait till central reads OS? don't think we get notification that central has paired with us in linux.
         // but if we don't, how will we know if user hit cancel on pairing dialog?
         // wait to pair
-        process_bluetooth_message(BluetoothMessage::PairSuccess, &mut rx, ui).await?;
+        if msg != BluetoothMessage::AlreadyPaired {
+            process_bluetooth_message(BluetoothMessage::PairSuccess, &mut rx, ui).await?;
+        }
 
         println!("before get_services_and_characteristics");
         // discover service and characteristics once paired
@@ -221,7 +217,7 @@ pub async fn negotiate_bluetooth<T: UI>(
 
         // read or write ssid and password
         let (ssid, password) = if network::is_hosting(&Peer::from(peer.as_str()), mode) {
-            let password = password.clone().expect("Hosting but do not have password");
+            let password = generate_password();
             let (_, ssid) = get_key_and_ssid(&password);
             bluetooth
                 .central
@@ -267,7 +263,7 @@ pub async fn process_bluetooth_message<T: UI>(
             BluetoothMessage::AlreadyPaired => {
                 ui.output("Already BLE paired with Bluetooth device");
                 // TODO: this is an ugly edge case, but redoing it to look for either might be equally ugly
-                if looking_for == BluetoothMessage::PairSuccess {
+                if looking_for == BluetoothMessage::PairSuccess || discriminant(&looking_for) == discriminant(&BluetoothMessage::Pin("".to_string())) {
                     return Ok(msg);
                 }
             }
