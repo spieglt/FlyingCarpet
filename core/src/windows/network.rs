@@ -8,7 +8,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 use std::{process, thread};
 use wifidirect_legacy_ap::WlanHostedNetworkHelper;
-use windows::core::{GUID, PCSTR, PCWSTR, PSTR};
+use windows::core::{GUID, HSTRING, PCSTR, PCWSTR, PSTR};
 use windows::Win32::Foundation::{GetLastError, ERROR_SUCCESS, HANDLE, WIN32_ERROR};
 use windows::Win32::NetworkManagement::IpHelper;
 use windows::Win32::NetworkManagement::WiFi::{
@@ -195,10 +195,21 @@ fn find_gateway() -> Result<Option<String>, Box<dyn Error>> {
                 if !gateway.is_null() {
                     let address = (*gateway).Address;
                     let sa_data = (*address.lpSockaddr).sa_data;
+
+                    // for some reason after the windows-rs version upgrade, sa_data were signed bytes
+                    // and there were negative numbers in the ip address, so have to convert to u8
+                    let mut unsigned_octets = [0u8; 4];
+                    for i in 2..=5 {
+                        unsigned_octets[i - 2] = sa_data[i] as u8;
+                    }
+
                     // TODO: do this properly? https://stackoverflow.com/questions/1276294/getting-ipv4-address-from-a-sockaddr-structure
                     let gateway = format!(
                         "{}.{}.{}.{}",
-                        sa_data[2], sa_data[3], sa_data[4], sa_data[5]
+                        unsigned_octets[0],
+                        unsigned_octets[1],
+                        unsigned_octets[2],
+                        unsigned_octets[3]
                     );
                     return Ok(Some(gateway));
                 }
@@ -378,10 +389,8 @@ fn join_hotspot(
         + "		<enableRandomization>false</enableRandomization>\r\n"
         + "	</MacRandomization>\r\n"
         + "</WLANProfile>";
-    // TODO: double check
-    let mut xml_utf_16: Vec<u16> = xml.encode_utf16().collect();
-    xml_utf_16.push(0);
-    let str_profile = PCWSTR::from_raw(xml_utf_16.as_ptr());
+    let xml_hstring = HSTRING::from(xml);
+    let str_profile = PCWSTR::from_raw(xml_hstring.as_ptr());
 
     let mut uc_ssid = [0u8; 32];
     let ssid_chars = ssid.as_bytes().to_vec();

@@ -101,7 +101,9 @@ impl BluetoothCentral {
                                 .blocking_send(BluetoothMessage::AlreadyPaired)
                                 .is_err()
                             {
-                                println!("Could not send on Bluetooth tx when we've already paired");
+                                println!(
+                                    "Could not send on Bluetooth tx when we've already paired"
+                                );
                             }
                             return Ok(());
                         }
@@ -153,7 +155,10 @@ impl BluetoothCentral {
             let pin = args.Pin()?.to_string();
             // emit this pin to js
             if let Err(e) = thread_tx.blocking_send(BluetoothMessage::Pin(pin)) {
-                println!("Could not send on Bluetooth tx when PIN was generated: {}", e);
+                println!(
+                    "Could not send on Bluetooth tx when PIN was generated: {}",
+                    e
+                );
             }
             // we need to receive javascript's answer here... which means we need ble_ui_rx here, which means we can't use it from the struct and clone it, which means we have to wrap it in an arc<mutex>?
             let approved = ble_ui_rx
@@ -163,11 +168,17 @@ impl BluetoothCentral {
                 .expect("ble_ui_rx reply from js was None");
             if approved {
                 args.Accept()?;
-                if thread_tx.blocking_send(BluetoothMessage::PairApproved).is_err() {
+                if thread_tx
+                    .blocking_send(BluetoothMessage::PairApproved)
+                    .is_err()
+                {
                     println!("Could not send on Bluetooth tx in pairing callback");
                 };
             } else {
-                if thread_tx.blocking_send(BluetoothMessage::UserCanceled).is_err() {
+                if thread_tx
+                    .blocking_send(BluetoothMessage::UserCanceled)
+                    .is_err()
+                {
                     println!("Could not send on Bluetooth tx in pairing callback");
                 };
             }

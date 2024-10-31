@@ -132,7 +132,6 @@ pub async fn negotiate_bluetooth<T: UI>(
             ))?;
         }
 
-        // TODO: if hosting, we need to wait for reads to happen to know that peer received messages and when to start transfer?
         if is_hosting(&Peer::from(peer_os.as_str()), mode) {
             // TODO: race condition here, if peer reads from our SSID characteristic before we've set it?
             // then we'll write NONE, peer will wait a second and read again, so tx will get another PeerReadSSID message,
@@ -267,6 +266,10 @@ pub async fn process_bluetooth_message<T: UI>(
             BluetoothMessage::PairFailure => Err("Pairing failed.")?,
             BluetoothMessage::AlreadyPaired => {
                 ui.output("Already BLE paired with Bluetooth device");
+                // TODO: this is an ugly edge case, but redoing it to look for either might be equally ugly
+                if looking_for == BluetoothMessage::PairSuccess {
+                    return Ok(msg);
+                }
             }
             BluetoothMessage::UserCanceled => Err("User canceled.")?,
             BluetoothMessage::StartedAdvertising => {

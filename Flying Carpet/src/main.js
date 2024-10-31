@@ -146,7 +146,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     progressBar.style.display = uiState.progressBarVisible ? '' : 'none';
     progressBar.value = uiState.progressBarValue;
     modeChange(selectedMode);
-    // updateSelectionBox();
     if (uiState.transferRunning) {
       disableUi();
     }
@@ -171,7 +170,7 @@ function makeQRCode(str) {
 async function startTransfer(filesSelected) {
 
   // if we need password, make sure we have it before prompting for files/folder
-  let password;
+  let password = null;
   if (await needPassword()) {
     password = document.getElementById('passwordBox').value;
     if (password.length < 8) {
@@ -228,8 +227,8 @@ async function startTransfer(filesSelected) {
   
   // if we're hosting, generate and display the password
   if (!await needPassword()) {
-    password = await tauri.invoke('generate_password');
     if (!usingBluetooth) {
+      password = await tauri.invoke('generate_password');
       if (selectedPeer === 'ios' || selectedPeer === 'android') {
         output('\nStart the transfer on the other device and scan the QR code when prompted.');
         makeQRCode(password);
@@ -306,11 +305,11 @@ let checkStatus = () => {
 }
 
 let needPassword = async () => {
-  // if linux, joining windows, hosting mac/ios/android or linux if receiving.
-  // if windows, always hosting unless windows and sending.
   if (usingBluetooth) {
     return false;
   }
+  // if linux, joining windows, hosting mac/ios/android or linux if receiving.
+  // if windows, always hosting unless windows and sending.
   let showPassword;
   switch (await os.type()) {
     case 'Linux':
@@ -340,7 +339,7 @@ let enableUi = async () => {
   // hide cancel button
   cancelButton.style.display = 'none';
   // enable bluetooth switch
-  document.getElementById('bluetoothSwitch').disabled = false;
+  document.getElementById('bluetoothSwitch').disabled = false; // TODO: only enable if we can use bluetooth. need canUseBluetooth?
   // enable radio buttons, file/folder selection buttons
   let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton'];
   for (let i in radioButtons) {
