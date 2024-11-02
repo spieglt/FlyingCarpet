@@ -24,6 +24,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.ActivityCompat
+import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModelProvider
@@ -351,8 +352,8 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(id.windowsButton).isEnabled = enabled
         findViewById<CheckBox>(id.sendFolderCheckBox).isEnabled = enabled
 
-        findViewById<Button>(id.startButton).isVisible = enabled
-        findViewById<Button>(id.cancelButton).isVisible = !enabled
+        findViewById<Button>(id.startButton).isInvisible = !enabled
+        findViewById<Button>(id.cancelButton).isInvisible = enabled
 
         findViewById<TextView>(id.aboutButton).isClickable = enabled
     }
@@ -504,7 +505,6 @@ class MainActivity : AppCompatActivity() {
         }
         var initialized = false
         try {
-            // TODO: undo after testing
             val initializedPeripheral = viewModel.bluetooth.initializePeripheral(this)
             val initializedCentral = viewModel.bluetooth.initializeCentral()
             if (!initializedPeripheral) {
@@ -526,16 +526,11 @@ class MainActivity : AppCompatActivity() {
 }
 
 // TODO:
-//   send mode before OS over bluetooth? necessary?
-//   mutex needed for wifi info?
-//   can't run advertiser more than once, have to quit app
-//   bluetooth permissions messed up on launch
-//   support if devices already bonded
-//   text box scrolls up over cancel button
+//   bluetooth permissions messed up on first launch
 //   one permission check for all permissions?
 //   bluetooth UI in landscape mode
 //   bluetooth UI save/reload when screen rotated
-//   bluetooth icon color change when scan/advertisement stops or starts: livedata?
+//   bluetooth icon color change when scan/advertisement stops or starts: livedata? fix bluetooth icon.
 //   transfer "completing" if receiving end quit?
 //   check !!s
 //   test what happens if wifi is turned off - done. hotspot still runs, not sure about joining.

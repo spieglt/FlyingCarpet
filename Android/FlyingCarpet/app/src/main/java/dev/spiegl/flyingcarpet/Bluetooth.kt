@@ -1,6 +1,7 @@
 package dev.spiegl.flyingcarpet
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Application
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothDevice.BOND_BONDED
@@ -100,11 +101,15 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
     }
 
     private val serverCallback = object : BluetoothGattServerCallback() {
+        @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(device: BluetoothDevice?, status: Int, newState: Int) {
             outputText("In serverCallback")
             super.onConnectionStateChange(device, status, newState)
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 outputText("Device connected")
+                val bluetoothLeAdvertiser = bluetoothManager.adapter.bluetoothLeAdvertiser
+                bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
+                outputText("Stopped advertising")
             } else {
                 outputText("Device disconnected")
             }
@@ -301,12 +306,17 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             }
             outputText("Scan result: $result")
             if (result != null) {
-//                address = result.device.address
-                _status.postValue(true)
-                bluetoothReceiver.result = result
-                result.device.createBond()
                 bluetoothLeScanner.stopScan(this)
-                outputText("Called createBond()")
+                _status.postValue(true)
+//                address = result.device.address
+                bluetoothReceiver.result = result
+                if (result.device.bondState == BOND_BONDED) {
+                    result.device.connectGatt(application.applicationContext, false, bluetoothReceiver.gattCallback)
+                    outputText("Already paired, called connectGatt()")
+                } else {
+                    result.device.createBond()
+                    outputText("Called createBond()")
+                }
             }
         }
 
@@ -331,6 +341,110 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         var ssidCharacteristic: BluetoothGattCharacteristic? = null
         var passwordCharacteristic: BluetoothGattCharacteristic? = null
 
+        val gattCallback = object : BluetoothGattCallback() {
+            // this is called when we as central have read a characteristic from the peer's peripheral
+            override fun onCharacteristicRead(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                value: ByteArray,
+                status: Int
+            ) {
+                super.onCharacteristicRead(gatt, characteristic, value, status)
+                val stringRepresentation = value.toString(Charsets.UTF_8)
+                outputText("Read characteristic: $stringRepresentation")
+                when (characteristic.uuid) {
+                    OS_CHARACTERISTIC_UUID -> {
+                        gotPeer(value.toString(Charsets.UTF_8))
+                    }
+                    SSID_CHARACTERISTIC_UUID -> {
+                        val ssid = value.toString(Charsets.UTF_8)
+                        if (ssid == "") {
+                            // peripheral hasn't stood up its hotspot yet, have to wait.
+                            // kill a second, then read again, which will loop us back here.
+                            outputText("Could not read peer's WiFi characteristic. trying again...")
+                            Thread.sleep(1000)
+                            read(SSID_CHARACTERISTIC_UUID)
+                            return
+                        }
+                        gotSsid(ssid)
+                        // doing this here instead of in gotSsid because if peripheral had SSID
+                        // written to it, we wouldn't need to call read
+                        // we read the SSID, now read the password.
+                        read(PASSWORD_CHARACTERISTIC_UUID)
+                    }
+                    PASSWORD_CHARACTERISTIC_UUID -> gotPassword(value.toString(Charsets.UTF_8))
+                }
+            }
+
+            // this is called when we as central have written a characteristic to the peripheral
+            override fun onCharacteristicWrite(
+                gatt: BluetoothGatt?,
+                characteristic: BluetoothGattCharacteristic?,
+                status: Int
+            ) {
+                super.onCharacteristicWrite(gatt, characteristic, status)
+                when (characteristic?.uuid) {
+                    OS_CHARACTERISTIC_UUID -> {
+                        outputText("Wrote OS to peer")
+                        connectToPeer()
+                    }
+                    SSID_CHARACTERISTIC_UUID -> {
+                        outputText("Wrote SSID to peer")
+                        val (_, password) = getWifiInfo()
+                        outputText("Fetched password = $password")
+                        write(PASSWORD_CHARACTERISTIC_UUID, password.toByteArray())
+                    }
+                    PASSWORD_CHARACTERISTIC_UUID -> {
+                        outputText("Wrote password to peer")
+                        // we told the peripheral the password, now just have to wait for them to join the hotspot
+                    }
+                }
+            }
+
+            override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+                if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    return
+                }
+                super.onServicesDiscovered(gatt, status)
+                outputText("Discovered services")
+                for (service in gatt?.services!!) {
+                    outputText("Service: ${service.uuid}")
+                }
+                val service = gatt.getService(SERVICE_UUID) ?: return
+                outputText("Got service: $service")
+                osCharacteristic = service.getCharacteristic(OS_CHARACTERISTIC_UUID) ?: return
+                ssidCharacteristic = service.getCharacteristic(SSID_CHARACTERISTIC_UUID) ?: return
+                passwordCharacteristic = service.getCharacteristic(PASSWORD_CHARACTERISTIC_UUID) ?: return
+                outputText("Got characteristics: $osCharacteristic, $ssidCharacteristic, $passwordCharacteristic")
+                read(OS_CHARACTERISTIC_UUID)
+            }
+
+            override fun onServiceChanged(gatt: BluetoothGatt) {
+                super.onServiceChanged(gatt)
+                if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    return
+                }
+                outputText("Services changed")
+                gatt.discoverServices()
+            }
+
+            override fun onConnectionStateChange(
+                gatt: BluetoothGatt?,
+                status: Int,
+                newState: Int
+            ) {
+                super.onConnectionStateChange(gatt, status, newState)
+                if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    return
+                }
+                bluetoothGatt = gatt
+                outputText("Connected")
+                gatt?.discoverServices()
+            }
+        }
+
+        // called when we get a bluetooth bonding event from the OS
+        @SuppressLint("MissingPermission")
         override fun onReceive(context: Context?, intent: Intent?) {
             outputText("Action: ${intent?.action}")
             peerDevice = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -345,108 +459,6 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             }
             outputText("Device: $peerDevice")
 
-            val gattCallback = object : BluetoothGattCallback() {
-
-                // this is called when we as central have read a characteristic from the peer's peripheral
-                override fun onCharacteristicRead(
-                    gatt: BluetoothGatt,
-                    characteristic: BluetoothGattCharacteristic,
-                    value: ByteArray,
-                    status: Int
-                ) {
-                    super.onCharacteristicRead(gatt, characteristic, value, status)
-                    val stringRepresentation = value.toString(Charsets.UTF_8)
-                    outputText("Read characteristic: $stringRepresentation")
-                    when (characteristic.uuid) {
-                        OS_CHARACTERISTIC_UUID -> {
-                            gotPeer(value.toString(Charsets.UTF_8))
-                        }
-                        SSID_CHARACTERISTIC_UUID -> {
-                            val ssid = value.toString(Charsets.UTF_8)
-                            if (ssid == "") {
-                                // peripheral hasn't stood up its hotspot yet, have to wait.
-                                // kill a second, then read again, which will loop us back here.
-                                outputText("Could not read peer's WiFi characteristic. trying again...")
-                                Thread.sleep(1000)
-                                read(SSID_CHARACTERISTIC_UUID)
-                                return
-                            }
-                            gotSsid(ssid)
-                            // doing this here instead of in gotSsid because if peripheral had SSID
-                            // written to it, we wouldn't need to call read
-                            // we read the SSID, now read the password.
-                            read(PASSWORD_CHARACTERISTIC_UUID)
-                        }
-                        PASSWORD_CHARACTERISTIC_UUID -> gotPassword(value.toString(Charsets.UTF_8))
-                    }
-                }
-
-                // this is called when we as central have written a characteristic to the peripheral
-                override fun onCharacteristicWrite(
-                    gatt: BluetoothGatt?,
-                    characteristic: BluetoothGattCharacteristic?,
-                    status: Int
-                ) {
-                    super.onCharacteristicWrite(gatt, characteristic, status)
-                    when (characteristic?.uuid) {
-                        OS_CHARACTERISTIC_UUID -> {
-                            outputText("Wrote OS to peer")
-                            connectToPeer()
-                        }
-                        SSID_CHARACTERISTIC_UUID -> {
-                            outputText("Wrote SSID to peer")
-                            val (_, password) = getWifiInfo()
-                            outputText("Fetched password = $password")
-                            write(PASSWORD_CHARACTERISTIC_UUID, password.toByteArray())
-                        }
-                        PASSWORD_CHARACTERISTIC_UUID -> {
-                            outputText("Wrote password to peer")
-                            // we told the peripheral the password, now just have to wait for them to join the hotspot
-                        }
-                    }
-                }
-
-                override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
-                    if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                        return
-                    }
-                    super.onServicesDiscovered(gatt, status)
-                    outputText("Discovered services")
-                    for (service in gatt?.services!!) {
-                        outputText("Service: ${service.uuid}")
-                    }
-                    val service = gatt.getService(SERVICE_UUID) ?: return
-                    outputText("Got service: $service")
-                    osCharacteristic = service.getCharacteristic(OS_CHARACTERISTIC_UUID) ?: return
-                    ssidCharacteristic = service.getCharacteristic(SSID_CHARACTERISTIC_UUID) ?: return
-                    passwordCharacteristic = service.getCharacteristic(PASSWORD_CHARACTERISTIC_UUID) ?: return
-                    outputText("Got characteristics: $osCharacteristic, $ssidCharacteristic, $passwordCharacteristic")
-                    read(OS_CHARACTERISTIC_UUID)
-                }
-
-                override fun onServiceChanged(gatt: BluetoothGatt) {
-                    super.onServiceChanged(gatt)
-                    if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                        return
-                    }
-                    outputText("Services changed")
-                    gatt.discoverServices()
-                }
-
-                override fun onConnectionStateChange(
-                    gatt: BluetoothGatt?,
-                    status: Int,
-                    newState: Int
-                ) {
-                    super.onConnectionStateChange(gatt, status, newState)
-                    if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                        return
-                    }
-                    bluetoothGatt = gatt
-                    outputText("Connected")
-                    gatt?.discoverServices()
-                }
-            }
             if (result == null) {
                 Log.e("Bluetooth", "Received ACTION_BOND_STATE_CHANGED but do not have device result")
                 return
