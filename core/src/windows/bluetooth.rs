@@ -30,28 +30,6 @@ pub(crate) const PASSWORD_CHARACTERISTIC_UUID: &str = "E1FA8F66-CF88-4572-9527-D
 // in case hosting rules change, which would mean detecting this when reading ssid and delaying/retrying.
 const NO_SSID: &str = "NONE";
 
-// can just match and only look for the type of message we want each read,
-// and only need one rx channel?
-#[derive(Debug, PartialEq)]
-pub enum BluetoothMessage {
-    Pin(String),
-    PairApproved,
-    PairSuccess,
-    PairFailure,
-    AlreadyPaired,
-    UserCanceled,
-    StartedAdvertising,
-    PeerOS(String),
-    SSID(String),
-    Password(String),
-    PeerReadSsid,
-    PeerReadPassword,
-    Other(String),
-}
-
-unsafe impl Send for BluetoothMessage {}
-unsafe impl Sync for BluetoothMessage {}
-
 pub(crate) struct Bluetooth {
     pub central: BluetoothCentral,
     pub peripheral: BluetoothPeripheral,

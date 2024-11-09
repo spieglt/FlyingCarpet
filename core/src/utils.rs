@@ -10,6 +10,26 @@ use std::{
 
 use crate::MAJOR_VERSION;
 
+#[derive(Debug, PartialEq)]
+pub enum BluetoothMessage {
+    Pin(String),
+    PairApproved,
+    PairSuccess,
+    PairFailure,
+    AlreadyPaired,
+    UserCanceled,
+    StartedAdvertising,
+    PeerOS(String),
+    SSID(String),
+    Password(String),
+    PeerReadSsid,
+    PeerReadPassword,
+    Other(String),
+}
+
+unsafe impl Send for BluetoothMessage {}
+unsafe impl Sync for BluetoothMessage {}
+
 pub fn run_command(
     program: &str,
     parameters: Option<Vec<&str>>,
