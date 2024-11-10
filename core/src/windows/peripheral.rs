@@ -1,10 +1,10 @@
-use std::sync::Arc;
-
-use tokio::sync::{mpsc, Mutex};
-
+use super::{ibuffer_to_string, NO_SSID};
 use crate::bluetooth::{
     OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID, SERVICE_UUID, SSID_CHARACTERISTIC_UUID,
 };
+use crate::utils::BluetoothMessage;
+use std::sync::Arc;
+use tokio::sync::{mpsc, Mutex};
 use windows::{
     core::{Result, GUID, HSTRING},
     Devices::Bluetooth::{
@@ -20,8 +20,6 @@ use windows::{
     Foundation::TypedEventHandler,
     Storage::Streams::DataWriter,
 };
-
-use super::{ibuffer_to_string, BluetoothMessage, NO_SSID};
 
 type CharacteristicReadHandler =
     TypedEventHandler<GattLocalCharacteristic, GattReadRequestedEventArgs>;

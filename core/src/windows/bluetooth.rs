@@ -1,15 +1,14 @@
 mod central;
 mod peripheral;
 
-use std::{error::Error, mem::discriminant};
-
 use crate::{
     network::{self, is_hosting},
-    utils::{generate_password, get_key_and_ssid},
+    utils::{generate_password, get_key_and_ssid, BluetoothMessage},
     Mode, Peer, UI,
 };
 use central::BluetoothCentral;
 use peripheral::BluetoothPeripheral;
+use std::{error::Error, mem::discriminant};
 use tokio::sync::mpsc;
 use windows::{
     core::HSTRING,
@@ -41,7 +40,7 @@ pub(crate) struct Bluetooth {
 // peripheral goes advertise, wait for bonding, wait for OS read, wait for OS write,
 // connectToPeer, start hotspot and wait for ssid/password to be read, or wait for ssid/pw writes and joinHotspot
 
-pub fn check_support() -> Result<(), Box<dyn Error>> {
+pub async fn check_support() -> Result<(), Box<dyn Error>> {
     let adapter = BluetoothAdapter::GetDefaultAsync()?
         .get()
         .map_err(|_| "no adapter found")?;
@@ -116,6 +115,7 @@ pub async fn negotiate_bluetooth<T: UI>(
             // making the "waiting for password" BluetoothMessage panic? only send PeerReadSSID if we sent a real one?
             // or pass the info in earlier so we're guaranteed to have it? but can we do this safely before we've exchanged
             // OS and know if we're hosting? doesn't hurt to have the data set even if we're not hosting maybe, but it's ugly.
+            // not a problem since redoing process_bluetooth_message() to look for messages.
             let (_, ssid) = get_key_and_ssid(&password);
             {
                 let mut peripheral_ssid = bluetooth.peripheral.ssid.lock().await;
@@ -161,12 +161,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         ui.output("Scanning for Bluetooth peripherals...");
         bluetooth.central.scan(ble_ui_rx)?;
 
-        // wait for result of scan. if PIN was shown, wait again for success or failure.
-        // TODO: don't need to wait for PIN, just result of scan? we don't do anything with the PIN here. can just have process_bluetooth_message() print that we received it.
-        // no, do need to wait for the result of the pin so we don't move on till user has made their choice.
-        // how to handle this on linux? just send a dummy?
-        // problem: we don't need to just wait for the user to hit yes on the pin dialog. we need to wait till we actually pair.
-        // if we hit yes but peer doesn't, we'll try to read characteristics that are still encrypted.
+        // if we're looking for Pin or PairSuccess, process_bluetooth_message() will bail when it sees AlreadyPaired
         println!("waiting for callback...");
         let msg =
             process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui).await?;
@@ -174,8 +169,6 @@ pub async fn negotiate_bluetooth<T: UI>(
         bluetooth.central.stop_watching()?;
         println!("stopped watching");
 
-        // TODO: do we need to wait to be notified that we've paired here, or just wait till central reads OS? don't think we get notification that central has paired with us in linux.
-        // but if we don't, how will we know if user hit cancel on pairing dialog?
         // wait to pair
         if msg != BluetoothMessage::AlreadyPaired {
             process_bluetooth_message(BluetoothMessage::PairSuccess, &mut rx, ui).await?;
@@ -193,9 +186,11 @@ pub async fn negotiate_bluetooth<T: UI>(
 
         // write OS
         bluetooth.central.write(OS_CHARACTERISTIC_UUID, OS).await?;
+        println!("wrote OS");
 
         // read or write ssid and password
         let (ssid, password) = if network::is_hosting(&Peer::from(peer.as_str()), mode) {
+            println!("hosting, writing wifi info to peer");
             let password = generate_password();
             let (_, ssid) = get_key_and_ssid(&password);
             bluetooth
@@ -208,6 +203,7 @@ pub async fn negotiate_bluetooth<T: UI>(
                 .await?;
             (ssid, password)
         } else {
+            println!("joining, reading wifi info from peer");
             let ssid = bluetooth.central.read(SSID_CHARACTERISTIC_UUID).await?;
             let password = bluetooth.central.read(PASSWORD_CHARACTERISTIC_UUID).await?;
             (ssid, password)
@@ -279,6 +275,8 @@ fn ibuffer_to_string(ibuffer: IBuffer) -> windows::core::Result<String> {
 
 fn str_to_ibuffer(s: &str) -> windows::core::Result<IBuffer> {
     let data_writer = DataWriter::new()?;
+    // TODO: use this?
+    data_writer.SetUnicodeEncoding(UnicodeEncoding::Utf8)?;
     let bytes_written = data_writer.WriteString(&HSTRING::from(s))?; // TODO: is this utf-8? WriteBytes instead?
     println!("bytes written: {}", bytes_written);
     Ok(data_writer.DetachBuffer()?)

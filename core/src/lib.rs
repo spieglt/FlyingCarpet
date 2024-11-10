@@ -144,7 +144,7 @@ pub async fn start_transfer<T: UI>(
         peer.expect("Neither UI nor Bluetooth peer present.")
             .as_str(),
     );
-    let password = password.unwrap(); // TODO
+    let password = password.expect("Missing password in start_transfer().");
 
     let (key, ssid) = get_key_and_ssid(&password);
 
@@ -362,7 +362,6 @@ async fn confirm_mode(
                 Err(msg)?
             }
         }
-        // TODO: LinuxHotspot needed at all?
         PeerResource::WindowsHotspot(_) | PeerResource::LinuxHotspot => {
             // wait for guest to say what mode they selected, compare to our own, and report back
             let peer_mode = stream.read_u64().await?;
@@ -422,6 +421,7 @@ async fn confirm_version(
 }
 
 // TODO:
+// windows not keeping bluetooth advertiser in scope till central can read it?
 // ui bug: disable bluetooth and refresh
 // test multiple transfers back to back, windows central unpaired but ios peripheral still paired, already paired but switched mode
 // why is ios looking for ip address for a long time?

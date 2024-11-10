@@ -29,7 +29,6 @@ pub async fn receive_file<T: UI>(
 
     // receive file details
     let (filename, file_size) = receive_file_details(stream).await?;
-    // TODO: convert forward slashes to backslashes before receiving if mirroring?
     ui.output(&format!("Filename: {}", filename));
     ui.output(&format!(
         "File size: {}",

@@ -526,6 +526,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // TODO:
+//   android left open after transfer is still exchanging OS with iOS peripheral when it restarts: can't do this whenever we connect? check if transfer running?
 //   bluetooth permissions messed up on first launch
 //   one permission check for all permissions?
 //   bluetooth UI in landscape mode

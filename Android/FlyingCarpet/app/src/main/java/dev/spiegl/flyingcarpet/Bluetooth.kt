@@ -307,6 +307,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             outputText("Scan result: $result")
             if (result != null) {
                 bluetoothLeScanner.stopScan(this)
+                outputText("Stopped scanning")
                 _status.postValue(true)
 //                address = result.device.address
                 bluetoothReceiver.result = result

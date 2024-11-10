@@ -26,9 +26,9 @@ use windows::{
     Foundation::{EventRegistrationToken, TypedEventHandler},
 };
 
+use super::{OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID};
 use crate::bluetooth::{ibuffer_to_string, str_to_ibuffer, SERVICE_UUID, SSID_CHARACTERISTIC_UUID};
-
-use super::{BluetoothMessage, OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID};
+use crate::utils::BluetoothMessage;
 
 type ScanCallback =
     TypedEventHandler<BluetoothLEAdvertisementWatcher, BluetoothLEAdvertisementReceivedEventArgs>;
@@ -104,6 +104,7 @@ impl BluetoothCentral {
                                 println!(
                                     "Could not send on Bluetooth tx when we've already paired"
                                 );
+                                return Ok(());
                             }
                             return Ok(());
                         }
