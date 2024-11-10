@@ -181,9 +181,13 @@ async fn main() {
         .expect("error while running tauri application");
 }
 
+// for javascript, None/null means no error and Some(String) means error message
 #[tauri::command]
-fn check_support() -> Option<String> {
-    bluetooth::check_support().map_err(|e| e.to_string()).err()
+async fn check_support() -> Option<String> {
+    bluetooth::check_support()
+        .await
+        .map_err(|e| e.to_string())
+        .err()
 }
 
 #[tauri::command]

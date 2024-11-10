@@ -168,7 +168,8 @@ pub async fn negotiate_bluetooth<T: UI>(
         // problem: we don't need to just wait for the user to hit yes on the pin dialog. we need to wait till we actually pair.
         // if we hit yes but peer doesn't, we'll try to read characteristics that are still encrypted.
         println!("waiting for callback...");
-        let msg = process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui).await?;
+        let msg =
+            process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui).await?;
 
         bluetooth.central.stop_watching()?;
         println!("stopped watching");
@@ -241,7 +242,10 @@ pub async fn process_bluetooth_message<T: UI>(
             BluetoothMessage::AlreadyPaired => {
                 ui.output("Already BLE paired with Bluetooth device");
                 // TODO: this is an ugly edge case, but redoing it to look for either might be equally ugly
-                if looking_for == BluetoothMessage::PairSuccess || discriminant(&looking_for) == discriminant(&BluetoothMessage::Pin("".to_string())) {
+                if looking_for == BluetoothMessage::PairSuccess
+                    || discriminant(&looking_for)
+                        == discriminant(&BluetoothMessage::Pin("".to_string()))
+                {
                     return Ok(msg);
                 }
             }

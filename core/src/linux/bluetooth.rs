@@ -1,11 +1,12 @@
 mod central;
 mod peripheral;
 
-use std::error::Error;
+use bluer::{Adapter, DiscoveryFilter, DiscoveryTransport, Session, Uuid};
+use std::{collections::HashSet, error::Error};
 use tokio::sync::mpsc;
 
-use crate::{Mode, UI, utils::BluetoothMessage};
-use central::BluetoothCentral;
+use crate::{utils::BluetoothMessage, Mode, UI};
+// use central::BluetoothCentral;
 use peripheral::BluetoothPeripheral;
 
 pub(crate) const OS: &str = "linux";
@@ -16,11 +17,20 @@ pub(crate) const PASSWORD_CHARACTERISTIC_UUID: &str = "E1FA8F66-CF88-4572-9527-D
 const NO_SSID: &str = "NONE";
 
 pub(crate) struct Bluetooth {
-    pub central: BluetoothCentral,
+    // pub central: BluetoothCentral,
     pub peripheral: BluetoothPeripheral,
+    adapter: Adapter,
 }
 
-pub fn check_support() -> Result<(), Box<dyn Error>> {
+pub async fn check_support() -> Result<(), Box<dyn Error>> {
+    let session = Session::new().await?;
+    let adapter = session.default_adapter().await?;
+    println!(
+        "Discovering devices using Bluetooth adapter {}\n",
+        adapter.name()
+    );
+    adapter.set_powered(true).await?;
+
     Ok(())
 }
 
@@ -34,4 +44,3 @@ pub async fn negotiate_bluetooth<T: UI>(
     let password = String::new();
     Ok((peer, ssid, password))
 }
-
