@@ -1,10 +1,9 @@
-const { dialog, os, path, tauri } = window.__TAURI__;
+const { core, dialog, os } = window.__TAURI__;
 import { QRCode } from './deps/qrcode.js'
 
 let aboutButton;
 let usingBluetooth;
 let bluetoothSwitch;
-let selectionBox;
 let peerLabel;
 let peerBox;
 let outputBox;
@@ -38,7 +37,6 @@ window.onunload = () => {
 
 window.addEventListener('DOMContentLoaded', async () => {
   aboutButton = document.getElementById('aboutButton');
-  selectionBox = document.getElementById('selectionBox');
   peerLabel = document.getElementById('peerLabel');
   peerBox = document.getElementById('peerBox');
   outputBox = document.getElementById('outputBox');
@@ -47,10 +45,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   progressBar = document.getElementById('progressBar');
   bluetoothSwitch = document.getElementById('bluetoothSwitch');
 
-  appWindow = window.__TAURI__.window.appWindow;
+  appWindow = window.__TAURI__.window.getCurrentWindow();
 
   // check for bluetooth support
-  let error = await tauri.invoke('check_support');
+  let error = await core.invoke('check_support');
   if (error != null) {
     output(`Bluetooth initialization failed: ${error}. Disable the Bluetooth switch in Flying Carpet on the other device to run a transfer.`);
     bluetoothSwitch.disabled = true;
@@ -91,7 +89,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     console.log(event);
     let choice = await dialog.ask(`Is this code displayed on the other device?\n\n${event.payload.message}`, { title: 'Confirm Bluetooth PIN', type: 'info' });
     console.log('choice:', choice);
-    await tauri.invoke('user_bluetooth_pair', {
+    await core.invoke('user_bluetooth_pair', {
       choice: choice,
     });
     console.log('invoked user_bluetooth_pair');
@@ -100,14 +98,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   // handle drag and drop
   await appWindow.listen('tauri://file-drop', async event => {
     if (selectedMode === 'send') {
-      selectedFiles = await tauri.invoke('expand_files', { paths: event.payload });
+      selectedFiles = await core.invoke('expand_files', { paths: event.payload });
       startTransfer(true);
     } else if (selectedMode === 'receive') {
       if (event.payload.length !== 1) {
         output('Error: if receiving, must drop only one destination folder.');
         return;
       }
-      let is_dir = await tauri.invoke('is_dir', { path: event.payload[0] });
+      let is_dir = await core.invoke('is_dir', { path: event.payload[0] });
       if (is_dir) {
         selectedFolder = event.payload[0];
       } else {
@@ -201,7 +199,7 @@ async function startTransfer(filesSelected) {
 
   // make sure we have a wifi interface and prompt for which if more than one
   let wifiInterface;
-  let interfaces = await tauri.invoke('get_wifi_interfaces');
+  let interfaces = await core.invoke('get_wifi_interfaces');
   // console.log('interfaces:', interfaces);
   switch (interfaces.length) {
     case 0:
@@ -228,7 +226,7 @@ async function startTransfer(filesSelected) {
   // if we're hosting, generate and display the password
   if (!await needPassword()) {
     if (!usingBluetooth) {
-      password = await tauri.invoke('generate_password');
+      password = await core.invoke('generate_password');
       if (selectedPeer === 'ios' || selectedPeer === 'android') {
         output('\nStart the transfer on the other device and scan the QR code when prompted.');
         makeQRCode(password);
@@ -243,7 +241,7 @@ async function startTransfer(filesSelected) {
   disableUi();
 
   // kick off transfer
-  await tauri.invoke('start_async', {
+  await core.invoke('start_async', {
     mode: selectedMode,
     peer: selectedPeer,
     password: password,
@@ -256,7 +254,7 @@ async function startTransfer(filesSelected) {
 }
 
 async function cancelTransfer() {
-  output(await tauri.invoke('cancel_transfer'));
+  output(await core.invoke('cancel_transfer'));
 }
 
 let selectFiles = async () => {

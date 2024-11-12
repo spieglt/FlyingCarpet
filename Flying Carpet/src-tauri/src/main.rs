@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::{fs, sync::Mutex};
-use tauri::{State, Window};
+use tauri::{Emitter, State, Window};
 use tokio;
 use tokio::sync::mpsc;
 
@@ -166,6 +166,8 @@ fn start_async(
 async fn main() {
     tauri::async_runtime::set(tokio::runtime::Handle::current());
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_os::init())
         .manage(Transfer::new())
         .invoke_handler(tauri::generate_handler![
             start_async,
