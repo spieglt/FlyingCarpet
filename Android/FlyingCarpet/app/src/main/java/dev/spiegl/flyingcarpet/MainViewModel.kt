@@ -330,7 +330,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             "android" -> Peer.Android
             "ios" -> Peer.iOS
             "linux" -> Peer.Linux
-            "macos" -> Peer.macOS
+            "macos" -> Peer.macOS // TODO
             "windows" -> Peer.Windows
             else -> {
                 outputText("Error: peer sent an unsupported OS.")

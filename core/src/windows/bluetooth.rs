@@ -29,6 +29,7 @@ pub(crate) const PASSWORD_CHARACTERISTIC_UUID: &str = "E1FA8F66-CF88-4572-9527-D
 // in case hosting rules change, which would mean detecting this when reading ssid and delaying/retrying.
 const NO_SSID: &str = "NONE";
 
+// TODO: remove this, no actual need for it?
 pub(crate) struct Bluetooth {
     pub central: BluetoothCentral,
     pub peripheral: BluetoothPeripheral,
