@@ -6,6 +6,7 @@ license = "GPL-3.0-only"
 
 [dependencies]
 aes-gcm = "0.10"
+futures = "0.3.31"
 rand = "0.8"
 regex = "1"
 serde = { version = "1.0", features = ["derive"] }

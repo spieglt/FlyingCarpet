@@ -1163,6 +1163,7 @@ version = "8.0.1"
 dependencies = [
  "aes-gcm",
  "bluer",
+ "futures",
  "rand 0.8.5",
  "regex",
  "serde",
