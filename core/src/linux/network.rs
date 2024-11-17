@@ -8,7 +8,7 @@ pub struct WindowsHotspot {
     _inner: (),
 }
 
-fn is_hosting(peer: Peer, mode: Mode) -> bool {
+pub fn is_hosting(peer: &Peer, mode: &Mode) -> bool {
     match peer {
         Peer::Android | Peer::IOS | Peer::MacOS => true,
         Peer::Windows => false,
@@ -27,7 +27,7 @@ pub async fn connect_to_peer<T: UI>(
     interface: WiFiInterface,
     ui: &T,
 ) -> Result<PeerResource, Box<dyn Error>> {
-    if is_hosting(peer, mode) {
+    if is_hosting(&peer, &mode) {
         // start hotspot
         ui.output(&format!("Starting hotspot {}", ssid));
         start_hotspot(&ssid, &password, &interface.0)?;

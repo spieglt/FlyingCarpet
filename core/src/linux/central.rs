@@ -1,6 +1,6 @@
 use bluer::{
     gatt::{local::characteristic_control, remote::Characteristic},
-    Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, Result, Uuid,
+    Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, ErrorKind, Result, Uuid,
 };
 use futures::{pin_mut, StreamExt};
 use std::{
@@ -11,8 +11,9 @@ use tokio::{sync::mpsc, time::sleep};
 
 use super::SERVICE_UUID;
 use crate::{
-    bluetooth::{OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID, SSID_CHARACTERISTIC_UUID},
-    utils::BluetoothMessage,
+    bluetooth::{
+        OS, OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID, SSID_CHARACTERISTIC_UUID,
+    }, network::is_hosting, utils::BluetoothMessage, Mode, Peer
 };
 
 // pub(crate) struct BluetoothCentral {
@@ -41,7 +42,7 @@ use crate::{
 //     }
 // }
 
-async fn find_charcteristics(device: &Device) -> Result<Option<HashMap<&str, Characteristic>>> {
+pub async fn find_charcteristics(device: &Device) -> Result<HashMap<&str, Characteristic>> {
     let addr = device.address();
     let uuids = device.uuids().await?.unwrap_or_default();
 
@@ -70,13 +71,12 @@ async fn find_charcteristics(device: &Device) -> Result<Option<HashMap<&str, Cha
                     Err(err) => return Err(err),
                 }
             }
-
             println!("    Connected");
         } else {
             println!("    Already connected");
         }
 
-        // TODO: bond
+        // TODO: bond?
         // device.pair().await?;
 
         println!("    Enumerating services...");
@@ -106,13 +106,14 @@ async fn find_charcteristics(device: &Device) -> Result<Option<HashMap<&str, Cha
                 }
             }
         }
-        return Ok(Some(characteristics));
+        return Ok(characteristics);
+    } else {
+        let err = bluer::Error{kind: ErrorKind::ServicesUnresolved, message: "Could not find service UUID on scanned device".to_string()};
+        Err(err)
     }
-
-    Ok(None)
 }
 
-pub async fn scan(adapter: Adapter) -> bluer::Result<()> {
+pub async fn scan(adapter: Adapter) -> bluer::Result<Device> {
     let mut uuids = HashSet::new();
     uuids.insert(Uuid::parse_str(SERVICE_UUID).expect("Could not parse service UUID"));
 
@@ -135,53 +136,41 @@ pub async fn scan(adapter: Adapter) -> bluer::Result<()> {
         );
         let discover = adapter.discover_devices().await?;
         pin_mut!(discover);
-        let mut done = false;
         while let Some(evt) = discover.next().await {
             match evt {
                 AdapterEvent::DeviceAdded(addr) => {
                     let device = adapter.device(addr)?;
-                    match find_charcteristics(&device).await {
-                        Ok(Some(characteristics)) => {
-                            let os_char = characteristics.get(OS_CHARACTERISTIC_UUID);
-                            match os_char {
-                                Some(char) => {
-                                    let value = char.read().await?;
-                                    let peer_os = String::from_utf8(value)
-                                        .expect("Peer OS value was not utf-8");
-                                    println!("Peer OS: {}", peer_os);
-                                }
-                                None => {
-                                    let e = bluer::Error{
-                                        kind: bluer::ErrorKind::ServicesUnresolved,
-                                        message: "Did not read all Flying Carpet characteristics from peer.".to_string()
-                                    };
-                                    Err(e)?;
-                                }
-                            }
-                        }
-                        Ok(None) => (),
-                        Err(err) => {
-                            println!("    Device failed: {}", &err);
-                            let _ = adapter.remove_device(device.address()).await;
-                        }
-                    }
-                    match device.disconnect().await {
-                        Ok(()) => println!("    Device disconnected"),
-                        Err(err) => println!("    Device disconnection failed: {}", &err),
-                    }
-                    println!();
+                    return Ok(device);
+                    // match device.disconnect().await {
+                    //     Ok(()) => println!("    Device disconnected"),
+                    //     Err(err) => println!("    Device disconnection failed: {}", &err),
+                    // }
+                    // println!();
                 }
                 AdapterEvent::DeviceRemoved(addr) => {
                     println!("Device removed {addr}");
                 }
-                _ => (),
-            }
-            if done {
-                break;
+                other_event => println!("Processed other event: {:?}", other_event),
             }
         }
         println!("Stopping discovery");
     }
+    Err(bluer::Error {
+        kind: ErrorKind::NotFound,
+        message: "Exited scan() without finding device".to_string(),
+    })
+}
 
+pub async fn exchange_info(characteristics: HashMap<&str, Characteristic>, mode: &Mode) -> bluer::Result<()> {
+    // read peer's OS
+    let os_char = &characteristics[OS_CHARACTERISTIC_UUID];
+    let value = os_char.read().await?;
+    let peer_os = String::from_utf8(value).expect("Peer OS value was not utf-8");
+    println!("Peer OS: {}", peer_os);
+    // write our OS
+    os_char.write(OS.as_bytes()).await?;
+    println!("Wrote OS to peer");
+
+    if is_hosting(&Peer::from(peer_os.as_str()), mode) {}
     Ok(())
 }

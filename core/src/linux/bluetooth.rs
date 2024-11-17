@@ -2,6 +2,7 @@ mod central;
 mod peripheral;
 
 use bluer::{Adapter, DiscoveryFilter, DiscoveryTransport, Session, Uuid};
+use central::{exchange_info, find_charcteristics};
 use std::{collections::HashSet, error::Error};
 use tokio::sync::mpsc;
 
@@ -42,7 +43,29 @@ pub async fn negotiate_bluetooth<T: UI>(
     } else {
         // acting as central
         ui.output("Scanning for Bluetooth peripherals...");
-        central::scan(adapter).await?;
+        let device = central::scan(adapter).await?;
+
+        match find_charcteristics(&device).await {
+            Ok(characteristics) => {
+                if characteristics.contains_key(OS_CHARACTERISTIC_UUID)
+                    && characteristics.contains_key(SSID_CHARACTERISTIC_UUID)
+                    && characteristics.contains_key(PASSWORD_CHARACTERISTIC_UUID)
+                {
+                    exchange_info(characteristics, mode).await?;
+                } else {
+                    let e = bluer::Error {
+                        kind: bluer::ErrorKind::ServicesUnresolved,
+                        message: "Did not read all Flying Carpet characteristics from peer."
+                            .to_string(),
+                    };
+                    Err(e)?;
+                }
+            }
+            Err(err) => {
+                println!("    Device failed: {}", &err);
+                let _ = adapter.remove_device(device.address()).await;
+            }
+        }
     }
     Ok((peer, ssid, password))
 }
