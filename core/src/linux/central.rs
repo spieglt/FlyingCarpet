@@ -1,19 +1,21 @@
 use bluer::{
-    gatt::{local::characteristic_control, remote::Characteristic},
-    Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, ErrorKind, Result, Uuid,
+    gatt::{remote::CharacteristicWriteRequest, remote::Characteristic, WriteOp}, Adapter, AdapterEvent, Device, DiscoveryFilter,
+    DiscoveryTransport, ErrorKind, Result, Uuid,
 };
 use futures::{pin_mut, StreamExt};
 use std::{
-    collections::{HashMap, HashSet},
-    time::Duration,
+    collections::{HashMap, HashSet}, time::Duration
 };
-use tokio::{sync::mpsc, time::sleep};
+use tokio::time::sleep;
 
 use super::SERVICE_UUID;
 use crate::{
     bluetooth::{
         OS, OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID, SSID_CHARACTERISTIC_UUID,
-    }, network::is_hosting, utils::BluetoothMessage, Mode, Peer
+    },
+    network::is_hosting,
+    utils::{generate_password, get_key_and_ssid},
+    Mode, Peer,
 };
 
 // pub(crate) struct BluetoothCentral {
@@ -106,14 +108,29 @@ pub async fn find_charcteristics(device: &Device) -> Result<HashMap<&str, Charac
                 }
             }
         }
-        return Ok(characteristics);
+
+        if characteristics.contains_key(OS_CHARACTERISTIC_UUID)
+            && characteristics.contains_key(SSID_CHARACTERISTIC_UUID)
+            && characteristics.contains_key(PASSWORD_CHARACTERISTIC_UUID)
+        {
+            Ok(characteristics)
+        } else {
+            let e = bluer::Error {
+                kind: bluer::ErrorKind::ServicesUnresolved,
+                message: "Did not read all Flying Carpet characteristics from peer.".to_string(),
+            };
+            Err(e)
+        }
     } else {
-        let err = bluer::Error{kind: ErrorKind::ServicesUnresolved, message: "Could not find service UUID on scanned device".to_string()};
+        let err = bluer::Error {
+            kind: ErrorKind::ServicesUnresolved,
+            message: "Could not find service UUID on scanned device".to_string(),
+        };
         Err(err)
     }
 }
 
-pub async fn scan(adapter: Adapter) -> bluer::Result<Device> {
+pub async fn scan(adapter: &Adapter) -> bluer::Result<Device> {
     let mut uuids = HashSet::new();
     uuids.insert(Uuid::parse_str(SERVICE_UUID).expect("Could not parse service UUID"));
 
@@ -161,16 +178,50 @@ pub async fn scan(adapter: Adapter) -> bluer::Result<Device> {
     })
 }
 
-pub async fn exchange_info(characteristics: HashMap<&str, Characteristic>, mode: &Mode) -> bluer::Result<()> {
+pub async fn exchange_info(
+    characteristics: HashMap<&str, Characteristic>,
+    mode: &Mode,
+) -> bluer::Result<(String, String, String)> {
     // read peer's OS
     let os_char = &characteristics[OS_CHARACTERISTIC_UUID];
     let value = os_char.read().await?;
     let peer_os = String::from_utf8(value).expect("Peer OS value was not utf-8");
     println!("Peer OS: {}", peer_os);
+    sleep(Duration::from_secs(1)).await;
     // write our OS
-    os_char.write(OS.as_bytes()).await?;
+    let write_req = CharacteristicWriteRequest{
+        offset: 0,
+        op_type: WriteOp::Request,
+        prepare_authorize: true,
+        ..Default::default()
+    };
+    os_char.write_ext(OS.as_bytes(), &write_req).await?;
     println!("Wrote OS to peer");
+    sleep(Duration::from_secs(1)).await;
 
-    if is_hosting(&Peer::from(peer_os.as_str()), mode) {}
-    Ok(())
+    let ssid_char = &characteristics[SSID_CHARACTERISTIC_UUID];
+    let password_char = &characteristics[PASSWORD_CHARACTERISTIC_UUID];
+    if is_hosting(&Peer::from(peer_os.as_str()), mode) {
+        // write ssid and password
+        let password = generate_password();
+        let (_, ssid) = get_key_and_ssid(&password);
+        ssid_char.write_ext(ssid.as_bytes(), &write_req).await?;
+        // let CharacteristicWriteRequest
+        // ssid_char.write_ext(value, req);
+        println!("Wrote SSID to peer");
+        sleep(Duration::from_secs(1)).await;
+        password_char.write_ext(password.as_bytes(), &write_req).await?;
+        println!("Wrote password to peer");
+        sleep(Duration::from_secs(1)).await;
+        Ok((peer_os, ssid, password))
+    } else {
+        // read ssid and password
+        let ssid = ssid_char.read().await?;
+        let ssid = String::from_utf8(ssid).expect("SSID was not UTF-8");
+        println!("Peer's SSID: {}", ssid);
+        let password = password_char.read().await?;
+        let password = String::from_utf8(password).expect("Password was not UTF-8");
+        println!("Peer's password: {}", ssid);
+        Ok((peer_os, ssid, password))
+    }
 }

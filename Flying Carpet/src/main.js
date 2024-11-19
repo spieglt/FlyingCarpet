@@ -317,7 +317,7 @@ let needPassword = async () => {
       showPassword = selectedPeer === 'windows' && selectedMode === 'send';
       break;
     default:
-      alert('Error in needPassword()');
+      alert('Error in needPassword()'); // TODO: this happening on linux
   }
   return showPassword;
 }

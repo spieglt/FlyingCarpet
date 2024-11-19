@@ -1,7 +1,7 @@
 mod central;
 mod peripheral;
 
-use bluer::{Adapter, DiscoveryFilter, DiscoveryTransport, Session, Uuid};
+use bluer::Session;
 use central::{exchange_info, find_charcteristics};
 use std::{collections::HashSet, error::Error};
 use tokio::sync::mpsc;
@@ -39,33 +39,23 @@ pub async fn negotiate_bluetooth<T: UI>(
     let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
 
-    if let Mode::Send(_) = mode { // acting as peripheral
+    if let Mode::Send(_) = mode {
+        // acting as peripheral
+        Ok((peer, ssid, password))
     } else {
         // acting as central
         ui.output("Scanning for Bluetooth peripherals...");
-        let device = central::scan(adapter).await?;
+        let device = central::scan(&adapter).await?;
 
-        match find_charcteristics(&device).await {
-            Ok(characteristics) => {
-                if characteristics.contains_key(OS_CHARACTERISTIC_UUID)
-                    && characteristics.contains_key(SSID_CHARACTERISTIC_UUID)
-                    && characteristics.contains_key(PASSWORD_CHARACTERISTIC_UUID)
-                {
-                    exchange_info(characteristics, mode).await?;
-                } else {
-                    let e = bluer::Error {
-                        kind: bluer::ErrorKind::ServicesUnresolved,
-                        message: "Did not read all Flying Carpet characteristics from peer."
-                            .to_string(),
-                    };
-                    Err(e)?;
-                }
-            }
-            Err(err) => {
-                println!("    Device failed: {}", &err);
+        let characteristics = match find_charcteristics(&device).await {
+            Ok(c) => c,
+            Err(e) => {
+                println!("    Device failed: {}", e);
                 let _ = adapter.remove_device(device.address()).await;
+                Err(e)?
             }
-        }
+        };
+        let info = exchange_info(characteristics, mode).await?;
+        Ok(info)
     }
-    Ok((peer, ssid, password))
 }
