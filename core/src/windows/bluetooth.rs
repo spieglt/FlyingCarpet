@@ -226,6 +226,7 @@ pub async fn process_bluetooth_message<T: UI>(
             .expect("Bluetooth message channel unexpectedly closed.");
         println!("received {:?}", msg);
         match msg {
+            // TODO: make this a reference and remove the refs below
             BluetoothMessage::Pin(ref pin) => {
                 ui.show_pin(pin);
             }

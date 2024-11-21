@@ -421,6 +421,7 @@ async fn confirm_version(
 }
 
 // TODO:
+// linux: bluetooth failing to initialize doesn't disable switch
 // windows not keeping bluetooth advertiser in scope till central can read it?
 // ui bug: disable bluetooth and refresh
 // test multiple transfers back to back, windows central unpaired but ios peripheral still paired, already paired but switched mode

@@ -1,10 +1,11 @@
 use bluer::{
-    gatt::{remote::CharacteristicWriteRequest, remote::Characteristic, WriteOp}, Adapter, AdapterEvent, Device, DiscoveryFilter,
-    DiscoveryTransport, ErrorKind, Result, Uuid,
+    gatt::{remote::Characteristic, remote::CharacteristicWriteRequest, WriteOp},
+    Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, ErrorKind, Result, Uuid,
 };
 use futures::{pin_mut, StreamExt};
 use std::{
-    collections::{HashMap, HashSet}, time::Duration
+    collections::{HashMap, HashSet},
+    time::Duration,
 };
 use tokio::time::sleep;
 
@@ -17,32 +18,6 @@ use crate::{
     utils::{generate_password, get_key_and_ssid},
     Mode, Peer,
 };
-
-// pub(crate) struct BluetoothCentral {
-//     tx: mpsc::Sender<BluetoothMessage>,
-// }
-
-// impl BluetoothCentral {
-//     pub fn new(tx: mpsc::Sender<BluetoothMessage>) -> Result<Self> {
-//         Ok(BluetoothCentral {
-//             tx,
-//         })
-//     }
-
-//     pub async fn scan(&mut self) -> bluer::Result<()> {
-//         let mut uuids = HashSet::new();
-//         uuids.insert(Uuid::parse_str(SERVICE_UUID).expect("Could not parse service UUID"));
-
-//         let filter = DiscoveryFilter {
-//             transport: DiscoveryTransport::Le,
-//             uuids,
-//             ..Default::default()
-//         };
-//         adapter.set_discovery_filter(filter).await?;
-//         println!("Using discovery filter:\n{:#?}\n\n", adapter.discovery_filter().await);
-//         Ok(())
-//     }
-// }
 
 pub async fn find_charcteristics(device: &Device) -> Result<HashMap<&str, Characteristic>> {
     let addr = device.address();
@@ -182,6 +157,15 @@ pub async fn exchange_info(
     characteristics: HashMap<&str, Characteristic>,
     mode: &Mode,
 ) -> bluer::Result<(String, String, String)> {
+    // have to use this with write_ext() for the write requests: iOS wouldn't receive unconfirmed writes, which WriteOp::Request provides.
+    // not sure if iOS requires it or if i did somehow. bluer seems to default to WriteOp::Command which has no confirmation.
+    let write_req = CharacteristicWriteRequest {
+        offset: 0,
+        op_type: WriteOp::Request,
+        prepare_authorize: true,
+        ..Default::default()
+    };
+
     // read peer's OS
     let os_char = &characteristics[OS_CHARACTERISTIC_UUID];
     let value = os_char.read().await?;
@@ -189,12 +173,6 @@ pub async fn exchange_info(
     println!("Peer OS: {}", peer_os);
     sleep(Duration::from_secs(1)).await;
     // write our OS
-    let write_req = CharacteristicWriteRequest{
-        offset: 0,
-        op_type: WriteOp::Request,
-        prepare_authorize: true,
-        ..Default::default()
-    };
     os_char.write_ext(OS.as_bytes(), &write_req).await?;
     println!("Wrote OS to peer");
     sleep(Duration::from_secs(1)).await;
@@ -210,7 +188,9 @@ pub async fn exchange_info(
         // ssid_char.write_ext(value, req);
         println!("Wrote SSID to peer");
         sleep(Duration::from_secs(1)).await;
-        password_char.write_ext(password.as_bytes(), &write_req).await?;
+        password_char
+            .write_ext(password.as_bytes(), &write_req)
+            .await?;
         println!("Wrote password to peer");
         sleep(Duration::from_secs(1)).await;
         Ok((peer_os, ssid, password))
