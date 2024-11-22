@@ -3,8 +3,8 @@ mod peripheral;
 
 use bluer::Session;
 use central::{exchange_info, find_charcteristics};
-use std::{error::Error, mem::discriminant};
-use tokio::sync::mpsc;
+use std::{error::Error, mem::discriminant, time::Duration};
+use tokio::{sync::mpsc, time::sleep};
 
 use crate::{
     network::is_hosting,
@@ -96,6 +96,7 @@ pub async fn negotiate_bluetooth<T: UI>(
             println!("Peer's password: {}", password);
         }
 
+        sleep(Duration::from_secs(1)).await;
         println!("Removing GATT service");
         drop(app_handle);
 
@@ -141,7 +142,6 @@ pub async fn process_bluetooth_message<T: UI>(
             BluetoothMessage::PairFailure => Err("Pairing failed.")?,
             BluetoothMessage::AlreadyPaired => {
                 ui.output("Already BLE paired with Bluetooth device");
-                // TODO: this is an ugly edge case, but redoing it to look for either might be equally ugly
                 if looking_for == BluetoothMessage::PairSuccess
                     || discriminant(&looking_for)
                         == discriminant(&BluetoothMessage::Pin("".to_string()))

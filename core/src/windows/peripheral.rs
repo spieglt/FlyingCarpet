@@ -116,7 +116,7 @@ impl BluetoothPeripheral {
                 let args = gatt_read_requested_event_args
                     .as_ref()
                     .expect("No args in read callback");
-                let deferral = args.GetDeferral()?; // TODO: copy this to other read handlers. write handlers?
+                let deferral = args.GetDeferral()?;
                 let request = args.GetRequestAsync()?.get()?;
                 let writer = DataWriter::new()?;
                 writer.WriteBytes(b"windows")?;

@@ -54,7 +54,24 @@ pub async fn find_charcteristics(device: &Device) -> Result<HashMap<&str, Charac
         }
 
         // TODO: bond?
-        // device.pair().await?;
+        // sleep(Duration::from_secs(2)).await;
+        // if !device.is_paired().await? {
+        //     println!("    Pairing...");
+        //     let mut retries = 2;
+        //     loop {
+        //         match device.pair().await {
+        //             Ok(()) => break,
+        //             Err(err) if retries > 0 => {
+        //                 println!("    Pair error: {}", &err);
+        //                 retries -= 1;
+        //             }
+        //             Err(err) => return Err(err),
+        //         }
+        //     }
+        //     println!("    Paired");
+        // } else {
+        //     println!("    Already paired");
+        // }
 
         println!("    Enumerating services...");
         for service in device.services().await? {

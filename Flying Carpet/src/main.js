@@ -309,15 +309,16 @@ let needPassword = async () => {
   // if linux, joining windows, hosting mac/ios/android or linux if receiving.
   // if windows, always hosting unless windows and sending.
   let showPassword;
+  console.log('os:', os.type());
   switch (await os.type()) {
-    case 'Linux':
+    case 'linux':
       showPassword = selectedPeer === 'windows' || (selectedPeer === 'linux' && selectedMode === 'send');
       break;
-    case 'Windows_NT':
+    case 'windows':
       showPassword = selectedPeer === 'windows' && selectedMode === 'send';
       break;
     default:
-      alert('Error in needPassword()'); // TODO: this happening on linux
+      alert('Error in needPassword()');
   }
   return showPassword;
 }

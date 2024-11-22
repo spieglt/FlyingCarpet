@@ -421,6 +421,7 @@ async fn confirm_version(
 }
 
 // TODO:
+// linux name is null on android when pairing - manufacturer info?
 // linux: bluetooth failing to initialize doesn't disable switch
 // windows not keeping bluetooth advertiser in scope till central can read it?
 // ui bug: disable bluetooth and refresh

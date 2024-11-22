@@ -277,9 +277,8 @@ fn ibuffer_to_string(ibuffer: IBuffer) -> windows::core::Result<String> {
 
 fn str_to_ibuffer(s: &str) -> windows::core::Result<IBuffer> {
     let data_writer = DataWriter::new()?;
-    // TODO: use this?
     data_writer.SetUnicodeEncoding(UnicodeEncoding::Utf8)?;
-    let bytes_written = data_writer.WriteString(&HSTRING::from(s))?; // TODO: is this utf-8? WriteBytes instead?
+    let bytes_written = data_writer.WriteString(&HSTRING::from(s))?;
     println!("bytes written: {}", bytes_written);
     Ok(data_writer.DetachBuffer()?)
 }

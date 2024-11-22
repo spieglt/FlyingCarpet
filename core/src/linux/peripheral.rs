@@ -17,9 +17,6 @@ use bluer::{
 use futures::FutureExt;
 use tokio::sync::mpsc;
 
-// TODO: write on tx after peer reads ssid and password,
-// make sure characteristics require encryption
-
 fn get_os_characteristic(tx: mpsc::Sender<BluetoothMessage>) -> Characteristic {
     // when the OS characteristic is read, return the constant
     // when it's written to, return that to calling thread, so we need tx
@@ -166,6 +163,8 @@ fn get_password_characteristic(
     tx: mpsc::Sender<BluetoothMessage>,
     password: String,
 ) -> Characteristic {
+    let read_tx = tx.clone();
+    let write_tx = tx.clone();
     Characteristic {
         uuid: Uuid::parse_str(PASSWORD_CHARACTERISTIC_UUID).unwrap(),
         read: Some(CharacteristicRead {
@@ -173,9 +172,17 @@ fn get_password_characteristic(
             secure_read: true,
             fun: Box::new(move |req| {
                 let password = password.clone();
+                let thread_tx = read_tx.clone();
                 async move {
                     let value = password.as_bytes().to_vec();
                     println!("Read request {:?} with value {:x?}", &req, &value);
+                    if thread_tx
+                        .send(BluetoothMessage::PeerReadPassword)
+                        .await
+                        .is_err()
+                    {
+                        return Err(ReqError::Failed);
+                    }
                     Ok(value)
                 }
                 .boxed()
@@ -187,7 +194,7 @@ fn get_password_characteristic(
             write_without_response: false,
             secure_write: true,
             method: CharacteristicWriteMethod::Fun(Box::new(move |new_value, req| {
-                let thread_tx = tx.clone();
+                let thread_tx = write_tx.clone();
                 async move {
                     println!("Write request {:?} with value {:x?}", &req, &new_value);
                     let peer_password =
