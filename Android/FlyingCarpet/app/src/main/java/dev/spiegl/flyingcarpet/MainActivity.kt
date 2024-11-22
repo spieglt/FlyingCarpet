@@ -420,7 +420,8 @@ class MainActivity : AppCompatActivity() {
 
     private var permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(
-            Manifest.permission.ACCESS_COARSE_LOCATION,
+            // TODO: reenable?
+            // Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_CONNECT,
@@ -459,6 +460,7 @@ class MainActivity : AppCompatActivity() {
             }
             if (allPermissionsGranted) {
                 viewModel.outputText("Bluetooth permissions granted")
+                initializeBluetooth()
             } else {
 //                viewModel.outputText("To use Flying Carpet, either grant Bluetooth permissions to the app, or turn off the Use Bluetooth switch.")
                 Log.e("Bluetooth", "To use Flying Carpet, either grant Bluetooth permissions to the app, or turn off the Use Bluetooth switch.")
@@ -482,6 +484,7 @@ class MainActivity : AppCompatActivity() {
             bluetoothIcon.isVisible = isChecked
             peerGroup.isVisible = !isChecked
             peerInstruction.isVisible = !isChecked
+            viewModel.bluetooth.active = isChecked
         }
 
         // register for bluetooth bonding events
@@ -526,8 +529,8 @@ class MainActivity : AppCompatActivity() {
 }
 
 // TODO:
+//   advertiser starting when bluetooth switch is off
 //   android left open after transfer is still exchanging OS with iOS peripheral when it restarts: can't do this whenever we connect? check if transfer running?
-//   bluetooth permissions messed up on first launch
 //   one permission check for all permissions?
 //   bluetooth UI in landscape mode
 //   bluetooth UI save/reload when screen rotated
