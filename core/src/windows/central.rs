@@ -359,6 +359,8 @@ impl BluetoothCentral {
                 "Error writing to Bluetooth peripheral: {:?}",
                 status
             ))?;
+        } else {
+            println!("wrote successfully")
         }
         Ok(())
     }

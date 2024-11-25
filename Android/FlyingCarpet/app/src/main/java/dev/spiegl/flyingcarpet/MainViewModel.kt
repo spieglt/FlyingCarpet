@@ -168,6 +168,8 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         if (this::reservation.isInitialized) {
             reservation.close()
         }
+        // TODO: clean up bluetooth, stop scanner, onConnectionStateChange triggers (unregisterReceiver), advertiser, gatt server
+        //
         // clean up UI
         cleanUpUi()
     }

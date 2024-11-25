@@ -35,14 +35,10 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import java.util.UUID
 
-
 val SERVICE_UUID: UUID = UUID.fromString("A70BF3CA-F708-4314-8A0E-5E37C259BE5C")
 val OS_CHARACTERISTIC_UUID: UUID = UUID.fromString("BEE14848-CC55-4FDE-8E9D-2E0F9EC45946")
 val SSID_CHARACTERISTIC_UUID: UUID = UUID.fromString("0D820768-A329-4ED4-8F53-BDF364EDAC75")
 val PASSWORD_CHARACTERISTIC_UUID: UUID = UUID.fromString("E1FA8F66-CF88-4572-9527-D5125A2E0762")
-
-//val messageTerminator = "DONE".toByteArray()
-//const val packetSize = 15
 const val NO_SSID = "NONE"
 
 interface BluetoothDelegate {
@@ -311,6 +307,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 _status.postValue(true)
 //                address = result.device.address
                 bluetoothReceiver.result = result
+                bluetoothReceiver.waitingForConnection = true
                 if (result.device.bondState == BOND_BONDED) {
                     result.device.connectGatt(application.applicationContext, false, bluetoothReceiver.gattCallback)
                     outputText("Already paired, called connectGatt()")
@@ -341,6 +338,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         var osCharacteristic: BluetoothGattCharacteristic? = null
         var ssidCharacteristic: BluetoothGattCharacteristic? = null
         var passwordCharacteristic: BluetoothGattCharacteristic? = null
+        var waitingForConnection = false // TODO: test if we connect if the app started when we were already paired, and bonding event was never received by this class
 
         val gattCallback = object : BluetoothGattCallback() {
             // this is called when we as central have read a characteristic from the peer's peripheral
@@ -426,7 +424,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     return
                 }
                 outputText("Services changed")
-                gatt.discoverServices()
+                // gatt.discoverServices()
             }
 
             override fun onConnectionStateChange(
@@ -438,9 +436,15 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                     return
                 }
-                bluetoothGatt = gatt
-                outputText("Connected")
-                gatt?.discoverServices()
+                // TODO: make sure that this device has our service and is not a mouse? need a waitingForBluetoothPeer flag or something?
+                if (waitingForConnection) {
+                    waitingForConnection = false
+                    bluetoothGatt = gatt
+                    outputText("Connected")
+                    gatt?.discoverServices()
+                } else {
+                    outputText("Connected but not waiting for connection")
+                }
             }
         }
 

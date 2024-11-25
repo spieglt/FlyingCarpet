@@ -86,6 +86,7 @@ pub async fn negotiate_bluetooth<T: UI>(
     let (tx, mut rx) = mpsc::channel(1);
     let mut bluetooth = Bluetooth::new(tx)?;
     if let Mode::Send(_) = mode {
+        // acting as peripheral
         ui.output("Advertising Bluetooth service...");
         bluetooth.peripheral.add_characteristics()?;
         bluetooth.peripheral.start_advertising()?;
@@ -158,6 +159,7 @@ pub async fn negotiate_bluetooth<T: UI>(
             Ok((peer_os, peer_ssid, peer_password))
         }
     } else {
+        // acting as central
         // scan for device advertising flying carpet service
         ui.output("Scanning for Bluetooth peripherals...");
         bluetooth.central.scan(ble_ui_rx)?;
@@ -279,7 +281,7 @@ fn str_to_ibuffer(s: &str) -> windows::core::Result<IBuffer> {
     let data_writer = DataWriter::new()?;
     data_writer.SetUnicodeEncoding(UnicodeEncoding::Utf8)?;
     let bytes_written = data_writer.WriteString(&HSTRING::from(s))?;
-    println!("bytes written: {}", bytes_written);
+    println!("bytes written to ibuffer: {}", bytes_written);
     Ok(data_writer.DetachBuffer()?)
 }
 

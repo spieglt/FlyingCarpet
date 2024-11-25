@@ -465,13 +465,6 @@ class MainActivity : AppCompatActivity() {
 //                viewModel.outputText("To use Flying Carpet, either grant Bluetooth permissions to the app, or turn off the Use Bluetooth switch.")
                 Log.e("Bluetooth", "To use Flying Carpet, either grant Bluetooth permissions to the app, or turn off the Use Bluetooth switch.")
                 bluetoothSwitch.isChecked = false
-//                if (initializeBluetooth()) {
-//                    viewModel.outputText("Bluetooth initialized")
-//                } else {
-//                    viewModel.outputText("Device can't use Bluetooth")
-//                    bluetoothSwitch.isChecked = false
-//                    bluetoothSwitch.isEnabled = false
-//                }
             }
         }
 
