@@ -112,6 +112,7 @@ pub fn stop_hotspot(
             Err(format!("Error stopping hotspot: {}", stderr))?;
         }
         let output = String::from_utf8_lossy(&command_output.stdout);
+        // TODO: output this to ui
         println!("Stop hotspot output: {}", output);
     }
     Ok(())
@@ -136,7 +137,6 @@ fn join_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<d
         ],
         vec!["con", "modify", ssid, "wifi-sec.key-mgmt", "wpa-psk"],
         vec!["con", "modify", ssid, "wifi-sec.psk", password],
-        vec!["con", "up", ssid],
     ];
     for command in commands {
         let res = run_command(nmcli, Some(command))?;
@@ -148,6 +148,19 @@ fn join_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<d
         //     "join hotspot output: {}",
         //     String::from_utf8_lossy(&res.stdout)
         // );
+    }
+    loop {
+        let res = run_command(nmcli, Some(vec!["con", "up", ssid]))?;
+        if !res.status.success() {
+            let stderr = String::from_utf8_lossy(&res.stderr);
+            // Err(format!("Error joining hotspot: {}", stderr))?;
+            // TODO: output this to ui
+            // TODO: async, allow cancel button to exit this task
+            println!("Error joining hotspot: {}. Retrying.", stderr);
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        } else {
+            break
+        }
     }
     Ok(())
 }
