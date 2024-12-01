@@ -9,7 +9,7 @@ use crate::{
 use central::BluetoothCentral;
 use peripheral::BluetoothPeripheral;
 use std::{error::Error, mem::discriminant};
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, time};
 use windows::{
     core::HSTRING,
     Devices::{Bluetooth::BluetoothAdapter, Radios::RadioState},
@@ -156,6 +156,8 @@ pub async fn negotiate_bluetooth<T: UI>(
                     msg
                 ))?;
             }
+            // keep everything in scope until peer has had a chance to read the password
+            time::sleep(time::Duration::from_secs(1)).await;
             Ok((peer_os, peer_ssid, peer_password))
         }
     } else {
@@ -227,9 +229,8 @@ pub async fn process_bluetooth_message<T: UI>(
             .await
             .expect("Bluetooth message channel unexpectedly closed.");
         println!("received {:?}", msg);
-        match msg {
-            // TODO: make this a reference and remove the refs below
-            BluetoothMessage::Pin(ref pin) => {
+        match &msg {
+            BluetoothMessage::Pin(pin) => {
                 ui.show_pin(pin);
             }
             BluetoothMessage::PairApproved => ui.output("Pairing approved."),
@@ -253,15 +254,15 @@ pub async fn process_bluetooth_message<T: UI>(
             BluetoothMessage::StartedAdvertising => {
                 ui.output("Started advertising Bluetooth service")
             }
-            BluetoothMessage::PeerOS(ref os) => ui.output(&format!("Peer's OS is {}", os)),
-            BluetoothMessage::SSID(ref ssid) => ui.output(&format!("Peer's SSID is {}", ssid)),
-            BluetoothMessage::Password(ref password) => {
+            BluetoothMessage::PeerOS(os) => ui.output(&format!("Peer's OS is {}", os)),
+            BluetoothMessage::SSID(ssid) => ui.output(&format!("Peer's SSID is {}", ssid)),
+            BluetoothMessage::Password(password) => {
                 ui.output(&format!("Peer's password is {}", password))
             }
             BluetoothMessage::PeerReadSsid => ui.output("Peer read our SSID"),
             BluetoothMessage::PeerReadPassword => ui.output("Peer read our password"),
-            BluetoothMessage::Other(ref s) => {
-                ui.output(&format!("Bluetooth peering result: {}", s))
+            BluetoothMessage::Other(s) => {
+                ui.output(&format!("Bluetooth message: {}", s))
             }
         };
         if discriminant(&msg) == discriminant(&looking_for) {
