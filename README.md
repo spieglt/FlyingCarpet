@@ -53,7 +53,7 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 
 + Apple devices can only transfer to/from Android, Linux, and Windows as they can no longer programmatically run hotspots. Use AirDrop instead for Apple-to-Apple transfers.
 
-+ Using the Bluetooth feature when sending files from macOS is not stable. This is because Flying Carpet has the sending end of the transfer act as the Bluetooth LE peripheral (GATT server), and the device I have to develop with does not work properly when acting as a peripheral, though CoreBluetooth purportedly supports it. Android and Linux see generic errors. TODO: windows behavior. The iOS version works with Android, Linux, and Windows, and uses the same CoreBluetooth code. I suspect the issue is worse on Sequoia, though Sonoma may not work either. Feedback is appreciated.
++ Using the Bluetooth feature when sending files from macOS is not stable. This is because Flying Carpet has the sending end of the transfer act as the Bluetooth LE peripheral (GATT server), and the device I have to develop with does not work properly when acting as a peripheral, though CoreBluetooth purportedly supports it. Android and Linux can pair with macOS but the connections drop from the macOS side with generic errors shortly after. TODO: windows behavior. The iOS version works with Android, Linux, and Windows, and uses the same CoreBluetooth code. I suspect the issue is worse on Sequoia, though Sonoma may not work either. Feedback is appreciated. The "Use Bluetooth" switch can be turned off on both sides of the transfer to enter the WiFi information manually instead.
 
 + Disables your wireless internet connection while in use. (Does not apply to Windows or Android when hosting the hotspot.)
 

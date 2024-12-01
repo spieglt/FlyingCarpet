@@ -421,6 +421,7 @@ async fn confirm_version(
 }
 
 // TODO:
+// windows rust lifetime issues preventing already paired transfers somehow?
 // linux sending to linux: last file sent but then hung, didn't exit transfer. receiving end said "didn't receive confirmation".
 // can't send from windows to android: android reading blank password somehow. android saw "services changed": windows stopping gatt server too early?
 // can't send from windows to android if already paired. (or receive?)
