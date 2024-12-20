@@ -80,6 +80,7 @@ class MainActivity : AppCompatActivity() {
                 if (viewModel.mode == Mode.Sending) {
                     viewModel.bluetooth.advertise()
                 } else if (viewModel.mode == Mode.Receiving) {
+                    viewModel.bluetooth.bluetoothReceiver.waitingForConnection = true
                     viewModel.bluetooth.scan()
                 }
             } else {
@@ -124,6 +125,7 @@ class MainActivity : AppCompatActivity() {
                     if (viewModel.mode == Mode.Sending) {
                         viewModel.bluetooth.advertise()
                     } else if (viewModel.mode == Mode.Receiving) {
+                        viewModel.bluetooth.bluetoothReceiver.waitingForConnection = true
                         viewModel.bluetooth.scan()
                     }
                 } else {
@@ -501,6 +503,7 @@ class MainActivity : AppCompatActivity() {
         }
         var initialized = false
         try {
+            // TODO: should we start gatt server here?
             val initializedPeripheral = viewModel.bluetooth.initializePeripheral(this)
             val initializedCentral = viewModel.bluetooth.initializeCentral()
             if (!initializedPeripheral) {

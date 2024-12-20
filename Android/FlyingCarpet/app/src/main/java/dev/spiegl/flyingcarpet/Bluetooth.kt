@@ -283,7 +283,8 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             .setServiceUuid(ParcelUuid(SERVICE_UUID))
             .build()
         val scanSettings = ScanSettings.Builder()
-            .setLegacy(false)
+            // this was actually the culprit
+            // .setLegacy(false)
             .build()
         bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
         outputText("Called startScan")
@@ -300,20 +301,28 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 outputText("Missing permission BLUETOOTH_SCAN")
                 return
             }
-            outputText("Scan result: $result")
             if (result != null) {
-                bluetoothLeScanner.stopScan(this)
-                outputText("Stopped scanning")
-                _status.postValue(true)
-//                address = result.device.address
-                bluetoothReceiver.result = result
-                bluetoothReceiver.waitingForConnection = true
-                if (result.device.bondState == BOND_BONDED) {
-                    result.device.connectGatt(application.applicationContext, false, bluetoothReceiver.gattCallback)
-                    outputText("Already paired, called connectGatt()")
+                outputText("Scan result: ${result.device}")
+                if (bluetoothReceiver.waitingForConnection) {
+                    bluetoothReceiver.waitingForConnection = false
+                    bluetoothLeScanner.stopScan(this)
+                    outputText("Stopped scanning")
+                    _status.postValue(true)
+                    //                address = result.device.address
+                    bluetoothReceiver.result = result
+                    if (result.device.bondState == BOND_BONDED) {
+                        result.device.connectGatt(
+                            application.applicationContext,
+                            false,
+                            bluetoothReceiver.gattCallback
+                        )
+                        outputText("Already paired, called connectGatt()")
+                    } else {
+                        result.device.createBond()
+                        outputText("Called createBond()")
+                    }
                 } else {
-                    result.device.createBond()
-                    outputText("Called createBond()")
+                    outputText("Connected but not waiting for connection")
                 }
             }
         }
@@ -409,7 +418,14 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 for (service in gatt?.services!!) {
                     outputText("Service: ${service.uuid}")
                 }
-                val service = gatt.getService(SERVICE_UUID) ?: return
+                val service = gatt.getService(SERVICE_UUID)
+                if (service == null) {
+                    outputText("Did not find service")
+//                    outputText("Trying to find services again")
+//                    Thread.sleep(1000)
+//                    gatt.discoverServices()
+                    return
+                }
                 outputText("Got service: $service")
                 osCharacteristic = service.getCharacteristic(OS_CHARACTERISTIC_UUID) ?: return
                 ssidCharacteristic = service.getCharacteristic(SSID_CHARACTERISTIC_UUID) ?: return
@@ -424,6 +440,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     return
                 }
                 outputText("Services changed")
+                // TODO: should this be enabled? does it cause problems? https://developer.android.com/reference/android/bluetooth/BluetoothGattCallback#onServiceChanged(android.bluetooth.BluetoothGatt)
                 // gatt.discoverServices()
             }
 
@@ -436,14 +453,14 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                     return
                 }
-                // TODO: make sure that this device has our service and is not a mouse? need a waitingForBluetoothPeer flag or something?
-                if (waitingForConnection) {
-                    waitingForConnection = false
+                if (newState == BluetoothProfile.STATE_CONNECTED) {
                     bluetoothGatt = gatt
                     outputText("Connected")
+                    // this was the reason android couldn't connect to macOS? no, was the setLegacy(false). diagnosed by comparing nRF Connect logs from Flying Carpet pairings to nRF Connect pairings.
+                    Thread.sleep(1600)
                     gatt?.discoverServices()
                 } else {
-                    outputText("Connected but not waiting for connection")
+                    outputText("New connection state: $newState")
                 }
             }
         }
