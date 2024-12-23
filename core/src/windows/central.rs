@@ -107,7 +107,11 @@ impl BluetoothCentral {
                                 return Ok(());
                             }
                             return Ok(());
+                        } else {
+                            println!("secure connection was not used")
                         }
+                    } else {
+                        println!("weren't connected");
                     }
 
                     // if we weren't paired, do so
@@ -354,6 +358,27 @@ impl BluetoothCentral {
         let status = characteristic
             .WriteValueWithOptionAsync(&ibuffer, write_option)?
             .get()?;
+        // let status = characteristic.WriteValueWithOptionAsync(&ibuffer, write_option);
+        // let status = match status {
+        //     Ok(x) => {
+        //         println!("Ok");
+        //         x
+        //     },
+        //     Err(e) => {
+        //         println!("Error: {}", e);
+        //         return Err(Box::new(e));
+        //     },
+        // };
+        // let status = match status.get() {
+        //     Ok(x) => {
+        //         println!("Ok");
+        //         x
+        //     },
+        //     Err(e) => {
+        //         println!("Second error: {}", e);
+        //         return Err(Box::new(e));
+        //     },
+        // };
         if status != GattCommunicationStatus::Success {
             Err(format!(
                 "Error writing to Bluetooth peripheral: {:?}",

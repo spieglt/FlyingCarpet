@@ -2,6 +2,7 @@ const { core, dialog, os } = window.__TAURI__;
 import { QRCode } from './deps/qrcode.js'
 
 let aboutButton;
+let canUseBluetooth = false;
 let usingBluetooth;
 let bluetoothSwitch;
 let peerLabel;
@@ -21,6 +22,7 @@ let selectedFolder;
 window.onunload = () => {
   let uiState = {
     usingBluetooth: usingBluetooth,
+    // canUseBluetooth:
     selectedMode: selectedMode,
     selectedPeer: selectedPeer,
     selectedFiles: selectedFiles,
@@ -54,11 +56,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     bluetoothSwitch.disabled = true;
     bluetoothSwitch.checked = false;
     usingBluetooth = false;
+    canUseBluetooth = false;
   } else {
     output('Bluetooth is supported.');
     bluetoothSwitch.disabled = false;
     bluetoothSwitch.checked = true;
     usingBluetooth = true;
+    canUseBluetooth = true;
   }
 
   // about button
@@ -338,7 +342,9 @@ let enableUi = async () => {
   // hide cancel button
   cancelButton.style.display = 'none';
   // enable bluetooth switch
-  document.getElementById('bluetoothSwitch').disabled = false; // TODO: only enable if we can use bluetooth. need canUseBluetooth?
+  if (canUseBluetooth) {
+    document.getElementById('bluetoothSwitch').disabled = false;
+  }
   // enable radio buttons, file/folder selection buttons
   let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton'];
   for (let i in radioButtons) {

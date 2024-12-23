@@ -170,9 +170,11 @@ impl BluetoothPeripheral {
                 writer.WriteBytes(ssid.as_bytes())?;
                 request.RespondWithValue(&writer.DetachBuffer()?)?;
                 println!("peer read our ssid: {}", ssid);
-                if let Err(e) = callback_tx.blocking_send(BluetoothMessage::PeerReadSsid) {
-                    println!("Could not send on Bluetooth tx: {}", e);
-                };
+                if ssid != NO_SSID {
+                    if let Err(e) = callback_tx.blocking_send(BluetoothMessage::PeerReadSsid) {
+                        println!("Could not send on Bluetooth tx: {}", e);
+                    };
+                }
                 deferral.Complete()?;
                 Ok(())
             },

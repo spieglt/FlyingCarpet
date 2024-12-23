@@ -43,7 +43,6 @@ pub async fn negotiate_bluetooth<T: UI>(
         let mut password = generate_password();
         let (_, mut ssid) = get_key_and_ssid(&password);
         let (app_handle, adv_handle) = peripheral::advertise(tx, &ssid, &password).await?;
-        // TODO: wait for StartedAdvertising
         let peer_os =
             match process_bluetooth_message(BluetoothMessage::PeerOS("".to_string()), &mut rx, ui)
                 .await?
@@ -142,10 +141,7 @@ pub async fn process_bluetooth_message<T: UI>(
             BluetoothMessage::PairFailure => Err("Pairing failed.")?,
             BluetoothMessage::AlreadyPaired => {
                 ui.output("Already BLE paired with Bluetooth device");
-                if looking_for == BluetoothMessage::PairSuccess
-                    || discriminant(&looking_for)
-                        == discriminant(&BluetoothMessage::Pin("".to_string()))
-                {
+                if looking_for == BluetoothMessage::PairSuccess {
                     return Ok(msg);
                 }
             }

@@ -112,12 +112,6 @@ pub async fn negotiate_bluetooth<T: UI>(
 
         if is_hosting(&Peer::from(peer_os.as_str()), mode) {
             let password = generate_password();
-            // TODO: race condition here, if peer reads from our SSID characteristic before we've set it?
-            // then we'll write NONE, peer will wait a second and read again, so tx will get another PeerReadSSID message,
-            // making the "waiting for password" BluetoothMessage panic? only send PeerReadSSID if we sent a real one?
-            // or pass the info in earlier so we're guaranteed to have it? but can we do this safely before we've exchanged
-            // OS and know if we're hosting? doesn't hurt to have the data set even if we're not hosting maybe, but it's ugly.
-            // not a problem since redoing process_bluetooth_message() to look for messages.
             let (_, ssid) = get_key_and_ssid(&password);
             {
                 let mut peripheral_ssid = bluetooth.peripheral.ssid.lock().await;
@@ -242,7 +236,6 @@ pub async fn process_bluetooth_message<T: UI>(
             BluetoothMessage::PairFailure => Err("Pairing failed.")?,
             BluetoothMessage::AlreadyPaired => {
                 ui.output("Already BLE paired with Bluetooth device");
-                // TODO: this is an ugly edge case, but redoing it to look for either might be equally ugly
                 if looking_for == BluetoothMessage::PairSuccess
                     || discriminant(&looking_for)
                         == discriminant(&BluetoothMessage::Pin("".to_string()))
