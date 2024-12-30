@@ -310,17 +310,19 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     _status.postValue(true)
                     //                address = result.device.address
                     bluetoothReceiver.result = result
-                    if (result.device.bondState == BOND_BONDED) {
-                        result.device.connectGatt(
-                            application.applicationContext,
-                            false,
-                            bluetoothReceiver.gattCallback
-                        )
-                        outputText("Already paired, called connectGatt()")
-                    } else {
-                        result.device.createBond()
-                        outputText("Called createBond()")
-                    }
+
+//                    if (result.device.bondState == BOND_BONDED) {
+                    result.device.connectGatt(
+                        application.applicationContext,
+                        false,
+                        bluetoothReceiver.gattCallback,
+                        BluetoothDevice.TRANSPORT_LE,
+                    )
+                    outputText("Called connectGatt()")
+//                    } else {
+//                        result.device.createBond()
+//                        outputText("Called createBond()")
+//                    }
                 } else {
                     outputText("Connected but not waiting for connection")
                 }
@@ -485,7 +487,12 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 Log.e("Bluetooth", "Received ACTION_BOND_STATE_CHANGED but do not have device result")
                 return
             }
-            result!!.device.connectGatt(application.applicationContext, false, gattCallback)
+            result!!.device.connectGatt(
+                application.applicationContext,
+                true,
+                gattCallback,
+                BluetoothDevice.TRANSPORT_AUTO,
+            )
         }
 
         // use to read peripheral's characteristic
