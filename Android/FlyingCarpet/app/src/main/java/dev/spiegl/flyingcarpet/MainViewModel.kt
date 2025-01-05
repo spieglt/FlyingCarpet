@@ -76,6 +76,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     lateinit var barcodeLauncher: ActivityResultLauncher<ScanOptions>
     lateinit var displayQrCode: (String, String) -> Unit
     lateinit var cleanUpUi: () -> Unit
+    lateinit var enableBluetoothUi: (Boolean) -> Unit
     private val handler = Handler(Looper.getMainLooper())
     private var _output = MutableLiveData<String>()
     val output: LiveData<String>
@@ -168,8 +169,8 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         if (this::reservation.isInitialized) {
             reservation.close()
         }
-        // TODO: clean up bluetooth, stop scanner, onConnectionStateChange triggers (unregisterReceiver), advertiser, gatt server
-        //
+        // stop bluetooth functions
+        bluetooth.stop(application)
         // clean up UI
         cleanUpUi()
     }
@@ -555,6 +556,10 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 //            super.onLosing(network, maxMsToLive)
 //            outputText("losing")
 //        }
+    }
+    override fun bluetoothFailed() {
+        enableBluetoothUi(false)
+        cleanUpTransfer()
     }
 }
 

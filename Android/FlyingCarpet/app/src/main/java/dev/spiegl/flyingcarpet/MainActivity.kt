@@ -203,6 +203,7 @@ class MainActivity : AppCompatActivity() {
         viewModel.barcodeLauncher = getBarcodeLauncher()
         viewModel.displayQrCode = ::displayQrCode
         viewModel.cleanUpUi = ::cleanUpUi
+        viewModel.enableBluetoothUi = ::enableBluetoothUi
 
         peerGroup = findViewById(id.peerGroup)
         peerInstruction = findViewById(id.peerInstruction)
@@ -422,7 +423,6 @@ class MainActivity : AppCompatActivity() {
 
     private var permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(
-            // TODO: reenable?
             // Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.BLUETOOTH_ADVERTISE,
@@ -503,7 +503,6 @@ class MainActivity : AppCompatActivity() {
         }
         var initialized = false
         try {
-            // TODO: should we start gatt server here?
             val initializedPeripheral = viewModel.bluetooth.initializePeripheral(this)
             val initializedCentral = viewModel.bluetooth.initializeCentral()
             if (!initializedPeripheral) {
@@ -516,16 +515,25 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e("Bluetooth", "Could not initialize Bluetooth: $e")
         }
+        viewModel.outputText("setting to $initialized")
         viewModel.bluetooth.active = initialized
         bluetoothSwitch.isChecked = initialized
         bluetoothSwitch.isEnabled = initialized
         bluetoothIcon.isVisible = initialized
         return initialized
     }
+
+    // disable Bluetooth if a callback fails
+    private fun enableBluetoothUi(enabled: Boolean) {
+        viewModel.outputText("fired")
+        bluetoothSwitch.isChecked = enabled
+        bluetoothSwitch.isEnabled = enabled
+        bluetoothIcon.isVisible = enabled
+    }
 }
 
 // TODO:
-//   advertiser starting when bluetooth switch is off
+//   need to not start peripheral when receiving, or central when sending? other how to check if we can initialize?
 //   android left open after transfer is still exchanging OS with iOS peripheral when it restarts: can't do this whenever we connect? check if transfer running?
 //   one permission check for all permissions?
 //   bluetooth UI in landscape mode

@@ -48,6 +48,7 @@ interface BluetoothDelegate {
     fun connectToPeer()
     fun getWifiInfo(): Pair<String, String>
     fun outputText(msg: String)
+    fun bluetoothFailed()
 }
 
 class Bluetooth(val application: Application, private val delegate: BluetoothDelegate): BluetoothDelegate by delegate {
@@ -66,6 +67,18 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
     private var _status = MutableLiveData<Boolean>()
     val status: LiveData<Boolean>
         get() = _status
+
+    fun stop(application: Context) {
+        if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+        // central
+        bluetoothLeScanner.stopScan(leScanCallback)
+        bluetoothReceiver.bluetoothGatt = null
+        // peripheral
+        bluetoothManager.adapter.bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
+        bluetoothGattServer.close()
+    }
 
     // peripheral
 
@@ -260,7 +273,8 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         override fun onStartFailure(errorCode: Int) {
             super.onStartFailure(errorCode)
             outputText("Advertiser failed to start: $errorCode")
-            // TODO: disable and turn off bluetooth UI, print message here?
+            active = false
+            bluetoothFailed()
         }
     }
 
@@ -332,7 +346,8 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         override fun onScanFailed(errorCode: Int) {
             Log.e("Bluetooth", "Scan failed: $errorCode")
             super.onScanFailed(errorCode)
-            // TODO: disable and turn off bluetooth UI, print message here?
+            active = false
+            bluetoothFailed()
         }
     }
 
