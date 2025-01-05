@@ -359,6 +359,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(id.cancelButton).isInvisible = enabled
 
         findViewById<TextView>(id.aboutButton).isClickable = enabled
+        findViewById<SwitchCompat>(id.bluetoothSwitch).isEnabled = enabled
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -388,6 +389,8 @@ class MainActivity : AppCompatActivity() {
         outState.putBoolean("transferRunning", transferRunning)
         val progressBarValue = findViewById<ProgressBar>(id.progressBar).progress
         outState.putInt("progress", progressBarValue)
+        val bluetoothEnabled = findViewById<SwitchCompat>(id.bluetoothSwitch).isEnabled
+        outState.putBoolean("bluetoothEnabled", bluetoothEnabled)
     }
 
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
@@ -417,6 +420,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
         findViewById<ProgressBar>(id.progressBar).progress = savedInstanceState.getInt("progress")
+        val bluetoothEnabled = savedInstanceState.getBoolean("bluetoothEnabled")
+        findViewById<SwitchCompat>(id.bluetoothSwitch).isEnabled = bluetoothEnabled
     }
 
     // bluetooth
@@ -472,7 +477,7 @@ class MainActivity : AppCompatActivity() {
 
         bluetoothIcon = findViewById(id.bluetoothIcon)
         viewModel.bluetooth.status.observe(this) {
-            bluetoothIcon.setBackgroundColor(Color.BLUE)
+            bluetoothIcon.drawable.setTint(if (it) { Color.BLUE } else { Color.BLACK })
         }
         bluetoothSwitch = findViewById(id.bluetoothSwitch)
         bluetoothSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -536,9 +541,6 @@ class MainActivity : AppCompatActivity() {
 //   need to not start peripheral when receiving, or central when sending? other how to check if we can initialize?
 //   android left open after transfer is still exchanging OS with iOS peripheral when it restarts: can't do this whenever we connect? check if transfer running?
 //   one permission check for all permissions?
-//   bluetooth UI in landscape mode
-//   bluetooth UI save/reload when screen rotated
-//   bluetooth icon color change when scan/advertisement stops or starts: livedata? fix bluetooth icon.
 //   transfer "completing" if receiving end quit?
 //   check !!s
 //   test what happens if wifi is turned off - done. hotspot still runs, not sure about joining.

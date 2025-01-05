@@ -72,6 +72,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
             return
         }
+        _status.postValue(false)
         // central
         bluetoothLeScanner.stopScan(leScanCallback)
         bluetoothReceiver.bluetoothGatt = null
@@ -301,6 +302,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             // .setLegacy(false)
             .build()
         bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
+        _status.postValue(true)
         outputText("Called startScan")
     }
 
@@ -321,7 +323,6 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     bluetoothReceiver.waitingForConnection = false
                     bluetoothLeScanner.stopScan(this)
                     outputText("Stopped scanning")
-                    _status.postValue(true)
                     //                address = result.device.address
                     bluetoothReceiver.result = result
 
