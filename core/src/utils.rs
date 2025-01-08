@@ -24,7 +24,7 @@ pub enum BluetoothMessage {
     Password(String),
     PeerReadSsid,
     PeerReadPassword,
-    Other(String),
+    OtherError(String),
 }
 
 unsafe impl Send for BluetoothMessage {}

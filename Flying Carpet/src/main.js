@@ -127,7 +127,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   // rehydrate UI if user refreshed
   let uiState = JSON.parse(sessionStorage.getItem('pageState'));
   if (uiState) {
-    bluetoothSwitch.checked = uiState.usingBluetooth;
+    usingBluetooth = uiState.usingBluetooth;
+    bluetoothSwitch.checked = usingBluetooth;
     selectedMode = uiState.selectedMode;
     if (selectedMode === 'send') {
       document.getElementById('sendButton').checked = true;
@@ -151,6 +152,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (uiState.transferRunning) {
       disableUi();
     }
+    checkStatus();
   }
 });
 

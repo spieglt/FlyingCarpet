@@ -27,6 +27,14 @@ pub async fn check_support() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+pub async fn get_adapter() -> Result<Adapter, Box<dyn Error>> {
+    let session = Session::new().await?;
+    let adapter = session.default_adapter().await?;
+    adapter.set_powered(true).await?;
+    println!("Bluetooth is supported");
+    Ok(adapter)
+}
+
 pub async fn negotiate_bluetooth<T: UI>(
     mode: &Mode,
     _ble_ui_rx: mpsc::Receiver<bool>, // only used on windows

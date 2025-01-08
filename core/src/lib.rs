@@ -421,20 +421,19 @@ async fn confirm_version(
 }
 
 // TODO:
-// windows rust lifetime issues preventing already paired transfers somehow?
+// windows rust lifetime issues preventing already paired transfers somehow? works with linux but failed with blank password once?
 // linux sending to linux: last file sent but then hung, didn't exit transfer. receiving end said "didn't receive confirmation".
 // can't receive from windows if already paired, service not found.
 // can't send from windows to android if already paired. (or receive?)
 // linux name is null on android when pairing - manufacturer info?
 // linux: bluetooth failing to initialize doesn't disable switch
 // windows not keeping bluetooth advertiser in scope till central can read it?
-// ui bug: disable bluetooth and refresh
 // test multiple transfers back to back, windows central unpaired but ios peripheral still paired, already paired but switched mode
 // why is ios looking for ip address for a long time?
 // test switching os...
 // "send mode selected but no files present"
 // how did windows read OS "windows" from itself when acting as central but not peripheral?
-// does linux need any channels for bluetooth?
+    // windows previously wrote "windows" to the OS characteristic of android, which stored it? doesn't look like it from the android code.
 // folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh.
 // fix tests
 // fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux: have to get whatever is blocking on background thread?

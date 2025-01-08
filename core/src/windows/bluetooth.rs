@@ -29,12 +29,6 @@ pub(crate) const PASSWORD_CHARACTERISTIC_UUID: &str = "E1FA8F66-CF88-4572-9527-D
 // in case hosting rules change, which would mean detecting this when reading ssid and delaying/retrying.
 const NO_SSID: &str = "NONE";
 
-// TODO: remove this, no actual need for it?
-pub(crate) struct Bluetooth {
-    pub central: BluetoothCentral,
-    pub peripheral: BluetoothPeripheral,
-}
-
 // central goes scan -> bond -> connect -> discoverServices -> read OS -> write OS
 // -> connectToPeer -> start hotspot and write ssid/pw, or read ssid/pw and join hotspot
 
@@ -65,31 +59,19 @@ pub async fn check_support() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-impl Bluetooth {
-    pub fn new(tx: mpsc::Sender<BluetoothMessage>) -> Result<Self, String> {
-        // returning Result<Self, Box<dyn Error>> here was throwing weird tokio errors so punting to string
-        let peripheral = BluetoothPeripheral::new(tx.clone()).map_err(|e| e.to_string())?;
-        let central = BluetoothCentral::new(tx.clone()).map_err(|e| e.to_string())?;
-
-        Ok(Bluetooth {
-            peripheral,
-            central,
-        })
-    }
-}
-
 pub async fn negotiate_bluetooth<T: UI>(
     mode: &Mode,
     ble_ui_rx: mpsc::Receiver<bool>,
     ui: &T,
 ) -> Result<(String, String, String), Box<dyn Error>> {
     let (tx, mut rx) = mpsc::channel(1);
-    let mut bluetooth = Bluetooth::new(tx)?;
+    let mut peripheral = BluetoothPeripheral::new(tx.clone()).map_err(|e| e.to_string())?;
+    let mut central = BluetoothCentral::new(tx.clone()).map_err(|e| e.to_string())?;
     if let Mode::Send(_) = mode {
         // acting as peripheral
         ui.output("Advertising Bluetooth service...");
-        bluetooth.peripheral.add_characteristics()?;
-        bluetooth.peripheral.start_advertising()?;
+        peripheral.add_characteristics()?;
+        peripheral.start_advertising()?;
 
         let mut peer_os = String::new();
         let mut peer_ssid = String::new();
@@ -114,9 +96,9 @@ pub async fn negotiate_bluetooth<T: UI>(
             let password = generate_password();
             let (_, ssid) = get_key_and_ssid(&password);
             {
-                let mut peripheral_ssid = bluetooth.peripheral.ssid.lock().await;
+                let mut peripheral_ssid = peripheral.ssid.lock().await;
                 *peripheral_ssid = Some(ssid.clone());
-                let mut peripheral_password = bluetooth.peripheral.password.lock().await;
+                let mut peripheral_password = peripheral.password.lock().await;
                 *peripheral_password = Some(password.clone());
             }
             println!("set peripheral ssid and password");
@@ -158,14 +140,14 @@ pub async fn negotiate_bluetooth<T: UI>(
         // acting as central
         // scan for device advertising flying carpet service
         ui.output("Scanning for Bluetooth peripherals...");
-        bluetooth.central.scan(ble_ui_rx)?;
+        central.scan(ble_ui_rx)?;
 
         // if we're looking for Pin or PairSuccess, process_bluetooth_message() will bail when it sees AlreadyPaired
         println!("waiting for callback...");
         let msg =
             process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui).await?;
 
-        bluetooth.central.stop_watching()?;
+        central.stop_watching()?;
         println!("stopped watching");
 
         // wait to pair
@@ -175,16 +157,16 @@ pub async fn negotiate_bluetooth<T: UI>(
 
         println!("before get_services_and_characteristics");
         // discover service and characteristics once paired
-        bluetooth.central.get_services_and_characteristics().await?;
+        central.get_services_and_characteristics().await?;
         println!("after get_services_and_characteristics");
 
         ui.output("Reading peer's OS");
         // read peer's OS
-        let peer = bluetooth.central.read(OS_CHARACTERISTIC_UUID).await?;
+        let peer = central.read(OS_CHARACTERISTIC_UUID).await?;
         ui.output(&format!("Peer OS: {:?}", peer));
 
         // write OS
-        bluetooth.central.write(OS_CHARACTERISTIC_UUID, OS).await?;
+        central.write(OS_CHARACTERISTIC_UUID, OS).await?;
         println!("wrote OS");
 
         // read or write ssid and password
@@ -192,19 +174,17 @@ pub async fn negotiate_bluetooth<T: UI>(
             println!("hosting, writing wifi info to peer");
             let password = generate_password();
             let (_, ssid) = get_key_and_ssid(&password);
-            bluetooth
-                .central
+            central
                 .write(SSID_CHARACTERISTIC_UUID, &ssid)
                 .await?;
-            bluetooth
-                .central
+            central
                 .write(PASSWORD_CHARACTERISTIC_UUID, &password)
                 .await?;
             (ssid, password)
         } else {
             println!("joining, reading wifi info from peer");
-            let ssid = bluetooth.central.read(SSID_CHARACTERISTIC_UUID).await?;
-            let password = bluetooth.central.read(PASSWORD_CHARACTERISTIC_UUID).await?;
+            let ssid = central.read(SSID_CHARACTERISTIC_UUID).await?;
+            let password = central.read(PASSWORD_CHARACTERISTIC_UUID).await?;
             (ssid, password)
         };
         Ok((peer, ssid, password))
@@ -254,9 +234,7 @@ pub async fn process_bluetooth_message<T: UI>(
             }
             BluetoothMessage::PeerReadSsid => ui.output("Peer read our SSID"),
             BluetoothMessage::PeerReadPassword => ui.output("Peer read our password"),
-            BluetoothMessage::Other(s) => {
-                ui.output(&format!("Bluetooth message: {}", s))
-            }
+            BluetoothMessage::OtherError(s) => Err(s.as_str())?,
         };
         if discriminant(&msg) == discriminant(&looking_for) {
             return Ok(msg);

@@ -112,6 +112,10 @@ impl BluetoothCentral {
                         }
                     } else {
                         println!("weren't connected");
+                        // TODO: connect here
+                        let x = device.RequestAccessAsync()?.get()?;
+                        println!("{:?}", x);
+                        println!("requested access");
                     }
 
                     // if we weren't paired, do so
@@ -214,7 +218,7 @@ impl BluetoothCentral {
         let msg = match status {
             DevicePairingResultStatus::AlreadyPaired => BluetoothMessage::AlreadyPaired,
             DevicePairingResultStatus::Paired => BluetoothMessage::PairSuccess,
-            _ => BluetoothMessage::Other(error_msg.to_string()), // TODO: should this be OtherError?
+            _ => BluetoothMessage::OtherError(error_msg.to_string()),
         };
         let res = tx.blocking_send(msg);
         if res.is_err() {
@@ -282,16 +286,11 @@ impl BluetoothCentral {
                 println!("UUID: {:?}", service.Uuid()?);
                 if service.Uuid()? == GUID::from(SERVICE_UUID) {
                     println!("found service");
-                    // let x = device.RequestAccessAsync()?.await?;
-                    // println!("{:?}", x);
-                    // println!("requested access");
                     for characteristic in [
                         OS_CHARACTERISTIC_UUID,
                         SSID_CHARACTERISTIC_UUID,
                         PASSWORD_CHARACTERISTIC_UUID,
                     ] {
-                        // TODO: is this performing an implicit read?
-                        // or are we not waiting for pairing confirmation?
                         let characteristics = service
                             .GetCharacteristicsForUuidAsync(GUID::from(characteristic))?
                             .get()?
@@ -355,30 +354,30 @@ impl BluetoothCentral {
             .expect(&format!("Missing characteristic {}", characteristic_uuid));
         let write_option = GattWriteOption::WriteWithResponse;
         let ibuffer = str_to_ibuffer(value)?;
-        let status = characteristic
-            .WriteValueWithOptionAsync(&ibuffer, write_option)?
-            .get()?;
-        // let status = characteristic.WriteValueWithOptionAsync(&ibuffer, write_option);
-        // let status = match status {
-        //     Ok(x) => {
-        //         println!("Ok");
-        //         x
-        //     },
-        //     Err(e) => {
-        //         println!("Error: {}", e);
-        //         return Err(Box::new(e));
-        //     },
-        // };
-        // let status = match status.get() {
-        //     Ok(x) => {
-        //         println!("Ok");
-        //         x
-        //     },
-        //     Err(e) => {
-        //         println!("Second error: {}", e);
-        //         return Err(Box::new(e));
-        //     },
-        // };
+        // let status = characteristic
+        //     .WriteValueWithOptionAsync(&ibuffer, write_option)?
+        //     .get()?;
+        let status = characteristic.WriteValueWithOptionAsync(&ibuffer, write_option);
+        let status = match status {
+            Ok(x) => {
+                println!("Ok");
+                x
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+                return Err(Box::new(e));
+            },
+        };
+        let status = match status.get() {
+            Ok(x) => {
+                println!("Ok");
+                x
+            },
+            Err(e) => {
+                println!("Second error: {}", e);
+                return Err(Box::new(e));
+            },
+        };
         if status != GattCommunicationStatus::Success {
             Err(format!(
                 "Error writing to Bluetooth peripheral: {:?}",
