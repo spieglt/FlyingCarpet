@@ -424,6 +424,8 @@ async fn confirm_version(
 // windows rust lifetime issues preventing already paired transfers somehow? works with linux but failed with blank password once?
 // linux sending to linux: last file sent but then hung, didn't exit transfer. receiving end said "didn't receive confirmation".
 // can't receive from windows if already paired, service not found.
+// is the problem that the device we see advertising isn't the device we're already paired to? but then the device we're paired to presumably offers the services already.
+// https://github.com/hbldh/bleak/issues/367#issuecomment-784375835
 // can't send from windows to android if already paired. (or receive?)
 // linux name is null on android when pairing - manufacturer info?
 // linux: bluetooth failing to initialize doesn't disable switch

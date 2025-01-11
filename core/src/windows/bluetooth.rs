@@ -174,9 +174,7 @@ pub async fn negotiate_bluetooth<T: UI>(
             println!("hosting, writing wifi info to peer");
             let password = generate_password();
             let (_, ssid) = get_key_and_ssid(&password);
-            central
-                .write(SSID_CHARACTERISTIC_UUID, &ssid)
-                .await?;
+            central.write(SSID_CHARACTERISTIC_UUID, &ssid).await?;
             central
                 .write(PASSWORD_CHARACTERISTIC_UUID, &password)
                 .await?;

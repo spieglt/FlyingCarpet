@@ -159,7 +159,7 @@ fn join_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<d
             println!("Error joining hotspot: {}. Retrying.", stderr);
             std::thread::sleep(std::time::Duration::from_secs(1));
         } else {
-            break
+            break;
         }
     }
     Ok(())

@@ -93,6 +93,44 @@ impl BluetoothCentral {
                         *peer_device = Some(device.clone());
                     }
                     // determine if we're already paired
+
+                    // let selector = BluetoothDevice::GetDeviceSelectorFromPairingState(true)?;
+                    // let paired_devices = DeviceInformation::FindAllAsyncAqsFilter(&selector)?.get()?;
+                    // for paired_device in paired_devices {
+                    //     println!("1 paired device: {:?}", paired_device.Id()?);
+                    //     let _paired_device = BluetoothLEDevice::FromIdAsync(&paired_device.Id()?)?.get()?;
+                    //     let async_result = match _paired_device.GetGattServicesWithCacheModeAsync(BluetoothCacheMode::Uncached) {
+                    //         Ok(ar) => ar,
+                    //         Err(e) => {
+                    //             // thread_tx.blocking_send(BluetoothMessage::UserCanceled);
+                    //             println!("oh no: {e}");
+                    //             return Ok(());
+                    //         }
+                    //     };
+                    //     println!("yeah");
+                    //     // let _paired_device = BluetoothLEDevice::FromIdAsync(&paired_device.)
+                    //     println!("paired device: {:?}", _paired_device.Name()?);
+                    //     let async_result = match _paired_device.GetGattServicesWithCacheModeAsync(BluetoothCacheMode::Uncached) {
+                    //         Ok(ar) => ar,
+                    //         Err(e) => {
+                    //             thread_tx.blocking_send(BluetoothMessage::UserCanceled);
+                    //             println!("{e}");
+                    //             return Ok(());
+                    //         }
+                    //     };
+                    //     let services_result = async_result.get()?;
+                    //     println!("get services result: {:?}", services_result.Status());
+                    //     let services = services_result.Services()?;
+                    //     for service in services {
+                    //         println!("UUID: {:?}", service.Uuid()?);
+                    //     }
+                    // }
+
+                    // let res = thread_tx.blocking_send(BluetoothMessage::AlreadyPaired);
+                    // if res.is_err() {
+                    //     println!("Could not send on channel");
+                    // }
+
                     let connection_status = device.ConnectionStatus()?;
                     if connection_status == BluetoothConnectionStatus::Connected {
                         let secure_connection_used = device.WasSecureConnectionUsedForPairing()?;
@@ -113,9 +151,45 @@ impl BluetoothCentral {
                     } else {
                         println!("weren't connected");
                         // TODO: connect here
+                        // try to read services here?
                         let x = device.RequestAccessAsync()?.get()?;
                         println!("{:?}", x);
                         println!("requested access");
+                        // let id = device.DeviceId()?;
+                        // let id = BluetoothDeviceId::FromId(&id)?;
+                        // let session = GattSession::FromDeviceIdAsync(&id)?.get()?;
+                        // session.SetMaintainConnection(true)?;
+                        // println!("set maintain connection to true");
+
+                        // let selector = BluetoothDevice::GetDeviceSelectorFromPairingState(true)?;
+                        // let paired_devices = DeviceInformation::FindAllAsyncAqsFilter(&selector)?.get()?;
+                        // // let paired_devices = DeviceInformation::FindAllAsync()?.get()?;
+                        // for paired_device in paired_devices {
+                        //     println!("paired device: {:?}", paired_device.Id()?);
+                        //     let _paired_device = BluetoothLEDevice::FromIdAsync(&paired_device.Id()?)?.get()?;
+                        //     // let _paired_device = BluetoothLEDevice::FromIdAsync(&paired_device.)
+                        //     println!("paired device: {:?}", _paired_device.Name()?);
+                        //     let async_result = match _paired_device.GetGattServicesWithCacheModeAsync(BluetoothCacheMode::Uncached) {
+                        //         Ok(ar) => ar,
+                        //         Err(e) => {
+                        //             thread_tx.blocking_send(BluetoothMessage::UserCanceled);
+                        //             println!("{e}");
+                        //             return Ok(());
+                        //         }
+                        //     };
+                        //     let services_result = async_result.get()?;
+                        //     println!("get services result: {:?}", services_result.Status());
+                        //     let services = services_result.Services()?;
+                        //     for service in services {
+                        //         println!("UUID: {:?}", service.Uuid()?);
+                        //     }
+                        // }
+
+                        // let res = thread_tx.blocking_send(BluetoothMessage::AlreadyPaired);
+                        // if res.is_err() {
+                        //     println!("Could not send on channel");
+                        // }
+                        // return Ok(());
                     }
 
                     // if we weren't paired, do so
@@ -281,6 +355,7 @@ impl BluetoothCentral {
             println!("loop, getting services");
             tokio::task::yield_now().await;
             let services = device.GetGattServicesAsync()?.get()?.Services()?;
+            // let services = device.GetGattServicesWithCacheModeAsync(BluetoothCacheMode::Uncached)?.get()?.Services()?;
             println!("got services");
             for service in services {
                 println!("UUID: {:?}", service.Uuid()?);
@@ -308,6 +383,15 @@ impl BluetoothCentral {
                 }
             }
             println!("did not find flying carpet service, trying again...");
+            println!(
+                "Could not enumerate services, unpairing from device. Please restart transfer."
+            );
+            let info = device.DeviceInformation()?;
+            let pairing = info.Pairing()?;
+            let unpairing_result = pairing.UnpairAsync()?.get()?;
+            let status = unpairing_result.Status()?;
+            println!("Unpairing result: {:?}", status);
+            Err("Could not enumerate services, unpairing from device. Please restart transfer.")?;
             std::thread::sleep(std::time::Duration::from_secs(2));
         }
         // we had exited this function without setting OS_CHARACTERISTIC_UUID and panicked later.
@@ -362,21 +446,21 @@ impl BluetoothCentral {
             Ok(x) => {
                 println!("Ok");
                 x
-            },
+            }
             Err(e) => {
                 println!("Error: {}", e);
                 return Err(Box::new(e));
-            },
+            }
         };
         let status = match status.get() {
             Ok(x) => {
                 println!("Ok");
                 x
-            },
+            }
             Err(e) => {
                 println!("Second error: {}", e);
                 return Err(Box::new(e));
-            },
+            }
         };
         if status != GattCommunicationStatus::Success {
             Err(format!(
