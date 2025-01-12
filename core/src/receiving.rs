@@ -1,5 +1,6 @@
 use crate::{utils, UI};
 use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit};
+use core::time;
 use std::{
     error::Error,
     fs,
@@ -10,7 +11,7 @@ use std::{
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
-    time::timeout,
+    time::{sleep, timeout},
 };
 
 pub async fn receive_file<T: UI>(
@@ -185,10 +186,14 @@ async fn check_for_file(
             Ok(!hashes_match)
         } else {
             stream.write_u64(0).await?;
+            // TODO: ugly hack to get around lifetime issue? sending end didn't receive this last reply when calculating hash of large file.
+            sleep(time::Duration::from_secs(1)).await;
             Ok(true)
         }
     } else {
         stream.write_u64(0).await?;
+        // TODO: ugly hack to get around lifetime issue? sending end didn't receive this last reply when calculating hash of large file.
+        sleep(time::Duration::from_secs(1)).await;
         Ok(true)
     }
 }

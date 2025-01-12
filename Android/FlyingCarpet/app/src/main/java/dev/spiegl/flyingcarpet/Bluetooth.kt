@@ -366,6 +366,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         var ssidCharacteristic: BluetoothGattCharacteristic? = null
         var passwordCharacteristic: BluetoothGattCharacteristic? = null
         var waitingForConnection = false // TODO: test if we connect if the app started when we were already paired, and bonding event was never received by this class
+        var bonded = false
 
         val gattCallback = object : BluetoothGattCallback() {
             // this is called when we as central have read a characteristic from the peer's peripheral
@@ -503,12 +504,17 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 Log.e("Bluetooth", "Received ACTION_BOND_STATE_CHANGED but do not have device result")
                 return
             }
-            result!!.device.connectGatt(
-                application.applicationContext,
-                true,
-                gattCallback,
-                BluetoothDevice.TRANSPORT_AUTO,
-            )
+            if (!bonded) {
+                bonded = true
+                result!!.device.connectGatt(
+                    application.applicationContext,
+                    true,
+                    gattCallback,
+                    BluetoothDevice.TRANSPORT_AUTO,
+                )
+            } else {
+                Log.e("Bluetooth", "Received ACTION_BOND_STATE_CHANGED but already bonded")
+            }
         }
 
         // use to read peripheral's characteristic

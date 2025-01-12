@@ -135,6 +135,7 @@ pub async fn start_transfer<T: UI>(
             Err(e) => {
                 ui.output(&format!("Could not establish Bluetooth connection: {}", e));
                 println!("Could not establish Bluetooth connection: {}", e);
+                // TODO: unpair here somehow? no, probably further down, anything that can go wrong in central?
                 return None;
             }
         }

@@ -142,13 +142,15 @@ pub async fn negotiate_bluetooth<T: UI>(
         ui.output("Scanning for Bluetooth peripherals...");
         central.scan(ble_ui_rx)?;
 
+        // TODO: should this go back below process_bluetooth_message(Pin)?
+        central.stop_watching()?;
+        println!("stopped watching");
+
         // if we're looking for Pin or PairSuccess, process_bluetooth_message() will bail when it sees AlreadyPaired
         println!("waiting for callback...");
         let msg =
             process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui).await?;
 
-        central.stop_watching()?;
-        println!("stopped watching");
 
         // wait to pair
         if msg != BluetoothMessage::AlreadyPaired {

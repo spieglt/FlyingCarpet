@@ -81,6 +81,11 @@ impl BluetoothCentral {
             let service_uuids = advertisement.ServiceUuids()?;
             for uuid in service_uuids {
                 if uuid == GUID::from(SERVICE_UUID) {
+                    // stop watching
+                    if let Some(watcher) = _watcher {
+                        watcher.Stop()?;
+                        println!("Stopped watching inside received_handler")
+                    }
                     // device is advertising flying carpet service, we want to pair with it
                     println!("found bluetooth {:12x}", address);
                     let device = BluetoothLEDevice::FromBluetoothAddressAsync(address)?.get()?;
@@ -90,7 +95,12 @@ impl BluetoothCentral {
                     {
                         // drop this lock once we've stored the device
                         let mut peer_device = thread_peer_device.blocking_lock();
-                        *peer_device = Some(device.clone());
+                        if *peer_device == None {
+                            *peer_device = Some(device.clone());
+                        } else {
+                            println!("Found another device advertising service but we've already initiated pairing");
+                            return Ok(());
+                        }
                     }
                     // determine if we're already paired
 
@@ -248,7 +258,7 @@ impl BluetoothCentral {
                 .lock()
                 .expect("Could not lock ble_ui_rx mutex.")
                 .blocking_recv()
-                .expect("ble_ui_rx reply from js was None");
+                .expect("ble_ui_rx reply from js was None"); // TODO: hit this trying transfers with paired macOS, this side receiving
             if approved {
                 args.Accept()?;
                 if thread_tx
@@ -351,38 +361,37 @@ impl BluetoothCentral {
             .as_ref()
             .expect("Bluetooth central had no remote device");
         println!("locked");
-        'outer: loop {
-            println!("loop, getting services");
-            tokio::task::yield_now().await;
-            let services = device.GetGattServicesAsync()?.get()?.Services()?;
-            // let services = device.GetGattServicesWithCacheModeAsync(BluetoothCacheMode::Uncached)?.get()?.Services()?;
-            println!("got services");
-            for service in services {
-                println!("UUID: {:?}", service.Uuid()?);
-                if service.Uuid()? == GUID::from(SERVICE_UUID) {
-                    println!("found service");
-                    for characteristic in [
-                        OS_CHARACTERISTIC_UUID,
-                        SSID_CHARACTERISTIC_UUID,
-                        PASSWORD_CHARACTERISTIC_UUID,
-                    ] {
-                        let characteristics = service
-                            .GetCharacteristicsForUuidAsync(GUID::from(characteristic))?
-                            .get()?
-                            .Characteristics()?;
-                        println!("got characteristics");
-                        for c in characteristics {
-                            if c.Uuid()? == GUID::from(characteristic) {
-                                self.characteristics
-                                    .insert(characteristic.to_string(), Some(c));
-                            }
+
+        let services = device.GetGattServicesAsync()?.get()?.Services()?;
+        // let services = device.GetGattServicesWithCacheModeAsync(BluetoothCacheMode::Uncached)?.get()?.Services()?;
+        println!("got services");
+        let mut found_service = false;
+        for service in services {
+            println!("UUID: {:?}", service.Uuid()?);
+            if service.Uuid()? == GUID::from(SERVICE_UUID) {
+                found_service = true;
+                println!("found service");
+                for characteristic in [
+                    OS_CHARACTERISTIC_UUID,
+                    SSID_CHARACTERISTIC_UUID,
+                    PASSWORD_CHARACTERISTIC_UUID,
+                ] {
+                    let characteristics = service
+                        .GetCharacteristicsForUuidAsync(GUID::from(characteristic))?
+                        .get()?
+                        .Characteristics()?;
+                    println!("got characteristics");
+                    for c in characteristics {
+                        if c.Uuid()? == GUID::from(characteristic) {
+                            self.characteristics
+                                .insert(characteristic.to_string(), Some(c));
                         }
                     }
-                    self.peer_service = Some(service);
-                    break 'outer;
                 }
+                self.peer_service = Some(service);
             }
-            println!("did not find flying carpet service, trying again...");
+        }
+        if !found_service {
             println!(
                 "Could not enumerate services, unpairing from device. Please restart transfer."
             );
@@ -392,7 +401,7 @@ impl BluetoothCentral {
             let status = unpairing_result.Status()?;
             println!("Unpairing result: {:?}", status);
             Err("Could not enumerate services, unpairing from device. Please restart transfer.")?;
-            std::thread::sleep(std::time::Duration::from_secs(2));
+            // std::thread::sleep(std::time::Duration::from_secs(2));
         }
         // we had exited this function without setting OS_CHARACTERISTIC_UUID and panicked later.
         // there was a problem where if we hit pair on iOS first, windows sees flying carpet service. but if windows pairs first, we don't: solved by adding service to peripheralManager when it's powered on on iOS?
@@ -458,7 +467,7 @@ impl BluetoothCentral {
                 x
             }
             Err(e) => {
-                println!("Second error: {}", e);
+                println!("Second error: {}", e); // TODO: unpair here, but also everywhere else central might fail, so higher up?
                 return Err(Box::new(e));
             }
         };
