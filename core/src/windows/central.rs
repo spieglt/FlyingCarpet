@@ -11,11 +11,9 @@ use windows::{
             Advertisement::{
                 BluetoothLEAdvertisementReceivedEventArgs, BluetoothLEAdvertisementWatcher,
                 BluetoothLEAdvertisementWatcherStatus,
-            },
-            BluetoothConnectionStatus, BluetoothLEDevice,
-            GenericAttributeProfile::{
+            }, BluetoothCacheMode, BluetoothConnectionStatus, BluetoothLEDevice, GenericAttributeProfile::{
                 GattCharacteristic, GattCommunicationStatus, GattDeviceService, GattWriteOption,
-            },
+            }
         },
         Enumeration::{
             DeviceInformation, DeviceInformationCustomPairing, DevicePairingKinds,
@@ -362,8 +360,8 @@ impl BluetoothCentral {
             .expect("Bluetooth central had no remote device");
         println!("locked");
 
-        let services = device.GetGattServicesAsync()?.get()?.Services()?;
-        // let services = device.GetGattServicesWithCacheModeAsync(BluetoothCacheMode::Uncached)?.get()?.Services()?;
+        // let services = device.GetGattServicesAsync()?.get()?.Services()?;
+        let services = device.GetGattServicesWithCacheModeAsync(BluetoothCacheMode::Uncached)?.get()?.Services()?;
         println!("got services");
         let mut found_service = false;
         for service in services {
@@ -415,6 +413,7 @@ impl BluetoothCentral {
     }
 
     pub async fn read(&mut self, characteristic_uuid: &str) -> windows::core::Result<String> {
+        // tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         println!("reading {}", characteristic_uuid);
         let characteristic = self.characteristics[characteristic_uuid]
             .as_ref()
@@ -441,7 +440,8 @@ impl BluetoothCentral {
         characteristic_uuid: &str,
         value: &str,
     ) -> Result<(), Box<dyn Error>> {
-        println!("value: {}", value);
+        // tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        println!("writing value: {}", value);
         let characteristic = self.characteristics[characteristic_uuid]
             .as_ref()
             .expect(&format!("Missing characteristic {}", characteristic_uuid));
