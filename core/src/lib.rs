@@ -309,7 +309,7 @@ fn shut_down_hotspot<T: UI>(
     let peer_resource = peer_resource.as_ref();
     let ssid = ssid.lock().expect("Couldn't lock SSID mutex.");
     match network::stop_hotspot(peer_resource, ssid.as_deref()) {
-        Err(e) => ui.output(&format!("Error stopping hotspot: {}", e)),
+        Err(e) => ui.output(&format!("{}", e)),
         _ => (),
     };
 }
@@ -436,7 +436,7 @@ async fn confirm_version(
 // test switching os...
 // "send mode selected but no files present"
 // how did windows read OS "windows" from itself when acting as central but not peripheral?
-    // windows previously wrote "windows" to the OS characteristic of android, which stored it? doesn't look like it from the android code.
+// windows previously wrote "windows" to the OS characteristic of android, which stored it? doesn't look like it from the android code.
 // folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh.
 // fix tests
 // fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux: have to get whatever is blocking on background thread?

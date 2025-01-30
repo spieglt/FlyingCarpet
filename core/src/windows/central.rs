@@ -11,9 +11,11 @@ use windows::{
             Advertisement::{
                 BluetoothLEAdvertisementReceivedEventArgs, BluetoothLEAdvertisementWatcher,
                 BluetoothLEAdvertisementWatcherStatus,
-            }, BluetoothCacheMode, BluetoothConnectionStatus, BluetoothLEDevice, GenericAttributeProfile::{
+            },
+            BluetoothCacheMode, BluetoothConnectionStatus, BluetoothLEDevice,
+            GenericAttributeProfile::{
                 GattCharacteristic, GattCommunicationStatus, GattDeviceService, GattWriteOption,
-            }
+            },
         },
         Enumeration::{
             DeviceInformation, DeviceInformationCustomPairing, DevicePairingKinds,
@@ -361,7 +363,10 @@ impl BluetoothCentral {
         println!("locked");
 
         // let services = device.GetGattServicesAsync()?.get()?.Services()?;
-        let services = device.GetGattServicesWithCacheModeAsync(BluetoothCacheMode::Uncached)?.get()?.Services()?;
+        let services = device
+            .GetGattServicesWithCacheModeAsync(BluetoothCacheMode::Uncached)?
+            .get()?
+            .Services()?;
         println!("got services");
         let mut found_service = false;
         for service in services {

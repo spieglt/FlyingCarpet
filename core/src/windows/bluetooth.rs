@@ -151,7 +151,6 @@ pub async fn negotiate_bluetooth<T: UI>(
         let msg =
             process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui).await?;
 
-
         // wait to pair
         if msg != BluetoothMessage::AlreadyPaired {
             process_bluetooth_message(BluetoothMessage::PairSuccess, &mut rx, ui).await?;

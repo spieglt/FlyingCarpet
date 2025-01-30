@@ -19,7 +19,7 @@ use crate::{
     Mode, Peer,
 };
 
-pub async fn find_charcteristics(device: &Device) -> Result<HashMap<&str, Characteristic>> {
+pub async fn find_characteristics(device: &Device) -> Result<HashMap<&str, Characteristic>> {
     let addr = device.address();
     let uuids = device.uuids().await?.unwrap_or_default();
 
@@ -73,7 +73,20 @@ pub async fn find_charcteristics(device: &Device) -> Result<HashMap<&str, Charac
         //     println!("    Already paired");
         // }
 
+        sleep(Duration::from_secs(2)).await;
         println!("    Enumerating services...");
+        if !device.is_services_resolved().await? {
+            println!("Not resolved...");
+            sleep(Duration::from_secs(2)).await;
+        } else {
+            println!("Services are resolved: {:?}", device.services().await?);
+            let data = device.service_data().await?;
+            println!("Data: {:?}", data);
+        }
+        // let mut events = device.events().await.unwrap();
+        // while let Some(ev) = events.next().await {
+        //     println!("Received event {:?}", ev);
+        // }
         for service in device.services().await? {
             let uuid = service.uuid().await?;
             println!("    Service UUID: {}", &uuid);
@@ -127,7 +140,7 @@ pub async fn scan(adapter: &Adapter) -> bluer::Result<Device> {
     uuids.insert(Uuid::parse_str(SERVICE_UUID).expect("Could not parse service UUID"));
 
     let filter = DiscoveryFilter {
-        transport: DiscoveryTransport::Le,
+        transport: DiscoveryTransport::Auto,
         uuids,
         ..Default::default()
     };
@@ -148,6 +161,7 @@ pub async fn scan(adapter: &Adapter) -> bluer::Result<Device> {
         while let Some(evt) = discover.next().await {
             match evt {
                 AdapterEvent::DeviceAdded(addr) => {
+                    // let device = adapter.connect_device(addr, bluer::AddressType::LePublic).await?;
                     let device = adapter.device(addr)?;
                     return Ok(device);
                     // match device.disconnect().await {

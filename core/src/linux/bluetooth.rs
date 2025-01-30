@@ -1,8 +1,8 @@
 mod central;
 mod peripheral;
 
-use bluer::Session;
-use central::{exchange_info, find_charcteristics};
+use bluer::{Adapter, Session};
+use central::{exchange_info, find_characteristics};
 use std::{error::Error, mem::discriminant, time::Duration};
 use tokio::{sync::mpsc, time::sleep};
 
@@ -111,9 +111,10 @@ pub async fn negotiate_bluetooth<T: UI>(
     } else {
         // acting as central
         ui.output("Scanning for Bluetooth peripherals...");
+        // let info = central::scan(&adapter, &mode).await?;
         let device = central::scan(&adapter).await?;
 
-        let characteristics = match find_charcteristics(&device).await {
+        let characteristics = match find_characteristics(&device).await {
             Ok(c) => c,
             Err(e) => {
                 println!("    Device failed: {}", e);
@@ -164,7 +165,7 @@ pub async fn process_bluetooth_message<T: UI>(
             }
             BluetoothMessage::PeerReadSsid => ui.output("Peer read our SSID"),
             BluetoothMessage::PeerReadPassword => ui.output("Peer read our password"),
-            BluetoothMessage::Other(s) => ui.output(&format!("Bluetooth peering result: {}", s)),
+            BluetoothMessage::OtherError(s) => Err(s.as_str())?, // ui.output(&format!("Bluetooth peering result: {}", s)),
             other_message => println!(
                 "Other Bluetooth message not used on Linux: {:?}",
                 other_message
