@@ -310,7 +310,7 @@ fn shut_down_hotspot<T: UI>(
     let ssid = ssid.lock().expect("Couldn't lock SSID mutex.");
     match network::stop_hotspot(peer_resource, ssid.as_deref()) {
         Err(e) => ui.output(&format!("{}", e)),
-        _ => (),
+        Ok(msg) => ui.output(&msg),
     };
 }
 

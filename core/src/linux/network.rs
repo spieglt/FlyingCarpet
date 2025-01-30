@@ -103,19 +103,25 @@ fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<
 pub fn stop_hotspot(
     _peer_resource: Option<&PeerResource>,
     ssid: Option<&str>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<String, Box<dyn Error>> {
     if ssid.is_some() {
-        let options = Some(vec!["connection", "delete", ssid.unwrap()]);
-        let command_output = run_command("nmcli", options)?;
-        if !command_output.status.success() {
-            let stderr = String::from_utf8_lossy(&command_output.stderr);
-            Err(format!("Error stopping hotspot: {}", stderr))?;
+        // TODO: check if ssid is in list, only delete if so
+        let list = run_command("nmcli", Some(vec!["connection", "show"]))?;
+        if String::from_utf8_lossy(&list.stdout).contains(ssid.unwrap()) {
+            let options = Some(vec!["connection", "delete", ssid.unwrap()]);
+            let command_output = run_command("nmcli", options)?;
+            if !command_output.status.success() {
+                let stderr = String::from_utf8_lossy(&command_output.stderr);
+                Err(format!("Error stopping hotspot: {}", stderr))?;
+            }
+            let output = String::from_utf8_lossy(&command_output.stdout);
+            Ok(format!("Stop hotspot output: {}", output))
+        } else {
+            Ok(format!("SSID {} was not a known network", ssid.unwrap()))
         }
-        let output = String::from_utf8_lossy(&command_output.stdout);
-        // TODO: output this to ui
-        println!("Stop hotspot output: {}", output);
+    } else {
+        Ok(String::new())
     }
-    Ok(())
 }
 
 fn join_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<dyn Error>> {

@@ -232,7 +232,7 @@ pub async fn exchange_info(
         println!("Peer's SSID: {}", ssid);
         let password = password_char.read().await?;
         let password = String::from_utf8(password).expect("Password was not UTF-8");
-        println!("Peer's password: {}", ssid);
+        println!("Peer's password: {}", password);
         Ok((peer_os, ssid, password))
     }
 }
