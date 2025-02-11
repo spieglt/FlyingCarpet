@@ -258,7 +258,7 @@ impl BluetoothCentral {
                 .lock()
                 .expect("Could not lock ble_ui_rx mutex.")
                 .blocking_recv()
-                .expect("ble_ui_rx reply from js was None"); // TODO: hit this trying transfers with paired macOS, this side receiving
+                .expect("ble_ui_rx reply from js was None");
             if approved {
                 args.Accept()?;
                 if thread_tx
@@ -395,14 +395,11 @@ impl BluetoothCentral {
             }
         }
         if !found_service {
+            let info = device.DeviceInformation()?;
+            unpair(info)?;
             println!(
                 "Could not enumerate services, unpairing from device. Please restart transfer."
             );
-            let info = device.DeviceInformation()?;
-            let pairing = info.Pairing()?;
-            let unpairing_result = pairing.UnpairAsync()?.get()?;
-            let status = unpairing_result.Status()?;
-            println!("Unpairing result: {:?}", status);
             Err("Could not enumerate services, unpairing from device. Please restart transfer.")?;
             // std::thread::sleep(std::time::Duration::from_secs(2));
         }
@@ -452,30 +449,9 @@ impl BluetoothCentral {
             .expect(&format!("Missing characteristic {}", characteristic_uuid));
         let write_option = GattWriteOption::WriteWithResponse;
         let ibuffer = str_to_ibuffer(value)?;
-        // let status = characteristic
-        //     .WriteValueWithOptionAsync(&ibuffer, write_option)?
-        //     .get()?;
-        let status = characteristic.WriteValueWithOptionAsync(&ibuffer, write_option);
-        let status = match status {
-            Ok(x) => {
-                println!("Ok");
-                x
-            }
-            Err(e) => {
-                println!("Error: {}", e);
-                return Err(Box::new(e));
-            }
-        };
-        let status = match status.get() {
-            Ok(x) => {
-                println!("Ok");
-                x
-            }
-            Err(e) => {
-                println!("Second error: {}", e); // TODO: unpair here, but also everywhere else central might fail, so higher up?
-                return Err(Box::new(e));
-            }
-        };
+        let status = characteristic
+            .WriteValueWithOptionAsync(&ibuffer, write_option)?
+            .get()?;
         if status != GattCommunicationStatus::Success {
             Err(format!(
                 "Error writing to Bluetooth peripheral: {:?}",
@@ -486,6 +462,26 @@ impl BluetoothCentral {
         }
         Ok(())
     }
+
+    // used higher up if reads/writes fail
+    pub fn unpair(&self) -> windows::core::Result<()> {
+        let device = self.peer_device.blocking_lock();
+        let Some(ref device) = *device else {
+            println!("Unpair called but no peer device paired");
+            return Ok(())
+        };
+        let info = device.DeviceInformation()?;
+        unpair(info)
+    }
+}
+
+// used within BluetoothCentral because get_services_and_characteristics() will already have locked the peer device mutex
+fn unpair(info: DeviceInformation) -> windows::core::Result<()> {
+    let pairing = info.Pairing()?;
+    let unpairing_result = pairing.UnpairAsync()?.get()?;
+    let status = unpairing_result.Status()?;
+    println!("Unpairing result: {:?}", status);
+    Ok(())
 }
 
 const ERRORS: [(i32, &str); 20] = [

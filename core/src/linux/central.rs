@@ -53,7 +53,7 @@ pub async fn find_characteristics(device: &Device) -> Result<HashMap<&str, Chara
             println!("    Already connected");
         }
 
-        // TODO: bond?
+        // bond?
         // sleep(Duration::from_secs(2)).await;
         // if !device.is_paired().await? {
         //     println!("    Pairing...");

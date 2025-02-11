@@ -142,7 +142,6 @@ pub async fn negotiate_bluetooth<T: UI>(
         ui.output("Scanning for Bluetooth peripherals...");
         central.scan(ble_ui_rx)?;
 
-        // TODO: should this go back below process_bluetooth_message(Pin)?
         central.stop_watching()?;
         println!("stopped watching");
 
@@ -158,16 +157,34 @@ pub async fn negotiate_bluetooth<T: UI>(
 
         println!("before get_services_and_characteristics");
         // discover service and characteristics once paired
-        central.get_services_and_characteristics().await?;
+        if let Err(e) = central.get_services_and_characteristics().await {
+            if let Err(unpair_error) = central.unpair() {
+                println!("Error unpairing: {}", unpair_error);
+            }
+            Err(e)?
+        }
         println!("after get_services_and_characteristics");
 
         ui.output("Reading peer's OS");
         // read peer's OS
-        let peer = central.read(OS_CHARACTERISTIC_UUID).await?;
+        let peer = match central.read(OS_CHARACTERISTIC_UUID).await {
+            Ok(p) => p,
+            Err(e) => {
+                if let Err(unpair_error) = central.unpair() {
+                    println!("Error unpairing: {}", unpair_error);
+                }
+                Err(e)?
+            }
+        };
         ui.output(&format!("Peer OS: {:?}", peer));
 
         // write OS
-        central.write(OS_CHARACTERISTIC_UUID, OS).await?;
+        if let Err(e) = central.write(OS_CHARACTERISTIC_UUID, OS).await {
+            if let Err(unpair_error) = central.unpair() {
+                println!("Error unpairing: {}", unpair_error);
+            }
+            Err(e)?
+        };
         println!("wrote OS");
 
         // read or write ssid and password
@@ -175,15 +192,39 @@ pub async fn negotiate_bluetooth<T: UI>(
             println!("hosting, writing wifi info to peer");
             let password = generate_password();
             let (_, ssid) = get_key_and_ssid(&password);
-            central.write(SSID_CHARACTERISTIC_UUID, &ssid).await?;
-            central
-                .write(PASSWORD_CHARACTERISTIC_UUID, &password)
-                .await?;
+            if let Err(e) = central.write(SSID_CHARACTERISTIC_UUID, &ssid).await {
+                if let Err(unpair_error) = central.unpair() {
+                    println!("Error unpairing: {}", unpair_error);
+                }
+                Err(e)?
+            }
+            if let Err(e) = central.write(PASSWORD_CHARACTERISTIC_UUID, &password).await {
+                if let Err(unpair_error) = central.unpair() {
+                    println!("Error unpairing: {}", unpair_error);
+                }
+                Err(e)?
+            }
             (ssid, password)
         } else {
             println!("joining, reading wifi info from peer");
-            let ssid = central.read(SSID_CHARACTERISTIC_UUID).await?;
-            let password = central.read(PASSWORD_CHARACTERISTIC_UUID).await?;
+            let ssid = match central.read(SSID_CHARACTERISTIC_UUID).await {
+                Ok(s) => s,
+                Err(e) => {
+                    if let Err(unpair_error) = central.unpair() {
+                        println!("Error unpairing: {}", unpair_error);
+                    }
+                    Err(e)?
+                }
+            };
+            let password = match central.read(PASSWORD_CHARACTERISTIC_UUID).await {
+                Ok(p) => p,
+                Err(e) => {
+                    if let Err(unpair_error) = central.unpair() {
+                        println!("Error unpairing: {}", unpair_error);
+                    }
+                    Err(e)?
+                }
+            };
             (ssid, password)
         };
         Ok((peer, ssid, password))

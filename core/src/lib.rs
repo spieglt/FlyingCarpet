@@ -135,7 +135,6 @@ pub async fn start_transfer<T: UI>(
             Err(e) => {
                 ui.output(&format!("Could not establish Bluetooth connection: {}", e));
                 println!("Could not establish Bluetooth connection: {}", e);
-                // TODO: unpair here somehow? no, probably further down, anything that can go wrong in central?
                 return None;
             }
         }
@@ -422,6 +421,7 @@ async fn confirm_version(
 }
 
 // TODO:
+// linux unpair logic for read/write/get_services?
 // linux sending to linux: last file sent but then hung, didn't exit transfer. receiving end said "didn't receive confirmation".
 // linux can't receive from windows if already paired/connected, service not found. but then it disconnects and next transfer works.
 // is the problem that the device we see advertising isn't the device we're already paired to? but then the device we're paired to presumably offers the services already.
@@ -429,7 +429,6 @@ async fn confirm_version(
 // linux name is null on android when pairing - manufacturer info?
 // windows not keeping bluetooth advertiser in scope till central can read it?
 // test multiple transfers back to back, windows central unpaired but ios peripheral still paired, already paired but switched mode
-// why is ios looking for ip address for a long time?
 // test switching os...
 // "send mode selected but no files present"
 // how did windows read OS "windows" from itself when acting as central but not peripheral?
