@@ -427,17 +427,20 @@ async fn confirm_version(
 // is the problem that the device we see advertising isn't the device we're already paired to? but then the device we're paired to presumably offers the services already.
 // https://github.com/hbldh/bleak/issues/367#issuecomment-784375835
 // linux name is null on android when pairing - manufacturer info?
-// windows not keeping bluetooth advertiser in scope till central can read it?
-// test multiple transfers back to back, windows central unpaired but ios peripheral still paired, already paired but switched mode
-// test switching os...
-// "send mode selected but no files present"
-// how did windows read OS "windows" from itself when acting as central but not peripheral?
-// windows previously wrote "windows" to the OS characteristic of android, which stored it? doesn't look like it from the android code.
-// folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh. note in instructions/readme.
-// fix tests
 // fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux: have to get whatever is blocking on background thread?
 // show qr code after refresh
+// write instructions
+// note drag and drop to send folder in instructions/readme
+
+// TESTS:
+// test multiple transfers back to back, windows central unpaired but ios peripheral still paired, already paired but switched mode
+// test switching os...
+// fix tests
 // test pulling wifi card, quitting program, etc.
+
+// MYSTERIES
+// how did windows read OS "windows" from itself when acting as central but not peripheral?
+// windows previously wrote "windows" to the OS characteristic of android, which stored it? doesn't look like it from the android code.
 
 // LATER MAYBE:
 // code signing for windows?
