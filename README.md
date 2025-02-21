@@ -1,4 +1,4 @@
-## Version 8 adds the option to send folders from Android and iOS
+## Version 9 adds Bluetooth for transfer negotiation
 
 ### Download for Android:
 
@@ -16,9 +16,7 @@ Or search the App Store for "Flying Carpet File Transfer".
 
 # Flying Carpet
 
-TODO: Bluetooth
-
-Send and receive files between Android, iOS, Linux, macOS, and Windows over ad hoc WiFi. No shared network or cell connection required, just two devices with WiFi chips in close range.
+Send and receive files between Android, iOS, Linux, macOS, and Windows over ad hoc WiFi. No shared network or cell connection required, just two devices with WiFi (and optionally Bluetooth) chips in close range.
 
 Don't have a flash drive? Don't have access to a wireless network? Need to move a file larger than 2GB between different filesystems but don't want to set up a network share? Try it out!
 
@@ -66,6 +64,8 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 + The Linux version was developed and tested on Linux Mint. I mainly intend for it to run on Debian-based distributions. I will try to help troubleshoot others if I can, but I may not be able to as I don't have access to spare machines. There has been at least one [issue](https://github.com/spieglt/FlyingCarpet/issues/64) running on Fedora, possibly to SELinux but I don't really know.
 
 + Sometimes when the Cancel button is hit on the desktop platforms, it can take time for the OS to finish trying to join or create a hotspot. Please only click the Cancel button once and wait a few seconds. This sounds like it should be easy to fix, but last time I tried it was not.
+
++ Bluetooth cannot be used when sending from macOS to Linux. When Linux as a BLE central connects to macOS as a BLE peripheral, it performs a pairing, and macOS apparently prefers pairing not be done until an encrypted characteristic is read (or for some other reason Linux can't enumerate its services after pairing).
 
 ## Planned Features
 

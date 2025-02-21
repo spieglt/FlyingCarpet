@@ -383,11 +383,27 @@ window.modeChange = modeChange;
 window.peerChange = peerChange;
 
 const aboutMessage = `https://flyingcarpet.spiegl.dev
-Version: 8.0.1
+Version: 9.0.0
 theron@spiegl.dev
-Copyright (c) 2024, Theron Spiegl
+Copyright (c) 2025, Theron Spiegl
 All rights reserved.
 
-Flying Carpet performs file transfers between two laptops or phones (Android, iOS, Linux, macOS, Windows) via ad hoc WiFi. No access point or network gear is required. Just select a file, whether each device is sending or receiving, and the operating system of the other device. For mobile versions, search for "Flying Carpet File Transfer" in the Apple App Store or Google Play Store.
+Flying Carpet transfers files between two Android, iOS, Linux, macOS, and Windows devices over ad hoc WiFi. No access point or shared network is required, just two WiFi cards in close range. The only pairings that don't work are from one Apple device (macOS or iOS) to another, because Apple no longer allows hotspots to be started programmatically.
+
+INSTRUCTIONS
+
+Turn Bluetooth on or off on both devices. If one side fails to initialize Bluetooth or has it turned off, the other side must disable the "Use Bluetooth" switch in Flying Carpet.
+
+Select Sending on one device and Receiving on the other. If not using Bluetooth, select the operating system of the other device. Click the "Start Transfer" button on each device. On the sending device, select the files or folder to send. On the receiving device, select the folder in which to receive files. (To send a folder, drag it onto the window instead of clicking "Start Transfer".)
+
+If using Bluetooth, the WiFi connection will be configured automatically. Otherwise you will need to scan a QR code or type in a password. (If transferring between Android and macOS, you will have to type in the SSID and password.)
+
+If prompted to join a WiFi network or modify WiFi settings, say Allow. On Windows you may have to grant permission to add a firewall rule. On macOS you may have to grant location permissions. Flying Carpet does not read or collect your location. Apple requires this permission to scan for WiFi networks.
+
+TROUBLESHOOTING
+
+If using Bluetooth fails, try manually unpairing the devices from one another and starting a new transfer.
+
+If sending from macOS to Linux, disable Bluetooth on both sides.
 
 Licensed under the GPL3: https://www.gnu.org/licenses/gpl-3.0.html#license-text`

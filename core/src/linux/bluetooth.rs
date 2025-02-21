@@ -122,7 +122,13 @@ pub async fn negotiate_bluetooth<T: UI>(
                 Err(e)?
             }
         };
-        let info = exchange_info(characteristics, mode).await?;
+        let info = match exchange_info(characteristics, mode).await {
+            Ok(i) => i,
+            Err(e) => {
+                let _ = adapter.remove_device(device.address()).await;
+                Err(e)?
+            }
+        };
         Ok(info)
     }
 }

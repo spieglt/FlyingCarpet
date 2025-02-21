@@ -1,6 +1,5 @@
 use bluer::{
-    gatt::{remote::Characteristic, remote::CharacteristicWriteRequest, WriteOp},
-    Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, ErrorKind, Result, Uuid,
+    gatt::{remote::{Characteristic, CharacteristicWriteRequest}, WriteOp}, Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, Error, ErrorKind, Result, Uuid
 };
 use futures::{pin_mut, StreamExt};
 use std::{
@@ -51,6 +50,10 @@ pub async fn find_characteristics(device: &Device) -> Result<HashMap<&str, Chara
             println!("    Connected");
         } else {
             println!("    Already connected");
+            Err(Error{
+                kind: ErrorKind::AlreadyConnected,
+                message: "Already connected".to_string(),
+            })?
         }
 
         // bond?
@@ -73,16 +76,16 @@ pub async fn find_characteristics(device: &Device) -> Result<HashMap<&str, Chara
         //     println!("    Already paired");
         // }
 
-        sleep(Duration::from_secs(2)).await;
-        println!("    Enumerating services...");
-        if !device.is_services_resolved().await? {
-            println!("Not resolved...");
-            sleep(Duration::from_secs(2)).await;
-        } else {
-            println!("Services are resolved: {:?}", device.services().await?);
-            let data = device.service_data().await?;
-            println!("Data: {:?}", data);
-        }
+        // sleep(Duration::from_secs(2)).await;
+        // println!("    Enumerating services...");
+        // if !device.is_services_resolved().await? {
+        //     println!("Not resolved...");
+        //     sleep(Duration::from_secs(2)).await;
+        // } else {
+        //     println!("Services are resolved: {:?}", device.services().await?);
+        //     let data = device.service_data().await?;
+        //     println!("Data: {:?}", data);
+        // }
         // let mut events = device.events().await.unwrap();
         // while let Some(ev) = events.next().await {
         //     println!("Received event {:?}", ev);

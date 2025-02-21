@@ -421,16 +421,11 @@ async fn confirm_version(
 }
 
 // TODO:
-// linux unpair logic for read/write/get_services?
-// linux sending to linux: last file sent but then hung, didn't exit transfer. receiving end said "didn't receive confirmation".
-// linux can't receive from windows if already paired/connected, service not found. but then it disconnects and next transfer works.
-// is the problem that the device we see advertising isn't the device we're already paired to? but then the device we're paired to presumably offers the services already.
+// test closing about window with x on linux: panic?
 // https://github.com/hbldh/bleak/issues/367#issuecomment-784375835
 // linux name is null on android when pairing - manufacturer info?
 // fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux: have to get whatever is blocking on background thread?
 // show qr code after refresh
-// write instructions
-// note drag and drop to send folder in instructions/readme
 
 // TESTS:
 // test multiple transfers back to back, windows central unpaired but ios peripheral still paired, already paired but switched mode
@@ -441,6 +436,9 @@ async fn confirm_version(
 // MYSTERIES
 // how did windows read OS "windows" from itself when acting as central but not peripheral?
 // windows previously wrote "windows" to the OS characteristic of android, which stored it? doesn't look like it from the android code.
+// linux sending to linux: last file sent but then hung, didn't exit transfer. receiving end said "didn't receive confirmation".
+// linux can't receive from windows if already paired/connected, service not found. but then it disconnects and next transfer works.
+// is the problem that the device we see advertising isn't the device we're already paired to? but then the device we're paired to presumably offers the services already.
 
 // LATER MAYBE:
 // code signing for windows?
