@@ -16,6 +16,10 @@ use windows::{
     Storage::Streams::{DataReader, DataWriter, IBuffer, UnicodeEncoding},
 };
 
+enum BluetoothError {
+    
+}
+
 pub(crate) const OS: &str = "windows";
 const SERVICE_UUID: &str = "A70BF3CA-F708-4314-8A0E-5E37C259BE5C";
 pub(crate) const OS_CHARACTERISTIC_UUID: &str = "BEE14848-CC55-4FDE-8E9D-2E0F9EC45946";
@@ -63,7 +67,7 @@ pub async fn negotiate_bluetooth<T: UI>(
     mode: &Mode,
     ble_ui_rx: mpsc::Receiver<bool>,
     ui: &T,
-) -> Result<(String, String, String), Box<dyn Error>> {
+) -> Result<(String, String, String), Box<dyn Error + Send>> {
     let (tx, mut rx) = mpsc::channel(1);
     let mut peripheral = BluetoothPeripheral::new(tx.clone()).map_err(|e| e.to_string())?;
     let mut central = BluetoothCentral::new(tx.clone()).map_err(|e| e.to_string())?;
@@ -158,7 +162,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         println!("before get_services_and_characteristics");
         // discover service and characteristics once paired
         if let Err(e) = central.get_services_and_characteristics().await {
-            if let Err(unpair_error) = central.unpair() {
+            if let Err(unpair_error) = central.unpair().await {
                 println!("Error unpairing: {}", unpair_error);
             }
             Err(e)?
@@ -170,7 +174,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         let peer = match central.read(OS_CHARACTERISTIC_UUID).await {
             Ok(p) => p,
             Err(e) => {
-                if let Err(unpair_error) = central.unpair() {
+                if let Err(unpair_error) = central.unpair().await {
                     println!("Error unpairing: {}", unpair_error);
                 }
                 Err(e)?
@@ -180,7 +184,7 @@ pub async fn negotiate_bluetooth<T: UI>(
 
         // write OS
         if let Err(e) = central.write(OS_CHARACTERISTIC_UUID, OS).await {
-            if let Err(unpair_error) = central.unpair() {
+            if let Err(unpair_error) = central.unpair().await {
                 println!("Error unpairing: {}", unpair_error);
             }
             Err(e)?
@@ -193,13 +197,13 @@ pub async fn negotiate_bluetooth<T: UI>(
             let password = generate_password();
             let (_, ssid) = get_key_and_ssid(&password);
             if let Err(e) = central.write(SSID_CHARACTERISTIC_UUID, &ssid).await {
-                if let Err(unpair_error) = central.unpair() {
+                if let Err(unpair_error) = central.unpair().await {
                     println!("Error unpairing: {}", unpair_error);
                 }
                 Err(e)?
             }
             if let Err(e) = central.write(PASSWORD_CHARACTERISTIC_UUID, &password).await {
-                if let Err(unpair_error) = central.unpair() {
+                if let Err(unpair_error) = central.unpair().await {
                     println!("Error unpairing: {}", unpair_error);
                 }
                 Err(e)?
@@ -210,7 +214,7 @@ pub async fn negotiate_bluetooth<T: UI>(
             let ssid = match central.read(SSID_CHARACTERISTIC_UUID).await {
                 Ok(s) => s,
                 Err(e) => {
-                    if let Err(unpair_error) = central.unpair() {
+                    if let Err(unpair_error) = central.unpair().await {
                         println!("Error unpairing: {}", unpair_error);
                     }
                     Err(e)?
@@ -219,7 +223,7 @@ pub async fn negotiate_bluetooth<T: UI>(
             let password = match central.read(PASSWORD_CHARACTERISTIC_UUID).await {
                 Ok(p) => p,
                 Err(e) => {
-                    if let Err(unpair_error) = central.unpair() {
+                    if let Err(unpair_error) = central.unpair().await {
                         println!("Error unpairing: {}", unpair_error);
                     }
                     Err(e)?

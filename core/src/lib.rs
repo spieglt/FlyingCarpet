@@ -26,7 +26,7 @@ use tokio::{
 use utils::get_key_and_ssid;
 
 const CHUNKSIZE: usize = 1_000_000; // 1 MB
-const MAJOR_VERSION: u64 = 8;
+const MAJOR_VERSION: u64 = 9;
 
 pub trait UI: Clone + Send + 'static {
     fn output(&self, msg: &str);
@@ -386,6 +386,7 @@ async fn confirm_version(
     peer_resource: &PeerResource,
     stream: &mut TcpStream,
 ) -> Result<(), Box<dyn Error>> {
+    // TODO: 8/9 compatibility?
     // only really have to worry about version 6 as that's the only one online and in app store. it will do mode confirmation first,
     // and obey hotspot host/guest rule, and it will write 0 or 1 for mode, so we shouldn't deadlock with both ends waiting.
     let peer_version = match peer_resource {
@@ -419,6 +420,14 @@ async fn confirm_version(
     } // otherwise, versions match, implicitly compatible
     Ok(())
 }
+
+/*
+Unpairing result: DeviceUnpairingResultStatus(0)
+Could not enumerate services, unpairing from device. Please restart transfer.
+thread 'tokio-runtime-worker' panicked at core\src\windows\central.rs:468:39:
+Cannot block the current thread from within a runtime. This happens because a function attempted to block the current thread while the thread is being used to drive asynchronous tasks.
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+*/
 
 // TODO:
 // test closing about window with x on linux: panic?

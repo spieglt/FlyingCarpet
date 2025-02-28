@@ -464,7 +464,7 @@ impl BluetoothCentral {
     }
 
     // used higher up if reads/writes fail
-    pub fn unpair(&self) -> windows::core::Result<()> {
+    pub async fn unpair(&self) -> windows::core::Result<()> {
         let device = self.peer_device.blocking_lock();
         let Some(ref device) = *device else {
             println!("Unpair called but no peer device paired");
