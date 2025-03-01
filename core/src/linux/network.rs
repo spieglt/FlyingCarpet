@@ -1,6 +1,6 @@
+use crate::error::{fc_error, FCError};
 use crate::utils::run_command;
 use crate::{Mode, Peer, PeerResource, WiFiInterface, UI};
-use std::error::Error;
 use tokio::task;
 
 // stub
@@ -93,7 +93,7 @@ fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), FCEr
         let res = run_command(nmcli, Some(command))?;
         if !res.status.success() {
             let stderr = String::from_utf8_lossy(&res.stderr);
-            Err(format!("Could not start hotspot: {}", stderr))?;
+            fc_error(&format!("Could not start hotspot: {}", stderr))?;
         }
         // println!("output: {}", String::from_utf8_lossy(&res.stdout));
     }
@@ -112,7 +112,7 @@ pub fn stop_hotspot(
             let command_output = run_command("nmcli", options)?;
             if !command_output.status.success() {
                 let stderr = String::from_utf8_lossy(&command_output.stderr);
-                Err(format!("Error stopping hotspot: {}", stderr))?;
+                fc_error(&format!("Error stopping hotspot: {}", stderr))?;
             }
             let output = String::from_utf8_lossy(&command_output.stdout);
             Ok(format!("Stop hotspot output: {}", output))
@@ -148,7 +148,7 @@ fn join_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), FCErr
         let res = run_command(nmcli, Some(command))?;
         if !res.status.success() {
             let stderr = String::from_utf8_lossy(&res.stderr);
-            Err(format!("Error joining hotspot: {}", stderr))?;
+            fc_error(&format!("Error joining hotspot: {}", stderr))?;
         }
         // println!(
         //     "join hotspot output: {}",

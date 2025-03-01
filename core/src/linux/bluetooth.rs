@@ -3,14 +3,23 @@ mod peripheral;
 
 use bluer::{Adapter, Session};
 use central::{exchange_info, find_characteristics};
-use std::{error::Error, mem::discriminant, time::Duration};
+use std::{mem::discriminant, time::Duration};
 use tokio::{sync::mpsc, time::sleep};
 
 use crate::{
+    error::{fc_error, FCError},
     network::is_hosting,
     utils::{generate_password, get_key_and_ssid, BluetoothMessage},
     Mode, Peer, UI,
 };
+
+impl From<bluer::Error> for FCError {
+    fn from(value: bluer::Error) -> Self {
+        FCError {
+            message: format!("Bluer error: {}", value),
+        }
+    }
+}
 
 pub(crate) const OS: &str = "linux";
 const SERVICE_UUID: &str = "A70BF3CA-F708-4314-8A0E-5E37C259BE5C";
@@ -56,10 +65,12 @@ pub async fn negotiate_bluetooth<T: UI>(
                 .await?
             {
                 BluetoothMessage::PeerOS(os) => os,
-                other => Err(format!(
-                    "Received unexpected BluetoothMessage when waiting for peer OS: {:?}",
-                    other
-                ))?,
+                other => Err(FCError {
+                    message: format!(
+                        "Received unexpected BluetoothMessage when waiting for peer OS: {:?}",
+                        other
+                    ),
+                })?,
             };
 
         println!("Removing advertisement");
@@ -81,10 +92,12 @@ pub async fn negotiate_bluetooth<T: UI>(
             .await?
             {
                 BluetoothMessage::SSID(s) => s,
-                other => Err(format!(
-                    "Received unexpected BluetoothMessage when waiting for peer OS: {:?}",
-                    other
-                ))?,
+                other => Err(FCError {
+                    message: format!(
+                        "Received unexpected BluetoothMessage when waiting for peer OS: {:?}",
+                        other
+                    ),
+                })?,
             };
             println!("Peer's SSID: {}", ssid);
             password = match process_bluetooth_message(
@@ -95,10 +108,12 @@ pub async fn negotiate_bluetooth<T: UI>(
             .await?
             {
                 BluetoothMessage::Password(p) => p,
-                other => Err(format!(
-                    "Received unexpected BluetoothMessage when waiting for peer OS: {:?}",
-                    other
-                ))?,
+                other => Err(FCError {
+                    message: format!(
+                        "Received unexpected BluetoothMessage when waiting for peer OS: {:?}",
+                        other
+                    ),
+                })?,
             };
             println!("Peer's password: {}", password);
         }
@@ -153,14 +168,14 @@ pub async fn process_bluetooth_message<T: UI>(
                 // and nothing will be blocked in central because the pairing_handler won't be called.
                 ui.output("Successfully paired");
             }
-            BluetoothMessage::PairFailure => Err("Pairing failed.")?,
+            BluetoothMessage::PairFailure => fc_error("Pairing failed.")?,
             BluetoothMessage::AlreadyPaired => {
                 ui.output("Already BLE paired with Bluetooth device");
                 if looking_for == BluetoothMessage::PairSuccess {
                     return Ok(msg);
                 }
             }
-            BluetoothMessage::UserCanceled => Err("User canceled.")?,
+            BluetoothMessage::UserCanceled => fc_error("User canceled.")?,
             BluetoothMessage::StartedAdvertising => {
                 ui.output("Started advertising Bluetooth service")
             }
@@ -171,7 +186,7 @@ pub async fn process_bluetooth_message<T: UI>(
             }
             BluetoothMessage::PeerReadSsid => ui.output("Peer read our SSID"),
             BluetoothMessage::PeerReadPassword => ui.output("Peer read our password"),
-            BluetoothMessage::OtherError(s) => Err(s.as_str())?, // ui.output(&format!("Bluetooth peering result: {}", s)),
+            BluetoothMessage::OtherError(s) => fc_error(s.as_str())?, // ui.output(&format!("Bluetooth peering result: {}", s)),
             other_message => println!(
                 "Other Bluetooth message not used on Linux: {:?}",
                 other_message
