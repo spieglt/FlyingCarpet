@@ -6,13 +6,14 @@ pub mod network;
 #[cfg_attr(target_os = "windows", path = "windows/bluetooth.rs")]
 pub mod bluetooth;
 
+pub mod error;
 mod receiving;
 mod sending;
 pub mod utils;
 
 use bluetooth::negotiate_bluetooth;
+use error::{fc_error, FCError};
 use std::{
-    error::Error,
     net::SocketAddr,
     path::{Path, PathBuf},
     str::FromStr,
@@ -313,10 +314,7 @@ fn shut_down_hotspot<T: UI>(
     };
 }
 
-async fn start_tcp<T: UI>(
-    peer_resource: &PeerResource,
-    ui: &T,
-) -> Result<TcpStream, Box<dyn Error>> {
+async fn start_tcp<T: UI>(peer_resource: &PeerResource, ui: &T) -> Result<TcpStream, FCError> {
     let stream;
     match peer_resource {
         PeerResource::WifiClient(gateway) => {
@@ -340,7 +338,7 @@ async fn confirm_mode(
     mode: Mode,
     peer_resource: &PeerResource,
     stream: &mut TcpStream,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), FCError> {
     let our_mode = match mode {
         Mode::Send(..) => 1,
         Mode::Receive(..) => 0,
@@ -355,11 +353,11 @@ async fn confirm_mode(
             };
             // wait to ensure host responds that mode selection was correct
             if stream.read_u64().await? != 1 {
-                let msg = format!(
+                let message = format!(
                     "Both ends of the transfer selected {}",
                     if our_mode == 0 { "receive" } else { "send" }
                 );
-                Err(msg)?
+                fc_error(&message)?
             }
         }
         PeerResource::WindowsHotspot(_) | PeerResource::LinuxHotspot => {
@@ -372,7 +370,7 @@ async fn confirm_mode(
                 );
                 // write failure to guest
                 stream.write_u64(0).await?;
-                Err(msg)?
+                fc_error(&msg)?
             } else {
                 // write success to guest
                 stream.write_u64(1).await?;
@@ -385,7 +383,7 @@ async fn confirm_mode(
 async fn confirm_version(
     peer_resource: &PeerResource,
     stream: &mut TcpStream,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), FCError> {
     // TODO: 8/9 compatibility?
     // only really have to worry about version 6 as that's the only one online and in app store. it will do mode confirmation first,
     // and obey hotspot host/guest rule, and it will write 0 or 1 for mode, so we shouldn't deadlock with both ends waiting.
@@ -410,24 +408,16 @@ async fn confirm_version(
             stream.write_u64(1).await?; // report that versions are compatible
         } else {
             stream.write_u64(0).await?;
-            Err(format!("Peer's version {} not compatible, please update Flying Carpet to the latest version on both devices.", peer_version))?;
+            fc_error(&format!("Peer's version {} not compatible, please update Flying Carpet to the latest version on both devices.", peer_version))?;
         }
     } else if peer_version > MAJOR_VERSION {
         // peer makes decision
         if stream.read_u64().await? == 0 {
-            Err(format!("Peer's version {} not compatible, please update Flying Carpet to the latest version on both devices.", peer_version))?;
+            fc_error(&format!("Peer's version {} not compatible, please update Flying Carpet to the latest version on both devices.", peer_version))?;
         }
     } // otherwise, versions match, implicitly compatible
     Ok(())
 }
-
-/*
-Unpairing result: DeviceUnpairingResultStatus(0)
-Could not enumerate services, unpairing from device. Please restart transfer.
-thread 'tokio-runtime-worker' panicked at core\src\windows\central.rs:468:39:
-Cannot block the current thread from within a runtime. This happens because a function attempted to block the current thread while the thread is being used to drive asynchronous tasks.
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-*/
 
 // TODO:
 // test closing about window with x on linux: panic?

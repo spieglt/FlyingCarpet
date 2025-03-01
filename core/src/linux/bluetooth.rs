@@ -19,7 +19,7 @@ pub(crate) const SSID_CHARACTERISTIC_UUID: &str = "0D820768-A329-4ED4-8F53-BDF36
 pub(crate) const PASSWORD_CHARACTERISTIC_UUID: &str = "E1FA8F66-CF88-4572-9527-D5125A2E0762";
 // const NO_SSID: &str = "NONE";
 
-pub async fn check_support() -> Result<(), Box<dyn Error>> {
+pub async fn check_support() -> Result<(), FCError> {
     let session = Session::new().await?;
     let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
@@ -27,7 +27,7 @@ pub async fn check_support() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub async fn get_adapter() -> Result<Adapter, Box<dyn Error>> {
+pub async fn get_adapter() -> Result<Adapter, FCError> {
     let session = Session::new().await?;
     let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
@@ -39,7 +39,7 @@ pub async fn negotiate_bluetooth<T: UI>(
     mode: &Mode,
     _ble_ui_rx: mpsc::Receiver<bool>, // only used on windows
     ui: &T,
-) -> Result<(String, String, String), Box<dyn Error>> {
+) -> Result<(String, String, String), FCError> {
     // TODO: dedup with check_support(), but can't return adapter from it because windows doesn't, unless we stub which is annoying to pass it back into this.
     let session = Session::new().await?;
     let adapter = session.default_adapter().await?;
@@ -138,7 +138,7 @@ pub async fn process_bluetooth_message<T: UI>(
     looking_for: BluetoothMessage,
     rx: &mut mpsc::Receiver<BluetoothMessage>,
     ui: &T,
-) -> Result<BluetoothMessage, Box<dyn Error>> {
+) -> Result<BluetoothMessage, FCError> {
     loop {
         println!("waiting for bluetooth message...");
         let msg = rx

@@ -26,7 +26,7 @@ pub async fn connect_to_peer<T: UI>(
     password: String,
     interface: WiFiInterface,
     ui: &T,
-) -> Result<PeerResource, Box<dyn Error>> {
+) -> Result<PeerResource, FCError> {
     if is_hosting(&peer, &mode) {
         // start hotspot
         ui.output(&format!("Starting hotspot {}", ssid));
@@ -52,7 +52,7 @@ pub async fn connect_to_peer<T: UI>(
     }
 }
 
-fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<dyn Error>> {
+fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), FCError> {
     let nmcli = "nmcli";
     let commands = vec![
         vec![
@@ -103,7 +103,7 @@ fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<
 pub fn stop_hotspot(
     _peer_resource: Option<&PeerResource>,
     ssid: Option<&str>,
-) -> Result<String, Box<dyn Error>> {
+) -> Result<String, FCError> {
     if ssid.is_some() {
         // TODO: check if ssid is in list, only delete if so
         let list = run_command("nmcli", Some(vec!["connection", "show"]))?;
@@ -124,7 +124,7 @@ pub fn stop_hotspot(
     }
 }
 
-fn join_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<dyn Error>> {
+fn join_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), FCError> {
     let nmcli = "nmcli";
     let commands = vec![
         vec![
@@ -171,7 +171,7 @@ fn join_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<d
     Ok(())
 }
 
-pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, Box<dyn Error>> {
+pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
     let command = "nmcli";
     let options = vec!["-t", "device"];
     let command_output = run_command(command, Some(options))?;
@@ -188,7 +188,7 @@ pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, Box<dyn Error>> {
     Ok(interfaces)
 }
 
-fn find_gateway(interface: &str) -> Result<String, Box<dyn Error>> {
+fn find_gateway(interface: &str) -> Result<String, FCError> {
     let route_command = format!(
         "route -n | grep {} | grep UG | awk '{{print $2}}'",
         interface

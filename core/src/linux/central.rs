@@ -1,5 +1,10 @@
 use bluer::{
-    gatt::{remote::{Characteristic, CharacteristicWriteRequest}, WriteOp}, Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, Error, ErrorKind, Result, Uuid
+    gatt::{
+        remote::{Characteristic, CharacteristicWriteRequest},
+        WriteOp,
+    },
+    Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, Error, ErrorKind, Result,
+    Uuid,
 };
 use futures::{pin_mut, StreamExt};
 use std::{
@@ -50,7 +55,7 @@ pub async fn find_characteristics(device: &Device) -> Result<HashMap<&str, Chara
             println!("    Connected");
         } else {
             println!("    Already connected");
-            Err(Error{
+            Err(Error {
                 kind: ErrorKind::AlreadyConnected,
                 message: "Already connected".to_string(),
             })?

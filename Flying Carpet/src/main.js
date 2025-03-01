@@ -398,7 +398,7 @@ Select Sending on one device and Receiving on the other. If not using Bluetooth,
 
 If using Bluetooth, the WiFi connection will be configured automatically. Otherwise you will need to scan a QR code or type in a password. (If transferring between Android and macOS, you will have to type in the SSID and password.)
 
-If prompted to join a WiFi network or modify WiFi settings, say Allow. On Windows you may have to grant permission to add a firewall rule. On macOS you may have to grant location permissions. Flying Carpet does not read or collect your location. Apple requires this permission to scan for WiFi networks.
+If prompted to join a WiFi network or modify WiFi settings, say Allow. On Windows you may have to grant permission to add a firewall rule. On macOS you may have to grant location permissions, which Apple requires to scan for WiFi networks. Flying Carpet does not read or collect your location, nor any other data.
 
 TROUBLESHOOTING
 

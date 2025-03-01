@@ -1,8 +1,7 @@
-use crate::{utils, UI};
+use crate::{utils, FCError, UI};
 use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit};
 use core::time;
 use std::{
-    error::Error,
     fs,
     io::Write,
     path::Path,
@@ -20,9 +19,9 @@ pub async fn receive_file<T: UI>(
     stream: &mut TcpStream,
     ui: &T,
     last_file: bool,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), FCError> {
     let folder = folder.to_owned();
-    let cipher = Aes256Gcm::new_from_slice(key)?;
+    let cipher = Aes256Gcm::new_from_slice(key).expect("Invalid AES-256-GCM key length");
     let start = Instant::now();
 
     // check destination folder
@@ -128,7 +127,7 @@ pub async fn receive_file<T: UI>(
 async fn receive_and_decrypt_chunk(
     cipher: &Aes256Gcm,
     stream: &mut TcpStream,
-) -> Result<Vec<u8>, Box<dyn Error>> {
+) -> Result<Vec<u8>, FCError> {
     // receive chunk size
     let chunk_size = stream.read_u64().await? as usize;
     if chunk_size == 0 {
@@ -141,9 +140,7 @@ async fn receive_and_decrypt_chunk(
         let nonce = &chunk[..12];
         let ciphertext = &chunk[12..];
         let nonce = aes_gcm::Nonce::from_slice(nonce);
-        let decrypted_chunk = cipher
-            .decrypt(nonce, ciphertext)
-            .map_err(|e| e.to_string())?;
+        let decrypted_chunk = cipher.decrypt(nonce, ciphertext)?;
         Ok(decrypted_chunk)
     }
 }
@@ -165,7 +162,7 @@ async fn check_for_file(
     filename: &Path,
     size: u64,
     stream: &mut TcpStream,
-) -> Result<bool, Box<dyn Error>> {
+) -> Result<bool, FCError> {
     // check if file by this name and size exists
     if filename.is_file() {
         // check size

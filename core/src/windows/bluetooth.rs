@@ -2,13 +2,14 @@ mod central;
 mod peripheral;
 
 use crate::{
+    error::{fc_error, FCError},
     network::{self, is_hosting},
     utils::{generate_password, get_key_and_ssid, BluetoothMessage},
     Mode, Peer, UI,
 };
 use central::BluetoothCentral;
 use peripheral::BluetoothPeripheral;
-use std::{error::Error, mem::discriminant};
+use std::mem::discriminant;
 use tokio::{sync::mpsc, time};
 use windows::{
     core::HSTRING,
@@ -16,8 +17,12 @@ use windows::{
     Storage::Streams::{DataReader, DataWriter, IBuffer, UnicodeEncoding},
 };
 
-enum BluetoothError {
-    
+impl From<windows::core::Error> for FCError {
+    fn from(value: windows::core::Error) -> Self {
+        FCError {
+            message: format!("Windows error: {}", value),
+        }
+    }
 }
 
 pub(crate) const OS: &str = "windows";
@@ -39,25 +44,20 @@ const NO_SSID: &str = "NONE";
 // peripheral goes advertise, wait for bonding, wait for OS read, wait for OS write,
 // connectToPeer, start hotspot and wait for ssid/password to be read, or wait for ssid/pw writes and joinHotspot
 
-pub async fn check_support() -> Result<(), Box<dyn Error>> {
-    let adapter = BluetoothAdapter::GetDefaultAsync()?
-        .get()
-        .map_err(|_| "no adapter found")?;
+pub async fn check_support() -> Result<(), FCError> {
+    let adapter = BluetoothAdapter::GetDefaultAsync()?.get()?;
     println!("got adapter");
-    let radio = adapter
-        .GetRadioAsync()?
-        .get()
-        .map_err(|_| "could not find radio")?;
+    let radio = adapter.GetRadioAsync()?.get()?;
     println!("got radio");
     if radio.State()? != RadioState::On {
-        Err("radio is not on")?;
+        fc_error("radio is not on")?;
     }
     if !adapter.IsCentralRoleSupported()? {
-        Err("central role not supported")?;
+        fc_error("central role not supported")?;
     }
     println!("Central role is supported");
     if !adapter.IsPeripheralRoleSupported()? {
-        Err("peripheral role not supported")?;
+        fc_error("peripheral role not supported")?;
     }
     println!("Peripheral role is supported");
     Ok(())
@@ -67,10 +67,10 @@ pub async fn negotiate_bluetooth<T: UI>(
     mode: &Mode,
     ble_ui_rx: mpsc::Receiver<bool>,
     ui: &T,
-) -> Result<(String, String, String), Box<dyn Error + Send>> {
+) -> Result<(String, String, String), FCError> {
     let (tx, mut rx) = mpsc::channel(1);
-    let mut peripheral = BluetoothPeripheral::new(tx.clone()).map_err(|e| e.to_string())?;
-    let mut central = BluetoothCentral::new(tx.clone()).map_err(|e| e.to_string())?;
+    let mut peripheral = BluetoothPeripheral::new(tx.clone())?;
+    let mut central = BluetoothCentral::new(tx.clone())?;
     if let Mode::Send(_) = mode {
         // acting as peripheral
         ui.output("Advertising Bluetooth service...");
@@ -90,7 +90,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         if let BluetoothMessage::PeerOS(os) = msg {
             peer_os = os;
         } else {
-            Err(format!(
+            fc_error(&format!(
                 "Peripheral received incorrect BluetoothMessage. Expected peer OS, got {:?}",
                 msg
             ))?;
@@ -119,7 +119,7 @@ pub async fn negotiate_bluetooth<T: UI>(
             if let BluetoothMessage::SSID(ssid) = msg {
                 peer_ssid = ssid;
             } else {
-                Err(format!(
+                fc_error(&format!(
                     "Peripheral received incorrect BluetoothMessage. Expected SSID, got {:?}",
                     msg
                 ))?;
@@ -131,7 +131,7 @@ pub async fn negotiate_bluetooth<T: UI>(
             if let BluetoothMessage::Password(password) = msg {
                 peer_password = password;
             } else {
-                Err(format!(
+                fc_error(&format!(
                     "Peripheral received incorrect BluetoothMessage. Expected password, got {:?}",
                     msg
                 ))?;
@@ -239,7 +239,7 @@ pub async fn process_bluetooth_message<T: UI>(
     looking_for: BluetoothMessage,
     rx: &mut mpsc::Receiver<BluetoothMessage>,
     ui: &T,
-) -> Result<BluetoothMessage, Box<dyn Error>> {
+) -> Result<BluetoothMessage, FCError> {
     loop {
         println!("waiting for bluetooth message...");
         let msg = rx
@@ -257,7 +257,7 @@ pub async fn process_bluetooth_message<T: UI>(
                 // and nothing will be blocked in central because the pairing_handler won't be called.
                 ui.output("Successfully paired");
             }
-            BluetoothMessage::PairFailure => Err("Pairing failed.")?,
+            BluetoothMessage::PairFailure => fc_error("Pairing failed.")?,
             BluetoothMessage::AlreadyPaired => {
                 ui.output("Already BLE paired with Bluetooth device");
                 if looking_for == BluetoothMessage::PairSuccess
@@ -267,7 +267,7 @@ pub async fn process_bluetooth_message<T: UI>(
                     return Ok(msg);
                 }
             }
-            BluetoothMessage::UserCanceled => Err("User canceled.")?,
+            BluetoothMessage::UserCanceled => fc_error("User canceled.")?,
             BluetoothMessage::StartedAdvertising => {
                 ui.output("Started advertising Bluetooth service")
             }
@@ -278,7 +278,7 @@ pub async fn process_bluetooth_message<T: UI>(
             }
             BluetoothMessage::PeerReadSsid => ui.output("Peer read our SSID"),
             BluetoothMessage::PeerReadPassword => ui.output("Peer read our password"),
-            BluetoothMessage::OtherError(s) => Err(s.as_str())?,
+            BluetoothMessage::OtherError(s) => fc_error(s.as_str())?,
         };
         if discriminant(&msg) == discriminant(&looking_for) {
             return Ok(msg);

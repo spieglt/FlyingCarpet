@@ -1,4 +1,4 @@
-use super::{ibuffer_to_string, NO_SSID};
+use super::{fc_error, ibuffer_to_string, NO_SSID};
 use crate::bluetooth::{
     OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID, SERVICE_UUID, SSID_CHARACTERISTIC_UUID,
 };
@@ -56,7 +56,7 @@ impl BluetoothPeripheral {
         })
     }
 
-    pub fn add_characteristics(&mut self) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    pub fn add_characteristics(&mut self) -> std::result::Result<(), super::FCError> {
         // create characteristics
         let gatt_operand_parameters = GattLocalCharacteristicParameters::new()?;
         gatt_operand_parameters.SetCharacteristicProperties(
@@ -78,7 +78,7 @@ impl BluetoothPeripheral {
             .get()?;
         let e = result.Error()?;
         if e != BluetoothError::Success {
-            Err(format!("Error creating characteristic: {:?}", e))?;
+            fc_error(&format!("Error creating characteristic: {:?}", e))?;
         }
         let os_characteristic = result.Characteristic()?;
 
@@ -90,7 +90,7 @@ impl BluetoothPeripheral {
             .get()?;
         let e = result.Error()?;
         if e != BluetoothError::Success {
-            Err(format!("Error creating characteristic: {:?}", e))?;
+            fc_error(&format!("Error creating characteristic: {:?}", e))?;
         }
         let ssid_characteristic = result.Characteristic()?;
 
@@ -105,7 +105,7 @@ impl BluetoothPeripheral {
             .get()?;
         let e = result.Error()?;
         if e != BluetoothError::Success {
-            Err(format!("Error creating characteristic: {:?}", e))?;
+            fc_error(&format!("Error creating characteristic: {:?}", e))?;
         }
         let password_characteristic = result.Characteristic()?;
 

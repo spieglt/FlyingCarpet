@@ -1,14 +1,13 @@
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use std::{
-    error::Error,
     ffi::{c_char, CString},
     fs, io,
     path::{Path, PathBuf},
     process,
 };
 
-use crate::MAJOR_VERSION;
+use crate::{FCError, MAJOR_VERSION};
 
 #[derive(Debug, PartialEq)]
 pub enum BluetoothMessage {
@@ -73,7 +72,7 @@ pub fn get_key_and_ssid(password: &str) -> ([u8; 32], String) {
     (key.into(), ssid)
 }
 
-pub fn hash_file(filename: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
+pub fn hash_file(filename: &Path) -> Result<Vec<u8>, FCError> {
     let mut file = fs::File::open(filename)?;
     let mut hasher = Sha256::new();
     io::copy(&mut file, &mut hasher)?;

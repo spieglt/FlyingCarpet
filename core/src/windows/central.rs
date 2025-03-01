@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    error::Error,
     sync::{Arc, Mutex},
 };
 use tokio::sync::mpsc;
@@ -26,8 +25,10 @@ use windows::{
     Foundation::{EventRegistrationToken, TypedEventHandler},
 };
 
-use super::{OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID};
-use crate::bluetooth::{ibuffer_to_string, str_to_ibuffer, SERVICE_UUID, SSID_CHARACTERISTIC_UUID};
+use super::{FCError, OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID};
+use crate::bluetooth::{
+    fc_error, ibuffer_to_string, str_to_ibuffer, SERVICE_UUID, SSID_CHARACTERISTIC_UUID,
+};
 use crate::utils::BluetoothMessage;
 
 type ScanCallback =
@@ -353,7 +354,7 @@ impl BluetoothCentral {
         }
     }
 
-    pub async fn get_services_and_characteristics(&mut self) -> Result<(), Box<dyn Error>> {
+    pub async fn get_services_and_characteristics(&mut self) -> Result<(), FCError> {
         println!("locking device");
         // read service
         let device = self.peer_device.lock().await;
@@ -400,7 +401,9 @@ impl BluetoothCentral {
             println!(
                 "Could not enumerate services, unpairing from device. Please restart transfer."
             );
-            Err("Could not enumerate services, unpairing from device. Please restart transfer.")?;
+            fc_error(
+                "Could not enumerate services, unpairing from device. Please restart transfer.",
+            )?;
             // std::thread::sleep(std::time::Duration::from_secs(2));
         }
         // we had exited this function without setting OS_CHARACTERISTIC_UUID and panicked later.
@@ -437,11 +440,7 @@ impl BluetoothCentral {
         Ok(data_string)
     }
 
-    pub async fn write(
-        &mut self,
-        characteristic_uuid: &str,
-        value: &str,
-    ) -> Result<(), Box<dyn Error>> {
+    pub async fn write(&mut self, characteristic_uuid: &str, value: &str) -> Result<(), FCError> {
         // tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         println!("writing value: {}", value);
         let characteristic = self.characteristics[characteristic_uuid]
@@ -453,7 +452,7 @@ impl BluetoothCentral {
             .WriteValueWithOptionAsync(&ibuffer, write_option)?
             .get()?;
         if status != GattCommunicationStatus::Success {
-            Err(format!(
+            fc_error(&format!(
                 "Error writing to Bluetooth peripheral: {:?}",
                 status
             ))?;
@@ -465,10 +464,10 @@ impl BluetoothCentral {
 
     // used higher up if reads/writes fail
     pub async fn unpair(&self) -> windows::core::Result<()> {
-        let device = self.peer_device.blocking_lock();
+        let device = self.peer_device.lock().await;
         let Some(ref device) = *device else {
             println!("Unpair called but no peer device paired");
-            return Ok(())
+            return Ok(());
         };
         let info = device.DeviceInformation()?;
         unpair(info)
