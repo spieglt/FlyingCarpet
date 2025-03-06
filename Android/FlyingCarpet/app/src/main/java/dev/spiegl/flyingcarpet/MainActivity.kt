@@ -77,6 +77,9 @@ class MainActivity : AppCompatActivity() {
 
             // if using bluetooth, start the process of exchanging OS and wifi information
             if (viewModel.bluetooth.active) {
+                if (viewModel.bluetooth.bluetoothGattServer.getService(SERVICE_UUID) == null) {
+                    viewModel.bluetooth.bluetoothGattServer.addService(viewModel.bluetooth.service)
+                }
                 if (viewModel.mode == Mode.Sending) {
                     viewModel.bluetooth.advertise()
                 } else if (viewModel.mode == Mode.Receiving) {
@@ -539,7 +542,6 @@ class MainActivity : AppCompatActivity() {
 
 // TODO:
 //   need to not start peripheral when receiving, or central when sending? other how to check if we can initialize?
-//   android left open after transfer is still exchanging OS with iOS peripheral when it restarts: can't do this whenever we connect? check if transfer running?
 //   one permission check for all permissions?
 //   transfer "completing" if receiving end quit?
 //   check !!s

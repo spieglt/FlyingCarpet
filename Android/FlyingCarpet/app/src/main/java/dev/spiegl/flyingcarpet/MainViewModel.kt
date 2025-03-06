@@ -43,7 +43,7 @@ enum class Peer {
     Windows,
 }
 
-const val MAJOR_VERSION: Long = 8
+const val MAJOR_VERSION: Long = 9
 val zero = ByteArray(8) // meant to represent a 64-bit unsigned 0
 val one = byteArrayOf(0, 0, 0, 0, 0, 0, 0, 1) // meant to represent a 64-bit unsigned 1
 const val chunkSize = 5_000_000
@@ -386,6 +386,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     }
 
     private suspend fun confirmVersion() {
+        // TODO: 8/9 compatibility
         withContext(Dispatchers.IO) {
             val peerVersion: Long
             if (isHosting()) {

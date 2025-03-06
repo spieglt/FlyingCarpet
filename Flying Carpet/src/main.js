@@ -396,7 +396,7 @@ Turn Bluetooth on or off on both devices. If one side fails to initialize Blueto
 
 Select Sending on one device and Receiving on the other. If not using Bluetooth, select the operating system of the other device. Click the "Start Transfer" button on each device. On the sending device, select the files or folder to send. On the receiving device, select the folder in which to receive files. (To send a folder, drag it onto the window instead of clicking "Start Transfer".)
 
-If using Bluetooth, the WiFi connection will be configured automatically. Otherwise you will need to scan a QR code or type in a password. (If transferring between Android and macOS, you will have to type in the SSID and password.)
+If using Bluetooth, the WiFi connection will be configured automatically. Otherwise you will need to scan a QR code or type in a password.
 
 If prompted to join a WiFi network or modify WiFi settings, say Allow. On Windows you may have to grant permission to add a firewall rule. On macOS you may have to grant location permissions, which Apple requires to scan for WiFi networks. Flying Carpet does not read or collect your location, nor any other data.
 

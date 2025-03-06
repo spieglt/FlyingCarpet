@@ -55,7 +55,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
 
     lateinit var bluetoothManager: BluetoothManager
     lateinit var bluetoothGattServer: BluetoothGattServer
-    private lateinit var service: BluetoothGattService
+    lateinit var service: BluetoothGattService
     lateinit var bluetoothLeScanner: BluetoothLeScanner
     var bluetoothReceiver = BluetoothReceiver(application, null, delegate)
     var active = false
@@ -78,11 +78,15 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         bluetoothReceiver.bluetoothGatt = null
         // peripheral
         bluetoothManager.adapter.bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
-        bluetoothGattServer.close()
+        // this prevents android from sending twice? but disabling it leaves it advertising or offering services even after the stopAdvertising() above?
+        // need to clear services and replace between transfers?
+        // bluetoothGattServer.close()
+        bluetoothGattServer.clearServices()
     }
 
     // peripheral
 
+    // TODO: need to reinitialize peripheral between transfers, to prevent it continuing to advertise after first transfer? no, just clear and re-add service.
     fun initializePeripheral(application: Context): Boolean {
         if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             return false
