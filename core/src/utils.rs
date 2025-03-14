@@ -120,9 +120,8 @@ pub fn format_time(seconds: f64) -> String {
 }
 
 pub fn is_compatible(peer_version: u64) -> bool {
-    // version 8 is not compatible with previous versions
-    // TODO: test 8/9
-    peer_version == MAJOR_VERSION
+    // compatible with version 8. if transferring with higher version, that version will decide compatibility.
+    peer_version >= 8
 }
 
 #[cfg(test)]

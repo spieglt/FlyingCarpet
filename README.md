@@ -51,7 +51,7 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 
 + Apple devices can only transfer to/from Android, Linux, and Windows as they can no longer programmatically run hotspots. Use AirDrop instead for Apple-to-Apple transfers.
 
-+ Using the Bluetooth feature when sending files from macOS is not stable. This is because Flying Carpet has the sending end of the transfer act as the Bluetooth LE peripheral (GATT server), and the device I have to develop with does not work properly when acting as a peripheral, though CoreBluetooth purportedly supports it. Android and Linux can pair with macOS but the connections drop from the macOS side with generic errors shortly after. TODO: windows behavior. The iOS version works with Android, Linux, and Windows, and uses the same CoreBluetooth code. I suspect the issue is worse on Sequoia, though Sonoma may not work either. Feedback is appreciated. The "Use Bluetooth" switch can be turned off on both sides of the transfer to enter the WiFi information manually instead.
++ Bluetooth does not work when sending from macOS to Android. This is because Flying Carpet has the sending end of the transfer act as the Bluetooth LE peripheral (GATT server). MacOS, when acting as peripheral, does not seem to like the pairing process to be initiated before the BLE central device tries to read an encrypted characteristic, and when this happens, the central device cannot enumerate its GATT services. This can be worked around with the Windows and Android Bluetooth libraries by connecting without pairing, but the Linux library does not seem to be able to do this. The iOS version works with Linux when acting as a peripheral, and uses the same CoreBluetooth code. If you know more information about this problem, please let me know. The "Use Bluetooth" switch can be turned off on both sides of the transfer when sending from macOS to Linux, to enter the WiFi information manually instead.
 
 + Disables your wireless internet connection while in use. (Does not apply to Windows or Android when hosting the hotspot.)
 
@@ -78,5 +78,11 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 + **You're using SHA-256 to derive the key from a password. Isn't that bad? Shouldn't you be using a Password-Based Key Derivation Function like Scrypt or Argon2?** I was doing this before, but it wasn't strictly necessary because these keys are only used during the file transfer. For an attacker to intercept the data in transit, they'd need to be on the hotspot network, which is protected by WPA2, so they'd need to shoulder-surf the password or QR code. The change to SHA-256 was made because I couldn't find a good Scrypt or Argon2 implementation on all platforms when I added the mobile versions.
 
 + **Why are you using AES-GCM at all if there's already WPA2 then?** When I started working on this project in 2017, I was trying to allow for IBSS WiFi networks on macOS that didn't use authentication. I was using the wrong encryption (and incorrectly) then, and later I added AES-GCM because it's the only good and official-ish AEAD implementation I could find in all of Go, Swift, Kotlin, and now Rust. If any cryptographers read this and find that I'm still being dumb, please let me know.
+
+## Complaints at Apple
+
++ Requiring location permissions to use `scanForNetworks(withSSID:)` but not mentioning it in the [documentation](https://developer.apple.com/documentation/corewlan/cwinterface/scanfornetworks(withssid:)) is annoying.
+
++ There should be a way to programmatically start hotspots, or at least read the current hotspot configuration with the user's permission.
 
 If you've used Flying Carpet, please send feedback to theron@spiegl.dev. Thanks for your interest! Please also check out https://github.com/spieglt/cloaker, https://cloaker.mobi, and https://github.com/spieglt/whatfiles.

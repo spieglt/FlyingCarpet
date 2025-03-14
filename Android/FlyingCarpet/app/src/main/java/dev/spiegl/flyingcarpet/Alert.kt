@@ -47,7 +47,7 @@ const val AboutMessage = """
     
     If using Bluetooth, the WiFi connection will be configured automatically. Otherwise you will need to scan a QR code or type in a password.
     
-    If prompted to join a WiFi network or modify WiFi settings, say Allow. On Windows you may have to grant permission to add a firewall rule. On macOS you may have to grant location permissions, which Apple requires to scan for WiFi networks. Flying Carpet does not read or collect your location, nor any other data.
+    When prompted to join a WiFi network or modify WiFi settings, say Allow. On Windows you may have to grant permission to add a firewall rule. On macOS you may have to grant location permissions, which Apple requires to scan for WiFi networks. Flying Carpet does not read or collect your location, nor any other data.
     
     TROUBLESHOOTING
     

@@ -99,6 +99,20 @@ window.addEventListener('DOMContentLoaded', async () => {
     console.log('invoked user_bluetooth_pair');
   });
 
+  // have Enter start/cancel transfer
+  document.getElementById('mainContainer').addEventListener("keyup", event => {
+    if (event.key !== "Enter") {
+      return;
+    }
+    if (startButton.style.display != 'none' && !startButton.disabled) {
+      startButton.click();
+    }
+    if (cancelButton.style.display != 'none') {
+      cancelButton.click();
+    }
+    event.preventDefault();
+  });
+
   // handle drag and drop
   await appWindow.listen('tauri://file-drop', async event => {
     if (selectedMode === 'send') {
@@ -398,7 +412,7 @@ Select Sending on one device and Receiving on the other. If not using Bluetooth,
 
 If using Bluetooth, the WiFi connection will be configured automatically. Otherwise you will need to scan a QR code or type in a password.
 
-If prompted to join a WiFi network or modify WiFi settings, say Allow. On Windows you may have to grant permission to add a firewall rule. On macOS you may have to grant location permissions, which Apple requires to scan for WiFi networks. Flying Carpet does not read or collect your location, nor any other data.
+When prompted to join a WiFi network or modify WiFi settings, say Allow. On Windows you may have to grant permission to add a firewall rule. On macOS you may have to grant location permissions, which Apple requires to scan for WiFi networks. Flying Carpet does not read or collect your location, nor any other data.
 
 TROUBLESHOOTING
 

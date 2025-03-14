@@ -86,7 +86,6 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
 
     // peripheral
 
-    // TODO: need to reinitialize peripheral between transfers, to prevent it continuing to advertise after first transfer? no, just clear and re-add service.
     fun initializePeripheral(application: Context): Boolean {
         if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             return false
@@ -369,8 +368,8 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         var osCharacteristic: BluetoothGattCharacteristic? = null
         var ssidCharacteristic: BluetoothGattCharacteristic? = null
         var passwordCharacteristic: BluetoothGattCharacteristic? = null
-        var waitingForConnection = false // TODO: test if we connect if the app started when we were already paired, and bonding event was never received by this class
-        var bonded = false
+        var waitingForConnection = false
+        private var bonded = false
 
         val gattCallback = object : BluetoothGattCallback() {
             // this is called when we as central have read a characteristic from the peer's peripheral

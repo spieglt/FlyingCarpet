@@ -386,7 +386,6 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     }
 
     private suspend fun confirmVersion() {
-        // TODO: 8/9 compatibility
         withContext(Dispatchers.IO) {
             val peerVersion: Long
             if (isHosting()) {
@@ -410,8 +409,8 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 }
             } else {
                 // we make decision
-                // for this version, we're only compatible with the same
-                if (peerVersion != MAJOR_VERSION) {
+                // compatible with version 8. if transferring with higher version, that version will decide compatibility.
+                if (peerVersion < 8) {
                     throw Exception("Peer's version of Flying Carpet is not compatible. Please find links to download the newest version at https://flyingcarpet.spiegl.dev.")
                 }
             }
