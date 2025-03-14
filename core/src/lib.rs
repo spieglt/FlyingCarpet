@@ -384,7 +384,6 @@ async fn confirm_version(
     peer_resource: &PeerResource,
     stream: &mut TcpStream,
 ) -> Result<(), FCError> {
-    // TODO: 8/9 compatibility?
     // only really have to worry about version 6 as that's the only one online and in app store. it will do mode confirmation first,
     // and obey hotspot host/guest rule, and it will write 0 or 1 for mode, so we shouldn't deadlock with both ends waiting.
     let peer_version = match peer_resource {

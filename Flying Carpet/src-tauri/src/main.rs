@@ -11,7 +11,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::{fs, sync::Mutex};
 use tauri::{Emitter, State, Window};
-use tokio;
 use tokio::sync::mpsc;
 
 #[derive(Clone, serde::Serialize)]

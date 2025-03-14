@@ -35,7 +35,7 @@ pub async fn connect_to_peer<T: UI>(
     } else {
         // join hotspot and find gateway
         ui.output(&format!("Joining hotspot {}", ssid));
-        join_hotspot(&ssid, &password, &interface.0)?;
+        join_hotspot(&ssid, &password, &interface.0, ui).await?;
         loop {
             // println!("looking for gateway");
             task::yield_now().await;
@@ -105,7 +105,6 @@ pub fn stop_hotspot(
     ssid: Option<&str>,
 ) -> Result<String, FCError> {
     if ssid.is_some() {
-        // TODO: check if ssid is in list, only delete if so
         let list = run_command("nmcli", Some(vec!["connection", "show"]))?;
         if String::from_utf8_lossy(&list.stdout).contains(ssid.unwrap()) {
             let options = Some(vec!["connection", "delete", ssid.unwrap()]);
@@ -124,7 +123,7 @@ pub fn stop_hotspot(
     }
 }
 
-fn join_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), FCError> {
+async fn join_hotspot<T: UI>(ssid: &str, password: &str, interface: &str, ui: &T) -> Result<(), FCError> {
     let nmcli = "nmcli";
     let commands = vec![
         vec![
@@ -160,10 +159,10 @@ fn join_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), FCErr
         if !res.status.success() {
             let stderr = String::from_utf8_lossy(&res.stderr);
             // Err(format!("Error joining hotspot: {}", stderr))?;
-            // TODO: output this to ui
-            // TODO: async, allow cancel button to exit this task
-            println!("Error joining hotspot: {}. Retrying.", stderr);
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            let err_msg = format!("Error joining hotspot: {}. Retrying.", stderr);
+            ui.output(&err_msg);
+            println!("{}", err_msg);
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         } else {
             break;
         }
@@ -200,7 +199,7 @@ fn find_gateway(interface: &str) -> Result<String, FCError> {
 
 #[cfg(test)]
 mod test {
-    use crate::PeerResource;
+    use crate::{PeerResource, UI};
 
     use super::get_wifi_interfaces;
 
@@ -217,13 +216,30 @@ mod test {
 
     #[test]
     fn join_hotspot() {
+
+        #[derive(Clone)]
+        struct TestUI {}
+        impl UI for TestUI {
+            fn output(&self, _msg: &str) {}
+            fn show_progress_bar(&self) {}
+            fn update_progress_bar(&self, _percent: u8) {}
+            fn enable_ui(&self) {}
+            fn show_pin(&self, _pin: &str) {}
+        }
+
         let ssid = "";
         let password = "";
         let pr = PeerResource::WifiClient("".to_string());
         let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].0;
-        crate::network::join_hotspot(ssid, password, &interface).unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(20));
-        crate::network::stop_hotspot(Some(&pr), Some(ssid)).unwrap();
+        let interface = interface.to_string();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
+        tokio::spawn(async move {
+            crate::network::join_hotspot(ssid, password, &interface, &TestUI{}).await.unwrap();
+            std::thread::sleep(std::time::Duration::from_secs(20));
+            crate::network::stop_hotspot(Some(&pr), Some(ssid)).unwrap();
+            tx.send(()).await.unwrap();
+        });
+        rx.blocking_recv().unwrap();
     }
 
     #[test]
