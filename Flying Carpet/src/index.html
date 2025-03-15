@@ -74,8 +74,8 @@
       <input type="text" placeholder="Password (start transfer on other end):" id="passwordBox" style="display: none; padding: 5px;" autocapitalize="off" autocorrect="off" spellcheck="false">
 
       <!-- start/cancel buttons -->
-      <button type="button" id="startButton" onclick="startTransfer(false)" style="padding: 5px; min-height: 25px;" disabled>Select Files</button>
-      <button type="button" id="cancelButton" onclick="cancelTransfer()" style="display: none; padding: 5px; min-height: 25px;">Cancel Transfer</button>
+      <button type="button" id="startButton" class="btn btn-primary" onclick="startTransfer(false)" style="margin: 10px; min-height: 25px;" disabled>Select Files</button>
+      <button type="button" id="cancelButton" class="btn btn-danger" onclick="cancelTransfer()" style="display: none; margin: 10px; min-height: 25px;">Cancel Transfer</button>
 
       <!-- output box -->
       <div id="outputBox" class="horizontalContainer" style="flex-grow: 9; flex-shrink: 9; overflow-y: auto; padding: 5px; margin-top: 5px;">
