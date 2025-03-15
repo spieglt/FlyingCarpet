@@ -231,6 +231,10 @@ pub async fn negotiate_bluetooth<T: UI>(
             };
             (ssid, password)
         };
+        // unpair after every transfer because windows has trouble enumerating services of already-paired devices?
+        // if let Err(unpair_error) = central.unpair().await {
+        //     println!("Error unpairing: {}", unpair_error);
+        // }
         Ok((peer, ssid, password))
     }
 }

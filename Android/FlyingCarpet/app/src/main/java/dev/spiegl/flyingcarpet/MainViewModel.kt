@@ -10,6 +10,7 @@ import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -363,7 +364,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
     override fun getWifiInfo(): Pair<String, String> {
         // TODO: put mutex around this? and when setting it?
-        outputText("In getWifiInfo")
+        Log.i("Bluetooth", "In getWifiInfo")
         if (ssid == "" || password == "") {
             return Pair("", "")
         }

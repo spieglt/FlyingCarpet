@@ -13,6 +13,7 @@ suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
 
     // receive file details
     val (filename, fileSize) = receiveFileDetails()
+    outputText("Filename: $filename.  Size: ${makeSizeReadable(fileSize)}")
     val needTransfer = checkForFileReceiving(filename, fileSize)
     if (!needTransfer) {
         outputText("The same file already exists at this location, skipping.")
@@ -53,8 +54,7 @@ suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
 
     // stats
     progressBarMut.postValue(100)
-    // TODO: put these details before needTransfer check? but then we don't get to display newFilename...
-    outputText("Received file $newFilename. Size: ${makeSizeReadable(bytesRead)}")
+    outputText("Received $newFilename.")
     val end = System.currentTimeMillis()
     val seconds = (end - start) / 1000.0
     outputText("Receiving took ${formatTime(seconds)}")

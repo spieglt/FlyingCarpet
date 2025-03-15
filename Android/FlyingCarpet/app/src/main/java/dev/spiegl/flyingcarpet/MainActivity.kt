@@ -523,7 +523,6 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e("Bluetooth", "Could not initialize Bluetooth: $e")
         }
-        viewModel.outputText("setting to $initialized")
         viewModel.bluetooth.active = initialized
         bluetoothSwitch.isChecked = initialized
         bluetoothSwitch.isEnabled = initialized

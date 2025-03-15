@@ -116,7 +116,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
     private val serverCallback = object : BluetoothGattServerCallback() {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(device: BluetoothDevice?, status: Int, newState: Int) {
-            outputText("In serverCallback")
+            Log.i("Bluetooth", "In serverCallback")
             super.onConnectionStateChange(device, status, newState)
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 outputText("Device connected")
@@ -194,7 +194,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 value
             )
 
-            outputText("Central peer wrote something: \"${value?.toString(Charsets.UTF_8)}\"")
+            Log.i("Bluetooth", "Central peer wrote something: \"${value?.toString(Charsets.UTF_8)}\"")
             if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 return
             }
@@ -321,7 +321,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 return
             }
             if (result != null) {
-                outputText("Scan result: ${result.device}")
+                outputText("Found device: ${result.device}")
                 if (bluetoothReceiver.waitingForConnection) {
                     bluetoothReceiver.waitingForConnection = false
                     bluetoothLeScanner.stopScan(this)
@@ -336,7 +336,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                         bluetoothReceiver.gattCallback,
                         BluetoothDevice.TRANSPORT_LE,
                     )
-                    outputText("Called connectGatt()")
+                    Log.i("Bluetooth", "Called connectGatt()")
 //                    } else {
 //                        result.device.createBond()
 //                        outputText("Called createBond()")
@@ -381,7 +381,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             ) {
                 super.onCharacteristicRead(gatt, characteristic, value, status)
                 val stringRepresentation = value.toString(Charsets.UTF_8)
-                outputText("Read characteristic: $stringRepresentation")
+                Log.i("Bluetooth", "Read characteristic: $stringRepresentation")
                 when (characteristic.uuid) {
                     OS_CHARACTERISTIC_UUID -> {
                         gotPeer(value.toString(Charsets.UTF_8))
@@ -421,7 +421,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     SSID_CHARACTERISTIC_UUID -> {
                         outputText("Wrote SSID to peer")
                         val (_, password) = getWifiInfo()
-                        outputText("Fetched password = $password")
+                        // outputText("Fetched password = $password")
                         write(PASSWORD_CHARACTERISTIC_UUID, password.toByteArray())
                     }
                     PASSWORD_CHARACTERISTIC_UUID -> {
@@ -438,7 +438,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 super.onServicesDiscovered(gatt, status)
                 outputText("Discovered services")
                 for (service in gatt?.services!!) {
-                    outputText("Service: ${service.uuid}")
+                    // outputText("Service: ${service.uuid}")
                 }
                 val service = gatt.getService(SERVICE_UUID)
                 if (service == null) {
@@ -448,11 +448,11 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
 //                    gatt.discoverServices()
                     return
                 }
-                outputText("Got service: $service")
+                // outputText("Got service: $service")
                 osCharacteristic = service.getCharacteristic(OS_CHARACTERISTIC_UUID) ?: return
                 ssidCharacteristic = service.getCharacteristic(SSID_CHARACTERISTIC_UUID) ?: return
                 passwordCharacteristic = service.getCharacteristic(PASSWORD_CHARACTERISTIC_UUID) ?: return
-                outputText("Got characteristics: $osCharacteristic, $ssidCharacteristic, $passwordCharacteristic")
+                // outputText("Got characteristics: $osCharacteristic, $ssidCharacteristic, $passwordCharacteristic")
                 read(OS_CHARACTERISTIC_UUID)
             }
 
@@ -482,7 +482,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     Thread.sleep(1600)
                     gatt?.discoverServices()
                 } else {
-                    outputText("New connection state: $newState")
+                    Log.i("Bluetooth", "New connection state: $newState")
                 }
             }
         }
@@ -490,7 +490,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         // called when we get a bluetooth bonding event from the OS
         @SuppressLint("MissingPermission")
         override fun onReceive(context: Context?, intent: Intent?) {
-            outputText("Action: ${intent?.action}")
+            Log.i("Bluetooth", "Action: ${intent?.action}")
             peerDevice = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent?.getParcelableExtra(EXTRA_DEVICE, BluetoothDevice::class.java)
             } else {
@@ -501,7 +501,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 outputText("Not bonded")
                 return
             }
-            outputText("Device: $peerDevice")
+            // outputText("Device: $peerDevice")
 
             if (result == null) {
                 Log.e("Bluetooth", "Received ACTION_BOND_STATE_CHANGED but do not have device result")
@@ -522,7 +522,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
 
         // use to read peripheral's characteristic
         fun read(characteristicUuid: UUID) {
-            outputText("Reading $characteristicUuid")
+            // outputText("Reading $characteristicUuid")
             if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 outputText("No permission")
                 return
@@ -532,12 +532,11 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 SSID_CHARACTERISTIC_UUID -> bluetoothGatt?.readCharacteristic(ssidCharacteristic)
                 PASSWORD_CHARACTERISTIC_UUID -> bluetoothGatt?.readCharacteristic(passwordCharacteristic)
             }
-            outputText("Exiting read")
         }
 
         // private fun writeSinglePacket(characteristicUuid: UUID, value: ByteArray, waitForResponse: Boolean) {
         fun write(characteristicUuid: UUID, value: ByteArray) {
-            outputText("Writing to $characteristicUuid")
+            // outputText("Writing to $characteristicUuid")
             // val writeType = if (waitForResponse) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             val writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
             if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
