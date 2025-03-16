@@ -196,26 +196,6 @@ async function startTransfer(filesSelected) {
       return;
     }
   }
-  
-  // get files or folder
-  if (!filesSelected) {
-    if (selectedMode == 'send') {
-      await selectFiles();
-      if (!selectedFiles) {
-        output('User cancelled.');
-        return;
-      }
-    } else if (selectedMode == 'receive') {
-      await selectFolder();
-      if (!selectedFolder) {
-        output('User cancelled.');
-        return;
-      }
-    } else {
-      output('Must select whether this device is sending or receiving.');
-      return;
-    }
-  }
 
   // make sure we have a wifi interface and prompt for which if more than one
   let wifiInterface;
@@ -241,6 +221,26 @@ async function startTransfer(filesSelected) {
         output('Invalid interface selected. Please enter just the number of the WiFi interface you would like to use, e.g. "1" or "3".');
         return;
       }
+  }
+  
+  // get files or folder
+  if (!filesSelected) {
+    if (selectedMode == 'send') {
+      await selectFiles();
+      if (!selectedFiles) {
+        output('User cancelled.');
+        return;
+      }
+    } else if (selectedMode == 'receive') {
+      await selectFolder();
+      if (!selectedFolder) {
+        output('User cancelled.');
+        return;
+      }
+    } else {
+      output('Must select whether this device is sending or receiving.');
+      return;
+    }
   }
   
   // if we're hosting, generate and display the password
