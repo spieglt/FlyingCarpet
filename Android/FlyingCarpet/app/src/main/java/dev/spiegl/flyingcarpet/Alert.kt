@@ -45,7 +45,7 @@ const val AboutMessage = """
     
     Select Sending on one device and Receiving on the other. If not using Bluetooth, select the operating system of the other device. Click the "Start Transfer" button on each device. On the sending device, select the files or folder to send. On the receiving device, select the folder in which to receive files. (To send a folder, drag it onto the window instead of clicking "Start Transfer".)
     
-    If using Bluetooth, the WiFi connection will be configured automatically. Otherwise you will need to scan a QR code or type in a password.
+    If using Bluetooth, confirm the 6-digit PIN on each side. The WiFi connection will be configured automatically. If not using Bluetooth, you will need to scan a QR code or type in a password.
     
     When prompted to join a WiFi network or modify WiFi settings, say Allow. On Windows you may have to grant permission to add a firewall rule. On macOS you may have to grant location permissions, which Apple requires to scan for WiFi networks. Flying Carpet does not read or collect your location, nor any other data.
     
@@ -54,6 +54,8 @@ const val AboutMessage = """
     If using Bluetooth fails, try manually unpairing the devices from one another and starting a new transfer.
     
     If sending from macOS to Linux, disable Bluetooth on both sides.
+
+    Flying Carpet may make multiple attempts to join the other device's hotspot.
     
     Licensed under the GPL3: https://www.gnu.org/licenses/gpl-3.0.html#license-text`
 """

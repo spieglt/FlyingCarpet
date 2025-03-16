@@ -60,6 +60,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         let mut password = generate_password();
         let (_, mut ssid) = get_key_and_ssid(&password);
         let (app_handle, adv_handle) = peripheral::advertise(tx, &ssid, &password).await?;
+        ui.output("Started Bluetooth advertisement, waiting for receiving device...");
         let peer_os =
             match process_bluetooth_message(BluetoothMessage::PeerOS("".to_string()), &mut rx, ui)
                 .await?
@@ -125,9 +126,9 @@ pub async fn negotiate_bluetooth<T: UI>(
         Ok((peer_os, ssid, password))
     } else {
         // acting as central
-        ui.output("Scanning for Bluetooth peripherals...");
-        // let info = central::scan(&adapter, &mode).await?;
+        ui.output("Started Bluetooth scan, waiting for sending device...");
         let device = central::scan(&adapter).await?;
+        ui.output("Found device");
 
         let characteristics = match find_characteristics(&device).await {
             Ok(c) => c,

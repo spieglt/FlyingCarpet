@@ -7,7 +7,7 @@ use std::{
     process,
 };
 
-use crate::{FCError, MAJOR_VERSION};
+use crate::FCError;
 
 #[derive(Debug, PartialEq)]
 pub enum BluetoothMessage {

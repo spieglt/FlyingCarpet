@@ -303,14 +303,14 @@ pub async fn clean_up_transfer<T: UI>(
 fn shut_down_hotspot<T: UI>(
     hotspot: &Arc<Mutex<Option<PeerResource>>>,
     ssid: &Arc<Mutex<Option<String>>>,
-    ui: &T,
+    _ui: &T,
 ) {
     let peer_resource = hotspot.lock().expect("Couldn't lock hotspot mutex.");
     let peer_resource = peer_resource.as_ref();
     let ssid = ssid.lock().expect("Couldn't lock SSID mutex.");
     match network::stop_hotspot(peer_resource, ssid.as_deref()) {
-        Err(e) => ui.output(&format!("{}", e)),
-        Ok(msg) => ui.output(&msg),
+        Err(e) => println!("{}", e),
+        Ok(msg) => println!("{}", msg),
     };
 }
 
@@ -419,6 +419,9 @@ async fn confirm_version(
 }
 
 // TODO:
+// linux writing two files puts them in a folder by that name. does windows?
+// linux can't receive from windows or android if already paired/connected, service not found. but then it disconnects and next transfer works.
+// don't write ssid over bluetooth till hotspot has started, so that peer (especially iOS) doesn't start trying too early.
 // test closing about window with x on linux: panic?
 // https://github.com/hbldh/bleak/issues/367#issuecomment-784375835
 // linux name is null on android when pairing - manufacturer info?
@@ -432,10 +435,8 @@ async fn confirm_version(
 // test pulling wifi card, quitting program, etc.
 
 // MYSTERIES
-// how did windows read OS "windows" from itself when acting as central but not peripheral?
-// windows previously wrote "windows" to the OS characteristic of android, which stored it? doesn't look like it from the android code.
+// how did windows read OS "windows" from itself when acting as central but not peripheral? windows previously wrote "windows" to the OS characteristic of android, which stored it? doesn't look like it from the android code.
 // linux sending to linux: last file sent but then hung, didn't exit transfer. receiving end said "didn't receive confirmation".
-// linux can't receive from windows if already paired/connected, service not found. but then it disconnects and next transfer works.
 // is the problem that the device we see advertising isn't the device we're already paired to? but then the device we're paired to presumably offers the services already.
 
 // LATER MAYBE:
