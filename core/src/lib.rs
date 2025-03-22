@@ -420,7 +420,7 @@ async fn confirm_version(
 
 // TODO:
 // linux writing two files puts them in a folder by that name. does windows?
-// linux can't receive from windows or android if already paired/connected, service not found. but then it disconnects and next transfer works.
+// linux can't receive from windows or android if already paired/connected, service not found. but then it disconnects and next transfer works. unpair after every transfer?
 // don't write ssid over bluetooth till hotspot has started, so that peer (especially iOS) doesn't start trying too early.
 // test closing about window with x on linux: panic?
 // https://github.com/hbldh/bleak/issues/367#issuecomment-784375835

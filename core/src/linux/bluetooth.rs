@@ -1,10 +1,10 @@
 mod central;
 mod peripheral;
 
-use bluer::{Adapter, Session};
+use bluer::{Adapter, Address, Session};
 use central::{exchange_info, find_characteristics};
 use std::{mem::discriminant, time::Duration};
-use tokio::{sync::mpsc, time::sleep};
+use tokio::{spawn, sync::mpsc, time::sleep};
 
 use crate::{
     error::{fc_error, FCError},
@@ -53,6 +53,28 @@ pub async fn negotiate_bluetooth<T: UI>(
     let session = Session::new().await?;
     let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
+
+    struct ConnectedPeripheral {
+        adapter: Adapter,
+        address: Address,
+    }
+
+    impl Drop for ConnectedPeripheral {
+        fn drop(&mut self) {
+            let adapter = self.adapter.clone();
+            let address = self.address.clone();
+            // TODO: use std channel here to block?
+            // let (tx, mut rx) = sync::mpsc::channel::<()>(1);
+            spawn(async move {
+                match adapter.remove_device(address).await {
+                    Ok(_) => println!("Removed device {}", address),
+                    Err(e) => println!("Failed to unpair from peripheral: {}", e),
+                };
+                // tx.send(()).await.expect("Could not send on tx when dropping ConnectedPeripheral");
+            });
+            // rx.blocking_recv();
+        }
+    }
 
     if let Mode::Send(_) = mode {
         // acting as peripheral
@@ -130,21 +152,24 @@ pub async fn negotiate_bluetooth<T: UI>(
         let device = central::scan(&adapter).await?;
         ui.output("Found device");
 
+        let connected_peripheral = ConnectedPeripheral{adapter, address: device.address()};
+
         let characteristics = match find_characteristics(&device).await {
             Ok(c) => c,
             Err(e) => {
                 println!("    Device failed: {}", e);
-                let _ = adapter.remove_device(device.address()).await;
+                let _ = connected_peripheral.adapter.remove_device(device.address()).await;
                 Err(e)?
             }
         };
         let info = match exchange_info(characteristics, mode).await {
             Ok(i) => i,
             Err(e) => {
-                let _ = adapter.remove_device(device.address()).await;
+                let _ = connected_peripheral.adapter.remove_device(device.address()).await;
                 Err(e)?
             }
         };
+        connected_peripheral.adapter.remove_device(device.address()).await?;
         Ok(info)
     }
 }
