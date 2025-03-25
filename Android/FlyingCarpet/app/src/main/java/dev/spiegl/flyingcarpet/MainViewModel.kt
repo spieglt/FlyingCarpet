@@ -312,7 +312,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
     fun joinHotspot() {
         val callback = NetworkCallback()
-        outputText("Joining $ssid, password $password")
+        outputText("Joining $ssid")
         val specifier = WifiNetworkSpecifier.Builder()
             .setSsid(ssid)
             .setWpa2Passphrase(password)

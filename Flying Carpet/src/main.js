@@ -114,9 +114,12 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 
   // handle drag and drop
-  await appWindow.listen('tauri://file-drop', async event => {
+  await appWindow.onDragDropEvent(async event => {
+    if (event.payload.type != 'drop') {
+      return;
+    }
     if (selectedMode === 'send') {
-      selectedFiles = await core.invoke('expand_files', { paths: event.payload });
+      selectedFiles = await core.invoke('expand_files', { paths: event.payload.paths });
       startTransfer(true);
     } else if (selectedMode === 'receive') {
       if (event.payload.length !== 1) {
@@ -134,7 +137,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       output('Error: must select whether sending or receiving before dropping files or folder.');
     }
     checkStatus();
-  })
+  });
 
   checkStatus();
 

@@ -51,7 +51,7 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 
 + Apple devices can only transfer to/from Android, Linux, and Windows as they can no longer programmatically run hotspots. Use AirDrop instead for Apple-to-Apple transfers.
 
-+ Bluetooth does not work when sending from macOS to Android. This is because Flying Carpet has the sending end of the transfer act as the Bluetooth LE peripheral (GATT server). MacOS, when acting as peripheral, does not seem to like the pairing process to be initiated before the BLE central device tries to read an encrypted characteristic, and when this happens, the central device cannot enumerate its GATT services. This can be worked around with the Windows and Android Bluetooth libraries by connecting without pairing, but the Linux library does not seem to be able to do this. The iOS version works with Linux when acting as a peripheral, and uses the same CoreBluetooth code. If you know more information about this problem, please let me know. The "Use Bluetooth" switch can be turned off on both sides of the transfer when sending from macOS to Linux, to enter the WiFi information manually instead.
++ To use Bluetooth to send from macOS to Linux, the devices must be manually paired first, with the connection initiated by macOS[^1]. The "Use Bluetooth" switch can be turned off on both sides of the transfer when sending from macOS to Linux, to enter the WiFi information manually instead.
 
 + Disables your wireless internet connection while in use. (Does not apply to Windows or Android when hosting the hotspot.)
 
@@ -86,3 +86,5 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 + There should be a way to programmatically start hotspots, or at least read the current hotspot configuration with the user's permission.
 
 If you've used Flying Carpet, please send feedback to theron@spiegl.dev. Thanks for your interest! Please also check out https://github.com/spieglt/cloaker, https://cloaker.mobi, and https://github.com/spieglt/whatfiles.
+
+[^1]: Flying Carpet has the sending end of the transfer act as the Bluetooth LE peripheral (GATT server). MacOS, when acting as peripheral, does not seem to like the pairing process to be initiated before the BLE central device tries to read an encrypted characteristic, and when this happens, the central device cannot enumerate its GATT services. This can be worked around with the Windows and Android Bluetooth libraries by connecting without pairing, but the Linux library does not seem to be able to do this. The iOS version works with Linux when acting as a peripheral, and uses the same CoreBluetooth code. If you know more information about this problem, please let me know.

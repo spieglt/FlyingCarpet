@@ -219,9 +219,11 @@ pub async fn start_transfer<T: UI>(
                     let common_len = common_folder.components().collect::<Vec<_>>().len();
                     if current_len < common_len {
                         common_folder = current;
-                    } else if current_len == common_len {
-                        common_folder = current.parent().or(Some(Path::new(""))).unwrap();
                     }
+                    // this puts two files in the same directory in a directory on the other side, which doesn't match other versions' behavior
+                    // else if current_len == common_len {
+                    //     common_folder = current.parent().or(Some(Path::new(""))).unwrap();
+                    // }
                 }
             }
             // send files
@@ -419,7 +421,7 @@ async fn confirm_version(
 }
 
 // TODO:
-// linux writing two files puts them in a folder by that name. does windows?
+// drag and drop shouldn't work when already in transfer
 // linux can't receive from windows or android if already paired/connected, service not found. but then it disconnects and next transfer works. unpair after every transfer?
 // don't write ssid over bluetooth till hotspot has started, so that peer (especially iOS) doesn't start trying too early.
 // test closing about window with x on linux: panic?
@@ -435,6 +437,7 @@ async fn confirm_version(
 // test pulling wifi card, quitting program, etc.
 
 // MYSTERIES
+// "Corrupt JPEG data: 298 extraneous bytes before marker 0xbb" in debug output on windows
 // how did windows read OS "windows" from itself when acting as central but not peripheral? windows previously wrote "windows" to the OS characteristic of android, which stored it? doesn't look like it from the android code.
 // linux sending to linux: last file sent but then hung, didn't exit transfer. receiving end said "didn't receive confirmation".
 // is the problem that the device we see advertising isn't the device we're already paired to? but then the device we're paired to presumably offers the services already.
