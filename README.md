@@ -4,7 +4,7 @@
 
 <a href="https://play.google.com/store/apps/details?id=dev.spiegl.flyingcarpet"><img alt="Get it on Google Play" src="screenshots/google-play.png" height="80"/></a>&nbsp;&nbsp;<a href="https://f-droid.org/packages/dev.spiegl.flyingcarpet"><img src="screenshots/f-droid.png" alt="Get it on F-Droid" height="80"></a>
 
-Or if you prefer to sideload, `android_FlyingCarpet.apk` is available on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page.
+Or if you prefer to sideload, `android_FlyingCarpet_9.0.0.apk` is available on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page.
 
 ### Download for iOS:
 
@@ -57,7 +57,7 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 
 + macOS sometimes switches back to a wireless network with internet connectivity during particularly long transfers.
 
-+ The Android version requires at least Android 10/API level 26. The Android version does not work on some Xiaomi, MIUI, or HarmonyOS devices, and possibly other Android-like OSes. I don't own these devices and so can't test, but it seems like this is due to lack of support for the [LocalOnlyHotspot](https://developer.android.com/develop/connectivity/wifi/localonlyhotspot) API. It has been confirmed to work on at least one Xiaomi phone.
++ The Android version requires at least Android 10/API level 29. The Android version does not work on some Xiaomi, MIUI, or HarmonyOS devices, and possibly other Android-like OSes. I don't own these devices and so can't test, but it seems like this is due to lack of support for the [LocalOnlyHotspot](https://developer.android.com/develop/connectivity/wifi/localonlyhotspot) API. It has been confirmed to work on at least one Xiaomi phone.
 
 + Requires Windows 10 or later.
 
