@@ -1,6 +1,6 @@
+use crate::error::{fc_error, FCError};
 use crate::utils::run_command;
 use crate::{Mode, Peer, PeerResource, WiFiInterface, UI};
-use std::error::Error;
 use tokio::task;
 
 // stub
@@ -8,7 +8,7 @@ pub struct WindowsHotspot {
     _inner: (),
 }
 
-fn is_hosting(peer: Peer, mode: Mode) -> bool {
+pub fn is_hosting(peer: &Peer, mode: &Mode) -> bool {
     match peer {
         Peer::Android | Peer::IOS | Peer::MacOS => true,
         Peer::Windows => false,
@@ -26,8 +26,8 @@ pub async fn connect_to_peer<T: UI>(
     password: String,
     interface: WiFiInterface,
     ui: &T,
-) -> Result<PeerResource, Box<dyn Error>> {
-    if is_hosting(peer, mode) {
+) -> Result<PeerResource, FCError> {
+    if is_hosting(&peer, &mode) {
         // start hotspot
         ui.output(&format!("Starting hotspot {}", ssid));
         start_hotspot(&ssid, &password, &interface.0)?;
@@ -35,7 +35,7 @@ pub async fn connect_to_peer<T: UI>(
     } else {
         // join hotspot and find gateway
         ui.output(&format!("Joining hotspot {}", ssid));
-        join_hotspot(&ssid, &password, &interface.0)?;
+        join_hotspot(&ssid, &password, &interface.0, ui).await?;
         loop {
             // println!("looking for gateway");
             task::yield_now().await;
@@ -52,7 +52,7 @@ pub async fn connect_to_peer<T: UI>(
     }
 }
 
-fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<dyn Error>> {
+fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), FCError> {
     let nmcli = "nmcli";
     let commands = vec![
         vec![
@@ -93,28 +93,37 @@ fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<
         let res = run_command(nmcli, Some(command))?;
         if !res.status.success() {
             let stderr = String::from_utf8_lossy(&res.stderr);
-            Err(format!("Could not start hotspot: {}", stderr))?;
+            fc_error(&format!("Could not start hotspot: {}", stderr))?;
         }
         // println!("output: {}", String::from_utf8_lossy(&res.stdout));
     }
     Ok(())
 }
 
-pub fn stop_hotspot(_peer_resource: Option<&PeerResource>, ssid: Option<&str>) -> Result<(), Box<dyn Error>> {
+pub fn stop_hotspot(
+    _peer_resource: Option<&PeerResource>,
+    ssid: Option<&str>,
+) -> Result<String, FCError> {
     if ssid.is_some() {
-        let options = Some(vec!["connection", "delete", ssid.unwrap()]);
-        let command_output = run_command("nmcli", options)?;
-        if !command_output.status.success() {
-            let stderr = String::from_utf8_lossy(&command_output.stderr);
-            Err(format!("Error stopping hotspot: {}", stderr))?;
+        let list = run_command("nmcli", Some(vec!["connection", "show"]))?;
+        if String::from_utf8_lossy(&list.stdout).contains(ssid.unwrap()) {
+            let options = Some(vec!["connection", "delete", ssid.unwrap()]);
+            let command_output = run_command("nmcli", options)?;
+            if !command_output.status.success() {
+                let stderr = String::from_utf8_lossy(&command_output.stderr);
+                fc_error(&format!("Error stopping hotspot: {}", stderr))?;
+            }
+            let output = String::from_utf8_lossy(&command_output.stdout);
+            Ok(format!("Stop hotspot output: {}", output))
+        } else {
+            Ok(format!("SSID {} was not a known network", ssid.unwrap()))
         }
-        let output = String::from_utf8_lossy(&command_output.stdout);
-        println!("Stop hotspot output: {}", output);
+    } else {
+        Ok(String::new())
     }
-    Ok(())
 }
 
-fn join_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<dyn Error>> {
+async fn join_hotspot<T: UI>(ssid: &str, password: &str, interface: &str, ui: &T) -> Result<(), FCError> {
     let nmcli = "nmcli";
     let commands = vec![
         vec![
@@ -133,23 +142,35 @@ fn join_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), Box<d
         ],
         vec!["con", "modify", ssid, "wifi-sec.key-mgmt", "wpa-psk"],
         vec!["con", "modify", ssid, "wifi-sec.psk", password],
-        vec!["con", "up", ssid],
     ];
     for command in commands {
         let res = run_command(nmcli, Some(command))?;
         if !res.status.success() {
             let stderr = String::from_utf8_lossy(&res.stderr);
-            Err(format!("Error joining hotspot: {}", stderr))?;
+            fc_error(&format!("Error joining hotspot: {}", stderr))?;
         }
         // println!(
         //     "join hotspot output: {}",
         //     String::from_utf8_lossy(&res.stdout)
         // );
     }
+    loop {
+        let res = run_command(nmcli, Some(vec!["con", "up", ssid]))?;
+        if !res.status.success() {
+            let stderr = String::from_utf8_lossy(&res.stderr);
+            // Err(format!("Error joining hotspot: {}", stderr))?;
+            let err_msg = format!("Error joining hotspot: {}. Retrying.", stderr);
+            ui.output(&err_msg);
+            println!("{}", err_msg);
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        } else {
+            break;
+        }
+    }
     Ok(())
 }
 
-pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, Box<dyn Error>> {
+pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
     let command = "nmcli";
     let options = vec!["-t", "device"];
     let command_output = run_command(command, Some(options))?;
@@ -166,7 +187,7 @@ pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, Box<dyn Error>> {
     Ok(interfaces)
 }
 
-fn find_gateway(interface: &str) -> Result<String, Box<dyn Error>> {
+fn find_gateway(interface: &str) -> Result<String, FCError> {
     let route_command = format!(
         "route -n | grep {} | grep UG | awk '{{print $2}}'",
         interface
@@ -178,7 +199,7 @@ fn find_gateway(interface: &str) -> Result<String, Box<dyn Error>> {
 
 #[cfg(test)]
 mod test {
-    use crate::PeerResource;
+    use crate::{PeerResource, UI};
 
     use super::get_wifi_interfaces;
 
@@ -195,13 +216,30 @@ mod test {
 
     #[test]
     fn join_hotspot() {
+
+        #[derive(Clone)]
+        struct TestUI {}
+        impl UI for TestUI {
+            fn output(&self, _msg: &str) {}
+            fn show_progress_bar(&self) {}
+            fn update_progress_bar(&self, _percent: u8) {}
+            fn enable_ui(&self) {}
+            fn show_pin(&self, _pin: &str) {}
+        }
+
         let ssid = "";
         let password = "";
         let pr = PeerResource::WifiClient("".to_string());
         let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].0;
-        crate::network::join_hotspot(ssid, password, &interface).unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(20));
-        crate::network::stop_hotspot(Some(&pr), Some(ssid)).unwrap();
+        let interface = interface.to_string();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
+        tokio::spawn(async move {
+            crate::network::join_hotspot(ssid, password, &interface, &TestUI{}).await.unwrap();
+            std::thread::sleep(std::time::Duration::from_secs(20));
+            crate::network::stop_hotspot(Some(&pr), Some(ssid)).unwrap();
+            tx.send(()).await.unwrap();
+        });
+        rx.blocking_recv().unwrap();
     }
 
     #[test]

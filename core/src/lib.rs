@@ -1,32 +1,40 @@
-#[cfg_attr(target_os = "linux", path = "linux.rs")]
-#[cfg_attr(target_os = "macos", path = "mac.rs")]
-#[cfg_attr(target_os = "windows", path = "windows.rs")]
+#[cfg_attr(target_os = "linux", path = "linux/network.rs")]
+#[cfg_attr(target_os = "windows", path = "windows/network.rs")]
 pub mod network;
+
+#[cfg_attr(target_os = "linux", path = "linux/bluetooth.rs")]
+#[cfg_attr(target_os = "windows", path = "windows/bluetooth.rs")]
+pub mod bluetooth;
+
+pub mod error;
 mod receiving;
 mod sending;
 pub mod utils;
 
-use sha2::{Digest, Sha256};
+use bluetooth::negotiate_bluetooth;
+use error::{fc_error, FCError};
 use std::{
-    error::Error,
     net::SocketAddr,
-    path::{PathBuf, Path},
+    path::{Path, PathBuf},
     str::FromStr,
     sync::{Arc, Mutex},
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
+    sync::mpsc,
 };
+use utils::get_key_and_ssid;
 
 const CHUNKSIZE: usize = 1_000_000; // 1 MB
-const MAJOR_VERSION: u64 = 8;
+const MAJOR_VERSION: u64 = 9;
 
 pub trait UI: Clone + Send + 'static {
     fn output(&self, msg: &str);
     fn show_progress_bar(&self);
     fn update_progress_bar(&self, percent: u8);
     fn enable_ui(&self);
+    fn show_pin(&self, pin: &str);
 }
 
 #[derive(Clone)]
@@ -35,6 +43,7 @@ pub enum Mode {
     Receive(PathBuf),
 }
 
+#[derive(Clone, Copy)]
 pub enum Peer {
     Android,
     IOS,
@@ -70,6 +79,7 @@ pub struct Transfer {
     pub cancel_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub hotspot: Arc<Mutex<Option<PeerResource>>>,
     pub ssid: Arc<Mutex<Option<String>>>,
+    pub ble_ui_tx: Mutex<Option<mpsc::Sender<bool>>>, // used by javascript to report user's choice about whether to pair with bluetooth device to windows custom pairing callback.
 }
 
 impl Transfer {
@@ -78,24 +88,25 @@ impl Transfer {
             cancel_handle: Mutex::new(None),
             hotspot: Arc::new(Mutex::new(None)),
             ssid: Arc::new(Mutex::new(None)),
+            ble_ui_tx: Mutex::new(None),
         }
     }
 }
 
 pub async fn start_transfer<T: UI>(
     mode: String,
-    peer: String,
-    password: String,
-    ssid: Option<String>, // only used if mac talking to android, getting android ssid from ui. otherwise compute.
+    using_bluetooth: bool,
+    mut peer: Option<String>,
+    mut password: Option<String>,
     interface: WiFiInterface,
     file_list: Option<Vec<String>>,
     receive_dir: Option<String>,
     ui: &T,
     hotspot: Arc<Mutex<Option<PeerResource>>>,
     state_ssid: Arc<Mutex<Option<String>>>,
+    ble_ui_rx: mpsc::Receiver<bool>,
 ) -> Option<TcpStream> {
-    let peer = Peer::from(peer.as_str());
-
+    // get files or receive directory
     let mode = if mode == "send" {
         let paths = file_list
             .expect("Send mode selected but no files present.")
@@ -110,11 +121,33 @@ pub async fn start_transfer<T: UI>(
         panic!("Bad mode: {}", mode);
     };
 
-    let mut hasher = Sha256::new();
-    hasher.update(password.as_bytes());
-    let key = hasher.finalize();
-    let _ssid = format!("flyingCarpet_{:02x}{:02x}", key[0], key[1]);
-    let ssid = ssid.or(Some(_ssid)).unwrap();
+    // if bluetooth, make that connection here first
+    // for windows and linux, the central/client api can read and write synchronously, and we always know the ssid before starting hotspot, so we can just do that here before connecting to peer?
+    // for servers/peripherals, does it matter? callbacks in both cases?
+
+    if using_bluetooth {
+        match negotiate_bluetooth(&mode, ble_ui_rx, ui).await {
+            Ok((p, _ssid, pw)) => {
+                peer = Some(p);
+                if password.is_none() {
+                    password = Some(pw);
+                }
+            }
+            Err(e) => {
+                ui.output(&format!("Could not establish Bluetooth connection: {}", e));
+                println!("Could not establish Bluetooth connection: {}", e);
+                return None;
+            }
+        }
+    }
+
+    let peer = Peer::from(
+        peer.expect("Neither UI nor Bluetooth peer present.")
+            .as_str(),
+    );
+    let password = password.expect("Missing password in start_transfer().");
+
+    let (key, ssid) = get_key_and_ssid(&password);
 
     {
         let mut _state_ssid = state_ssid.lock().expect("Couldn't lock state_ssid");
@@ -186,9 +219,11 @@ pub async fn start_transfer<T: UI>(
                     let common_len = common_folder.components().collect::<Vec<_>>().len();
                     if current_len < common_len {
                         common_folder = current;
-                    } else if current_len == common_len {
-                        common_folder = current.parent().or(Some(Path::new(""))).unwrap();
                     }
+                    // this puts two files in the same directory in a directory on the other side, which doesn't match other versions' behavior
+                    // else if current_len == common_len {
+                    //     common_folder = current.parent().or(Some(Path::new(""))).unwrap();
+                    // }
                 }
             }
             // send files
@@ -267,20 +302,21 @@ pub async fn clean_up_transfer<T: UI>(
     ui.enable_ui();
 }
 
-fn shut_down_hotspot<T: UI>(hotspot: &Arc<Mutex<Option<PeerResource>>>, ssid: &Arc<Mutex<Option<String>>>, ui: &T) {
+fn shut_down_hotspot<T: UI>(
+    hotspot: &Arc<Mutex<Option<PeerResource>>>,
+    ssid: &Arc<Mutex<Option<String>>>,
+    _ui: &T,
+) {
     let peer_resource = hotspot.lock().expect("Couldn't lock hotspot mutex.");
     let peer_resource = peer_resource.as_ref();
     let ssid = ssid.lock().expect("Couldn't lock SSID mutex.");
     match network::stop_hotspot(peer_resource, ssid.as_deref()) {
-        Err(e) => ui.output(&format!("Error stopping hotspot: {}", e)),
-        _ => (),
+        Err(e) => println!("{}", e),
+        Ok(msg) => println!("{}", msg),
     };
 }
 
-async fn start_tcp<T: UI>(
-    peer_resource: &PeerResource,
-    ui: &T,
-) -> Result<TcpStream, Box<dyn Error>> {
+async fn start_tcp<T: UI>(peer_resource: &PeerResource, ui: &T) -> Result<TcpStream, FCError> {
     let stream;
     match peer_resource {
         PeerResource::WifiClient(gateway) => {
@@ -304,7 +340,7 @@ async fn confirm_mode(
     mode: Mode,
     peer_resource: &PeerResource,
     stream: &mut TcpStream,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), FCError> {
     let our_mode = match mode {
         Mode::Send(..) => 1,
         Mode::Receive(..) => 0,
@@ -319,14 +355,13 @@ async fn confirm_mode(
             };
             // wait to ensure host responds that mode selection was correct
             if stream.read_u64().await? != 1 {
-                let msg = format!(
+                let message = format!(
                     "Both ends of the transfer selected {}",
                     if our_mode == 0 { "receive" } else { "send" }
                 );
-                Err(msg)?
+                fc_error(&message)?
             }
         }
-        // TODO: LinuxHotspot needed at all?
         PeerResource::WindowsHotspot(_) | PeerResource::LinuxHotspot => {
             // wait for guest to say what mode they selected, compare to our own, and report back
             let peer_mode = stream.read_u64().await?;
@@ -337,7 +372,7 @@ async fn confirm_mode(
                 );
                 // write failure to guest
                 stream.write_u64(0).await?;
-                Err(msg)?
+                fc_error(&msg)?
             } else {
                 // write success to guest
                 stream.write_u64(1).await?;
@@ -350,7 +385,7 @@ async fn confirm_mode(
 async fn confirm_version(
     peer_resource: &PeerResource,
     stream: &mut TcpStream,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), FCError> {
     // only really have to worry about version 6 as that's the only one online and in app store. it will do mode confirmation first,
     // and obey hotspot host/guest rule, and it will write 0 or 1 for mode, so we shouldn't deadlock with both ends waiting.
     let peer_version = match peer_resource {
@@ -374,34 +409,47 @@ async fn confirm_version(
             stream.write_u64(1).await?; // report that versions are compatible
         } else {
             stream.write_u64(0).await?;
-            Err(format!("Peer's version {} not compatible, please update Flying Carpet to the latest version on both devices.", peer_version))?;
+            fc_error(&format!("Peer's version {} not compatible, please update Flying Carpet to the latest version on both devices.", peer_version))?;
         }
     } else if peer_version > MAJOR_VERSION {
         // peer makes decision
         if stream.read_u64().await? == 0 {
-            Err(format!("Peer's version {} not compatible, please update Flying Carpet to the latest version on both devices.", peer_version))?;
+            fc_error(&format!("Peer's version {} not compatible, please update Flying Carpet to the latest version on both devices.", peer_version))?;
         }
     } // otherwise, versions match, implicitly compatible
     Ok(())
 }
 
 // TODO:
-// folder send check box? or just rely on drag and drop? if so, disable it, store/restore on refresh.
-// fix tests
-// code signing for windows?
-// fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux
-// update screenshots?
+// drag and drop shouldn't work when already in transfer
+// linux can't receive from windows or android if already paired/connected, service not found. but then it disconnects and next transfer works. unpair after every transfer?
+// don't write ssid over bluetooth till hotspot has started, so that peer (especially iOS) doesn't start trying too early.
+// test closing about window with x on linux: panic?
+// https://github.com/hbldh/bleak/issues/367#issuecomment-784375835
+// linux name is null on android when pairing - manufacturer info?
+// fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux: have to get whatever is blocking on background thread?
 // show qr code after refresh
+
+// TESTS:
+// test multiple transfers back to back, windows central unpaired but ios peripheral still paired, already paired but switched mode
+// test switching os...
+// fix tests
 // test pulling wifi card, quitting program, etc.
 
+// MYSTERIES
+// "Corrupt JPEG data: 298 extraneous bytes before marker 0xbb" in debug output on windows
+// how did windows read OS "windows" from itself when acting as central but not peripheral? windows previously wrote "windows" to the OS characteristic of android, which stored it? doesn't look like it from the android code.
+// linux sending to linux: last file sent but then hung, didn't exit transfer. receiving end said "didn't receive confirmation".
+// is the problem that the device we see advertising isn't the device we're already paired to? but then the device we're paired to presumably offers the services already.
+
 // LATER MAYBE:
+// code signing for windows?
 // faster?
 // cli version?
 // move expand_files into utils and make tauri's version a wrapper for CLI version
 // hosted network stuff on windows?
 // send folder mode?
 // recreate directory structure if all submitted files are in same dir. taken for granted in gui? only problem for cli? not if dropping appends... only allow when using send-folder?
-// mac just times out after 200MB? no, just has to be kept awake? or cycles card if something tries to connect to internet? or if not plugged in? or it's just not happening now...
 // remove file selection box and replace start button with Choose Files/Choose Folder? gets in the way of drag and drop... so no?
 // optional password length?
 // move password length constant into rust, fetch in javascript

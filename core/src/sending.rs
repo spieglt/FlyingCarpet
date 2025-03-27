@@ -1,7 +1,6 @@
-use crate::{utils, CHUNKSIZE, UI};
+use crate::{utils, FCError, CHUNKSIZE, UI};
 use aes_gcm::{aead::Aead, AeadCore, Aes256Gcm, KeyInit};
 use std::{
-    error::Error,
     fs::{metadata, File},
     io::Read,
     path::Path,
@@ -18,9 +17,9 @@ pub async fn send_file<T: UI>(
     key: &[u8],
     stream: &mut TcpStream,
     ui: &T,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), FCError> {
     let start = Instant::now();
-    let cipher = Aes256Gcm::new_from_slice(key)?;
+    let cipher = Aes256Gcm::new_from_slice(key).expect("Invalid AES-256-GCM key length");
     let mut handle = File::open(file)?;
     let metadata = metadata(file)?;
     let size = metadata.len();
@@ -28,25 +27,17 @@ pub async fn send_file<T: UI>(
     ui.output(&format!("File size: {}", utils::make_size_readable(size)));
 
     // send file details
-    let mut filename = file
-        .strip_prefix(prefix)?
-        .to_string_lossy()
-        .to_string();
+    let mut filename = file.strip_prefix(prefix)?.to_string_lossy().to_string();
     if cfg!(windows) {
         filename = filename.replace("\\", "/");
     }
-    send_file_details(
-        &filename,
-        size,
-        stream,
-    )
-    .await?;
+    send_file_details(&filename, size, stream).await?;
 
     // check to see if receiving end already has the file
     let need_transfer = check_for_file(&file, stream).await?;
     if !need_transfer {
         ui.output("Recipient already has this file, skipping.");
-        return Ok(())
+        return Ok(());
     }
 
     // show progress bar
@@ -99,14 +90,12 @@ async fn encrypt_and_send_chunk(
     chunk: &[u8],
     cipher: &Aes256Gcm,
     stream: &mut TcpStream,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), FCError> {
     // generate nonce
     let nonce = aes_gcm::Aes256Gcm::generate_nonce(rand::thread_rng());
 
     // encrypt
-    let mut encrypted_chunk = cipher
-        .encrypt(&nonce, chunk)
-        .map_err(|e| format!("Encryption error: {}", e))?;
+    let mut encrypted_chunk = cipher.encrypt(&nonce, chunk)?;
 
     let mut nonce_and_chunk = nonce.to_vec();
     nonce_and_chunk.append(&mut encrypted_chunk);
@@ -135,7 +124,7 @@ async fn send_file_details(
 }
 
 // returns Ok(true) if we need to perform the transfer
-async fn check_for_file(filename: &Path, stream: &mut TcpStream) -> Result<bool, Box<dyn Error>> {
+async fn check_for_file(filename: &Path, stream: &mut TcpStream) -> Result<bool, FCError> {
     let has_file = stream.read_u64().await?;
     if has_file == 1 {
         let hash = utils::hash_file(filename)?;
@@ -146,8 +135,6 @@ async fn check_for_file(filename: &Path, stream: &mut TcpStream) -> Result<bool,
         Ok(true)
     }
 }
-
-
 
 /*
 mod tests {

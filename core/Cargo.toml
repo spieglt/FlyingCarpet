@@ -1,11 +1,12 @@
 [package]
 name = "flying-carpet-core"
-version = "8.0.1"
+version = "9.0.0"
 edition = "2021"
 license = "GPL-3.0-only"
 
 [dependencies]
 aes-gcm = "0.10"
+futures = "0.3.31"
 rand = "0.8"
 regex = "1"
 serde = { version = "1.0", features = ["derive"] }
@@ -13,8 +14,11 @@ sha2 = { version = "0.10" }
 tokio = { version = "1", features = ["full"] }
 wifidirect-legacy-ap = "0.4.0"
 
+[target.'cfg(unix)'.dependencies]
+bluer = { version = "0.17.3", features = ["bluetoothd"] }
+
 [target.'cfg(windows)'.dependencies.windows]
-version = "0.42.0"
+version = "0.58.0"
 features = [
     "Data_Xml_Dom",
     "Win32_Foundation",
@@ -28,4 +32,13 @@ features = [
     "Win32_NetworkManagement_IpHelper",
     "Win32_NetworkManagement_Ndis",
     "Win32_NetworkManagement_WiFi",
+    "Foundation",
+    "Foundation_Collections",
+    "implement",
+    "Devices_Bluetooth",
+    "Devices_Bluetooth_Advertisement",
+    "Devices_Bluetooth_GenericAttributeProfile",
+    "Devices_Enumeration",
+    "Devices_Radios",
+    "Storage_Streams",
 ]

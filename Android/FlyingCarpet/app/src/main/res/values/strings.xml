@@ -7,15 +7,16 @@
     <string name="linux">Linux</string>
     <string name="mac">macOS</string>
     <string name="windows">Windows</string>
-    <string name="step1">Step 1: Select mode for this device</string>
+    <string name="step1">Select mode for this device</string>
     <string name="welcome">Welcome to Flying Carpet!</string>
     <string name="selectFiles">Select Files</string>
     <string name="cancel">Cancel Transfer</string>
     <string name="selectFolder">Select Folder</string>
-    <string name="step2">Step 2: Select OS of the other device</string>
+    <string name="step2">Select OS of the other device</string>
     <string name="qrCodeDescription">Flying Carpet logo / QR code</string>
     <string name="programTitle">Flying Carpet</string>
     <string name="about">About</string>
-    <string name="versionNumber">Version 8</string>
+    <string name="versionNumber">Version 9</string>
     <string name="sendFolderText">Send Folder</string>
+    <string name="bluetooth">Use Bluetooth</string>
 </resources>

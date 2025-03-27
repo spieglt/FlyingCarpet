@@ -98,3 +98,11 @@ fun MainViewModel.hashFile(file: DocumentFile): ByteArray {
     stream.close()
     return hasher.digest()
 }
+
+fun getSsidAndKey(password: String): Pair<String, ByteArray> {
+    val hasher = MessageDigest.getInstance("SHA-256")
+    hasher.update(password.encodeToByteArray())
+    val key = hasher.digest()
+    val ssid = "flyingCarpet_%02x%02x".format(key[0], key[1])
+    return Pair(ssid, key)
+}

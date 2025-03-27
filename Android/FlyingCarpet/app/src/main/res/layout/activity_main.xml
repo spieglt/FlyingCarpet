@@ -254,15 +254,17 @@
 
     <CheckBox
         android:id="@+id/sendFolderCheckBox"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="109dp"
+        android:layout_height="25dp"
         android:layout_marginStart="8dp"
+        android:layout_marginTop="1dp"
         android:layout_marginBottom="16dp"
         android:buttonTint="@color/startButtonStrokeColor"
         android:text="@string/sendFolderText"
         android:visibility="invisible"
         app:layout_constraintBottom_toTopOf="@+id/modeInstruction"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/bluetoothSwitch" />
 
     <TextView
         android:id="@+id/textView"
@@ -273,5 +275,24 @@
         android:textColor="?android:attr/textColorPrimary"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/programTitle" />
+
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/bluetoothSwitch"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginStart="8dp"
+        android:text="@string/bluetooth"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/textView" />
+
+    <ImageView
+        android:id="@+id/bluetoothIcon"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:layout_marginTop="8dp"
+        app:layout_constraintStart_toEndOf="@+id/bluetoothSwitch"
+        app:layout_constraintTop_toBottomOf="@+id/textView"
+        app:srcCompat="@android:drawable/stat_sys_data_bluetooth"
+        app:tint="@color/bluetoothColor" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

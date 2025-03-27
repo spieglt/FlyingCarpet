@@ -1,15 +1,33 @@
 use rand::Rng;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use std::{
-    error::Error,
     ffi::{c_char, CString},
-    fs,
-    io,
-    path::{PathBuf, Path},
+    fs, io,
+    path::{Path, PathBuf},
     process,
 };
 
-use crate::MAJOR_VERSION;
+use crate::FCError;
+
+#[derive(Debug, PartialEq)]
+pub enum BluetoothMessage {
+    Pin(String),
+    PairApproved,
+    PairSuccess,
+    PairFailure,
+    AlreadyPaired,
+    UserCanceled,
+    StartedAdvertising,
+    PeerOS(String),
+    SSID(String),
+    Password(String),
+    PeerReadSsid,
+    PeerReadPassword,
+    OtherError(String),
+}
+
+unsafe impl Send for BluetoothMessage {}
+unsafe impl Sync for BluetoothMessage {}
 
 pub fn run_command(
     program: &str,
@@ -46,7 +64,15 @@ pub fn make_parent_directories(full_path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-pub fn hash_file(filename: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
+pub fn get_key_and_ssid(password: &str) -> ([u8; 32], String) {
+    let mut hasher = Sha256::new();
+    hasher.update(password.as_bytes());
+    let key = hasher.finalize();
+    let ssid = format!("flyingCarpet_{:02x}{:02x}", key[0], key[1]);
+    (key.into(), ssid)
+}
+
+pub fn hash_file(filename: &Path) -> Result<Vec<u8>, FCError> {
     let mut file = fs::File::open(filename)?;
     let mut hasher = Sha256::new();
     io::copy(&mut file, &mut hasher)?;
@@ -94,8 +120,8 @@ pub fn format_time(seconds: f64) -> String {
 }
 
 pub fn is_compatible(peer_version: u64) -> bool {
-    // version 8 is not compatible with previous versions
-    peer_version == MAJOR_VERSION
+    // compatible with version 8. if transferring with higher version, that version will decide compatibility.
+    peer_version >= 8
 }
 
 #[cfg(test)]

@@ -1,16 +1,24 @@
 package dev.spiegl.flyingcarpet
 
+import android.Manifest
 import android.app.Application
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.*
 import android.net.wifi.WifiManager
+import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
+import androidx.activity.result.ActivityResultLauncher
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.*
 import java.io.InputStream
 import java.io.OutputStream
@@ -19,6 +27,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
 import java.nio.ByteBuffer
+import java.security.MessageDigest
 
 const val PORT = 3290
 
@@ -35,19 +44,19 @@ enum class Peer {
     Windows,
 }
 
-const val MAJOR_VERSION: Long = 8
+const val MAJOR_VERSION: Long = 9
 val zero = ByteArray(8) // meant to represent a 64-bit unsigned 0
 val one = byteArrayOf(0, 0, 0, 0, 0, 0, 0, 1) // meant to represent a 64-bit unsigned 1
 const val chunkSize = 5_000_000
 //fun ByteArray.toHex(): String = joinToString(separator = "") { eachByte -> "%02x".format(eachByte) }
 
-class MainViewModel(application: Application) : AndroidViewModel(application) {
+class MainViewModel(private val application: Application) : AndroidViewModel(application), BluetoothDelegate {
 
     lateinit var mode: Mode
     lateinit var peer: Peer
     var peerIP: Inet4Address? = null
-    lateinit var ssid: String
-    lateinit var password: String
+    var ssid: String = ""
+    var password: String = ""
     lateinit var key: ByteArray
     var files: MutableList<DocumentFile> = mutableListOf()
     var fileStreams: MutableList<InputStream> = mutableListOf()
@@ -55,7 +64,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     lateinit var receiveDir: Uri
     lateinit var sendDir: Uri
     var sendFolder: Boolean = false
-    lateinit var server: ServerSocket // TCP listener, used to release port when transfer fails/ends/is cancelled
+    private lateinit var server: ServerSocket // TCP listener, used to release port when transfer fails/ends/is cancelled
     lateinit var client: Socket // TCP socket, used to release port when transfer fails/ends/is cancelled
     lateinit var inputStream: InputStream // incoming TCP stream from peer
     lateinit var outputStream: OutputStream // outgoing TCP stream to peer
@@ -63,20 +72,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var transferIsRunning = false
     lateinit var wifiManager: WifiManager
     lateinit var reservation: WifiManager.LocalOnlyHotspotReservation
-    val handler = Handler(Looper.getMainLooper())
+    lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
+    val bluetooth = Bluetooth(application, this)
+    lateinit var barcodeLauncher: ActivityResultLauncher<ScanOptions>
+    lateinit var displayQrCode: (String, String) -> Unit
+    lateinit var cleanUpUi: () -> Unit
+    lateinit var enableBluetoothUi: (Boolean) -> Unit
+    private val handler = Handler(Looper.getMainLooper())
     private var _output = MutableLiveData<String>()
     val output: LiveData<String>
         get() = _output
-    val outputText = { msg: String ->
+    override fun outputText(msg: String) {
         GlobalScope.launch(Dispatchers.Main) {
             _output.value = msg
         }
     }
+
     var qrBitmap: Bitmap? = null
 
-    var _progressBar = MutableLiveData(0)
+    var progressBarMut = MutableLiveData(0)
     val progressBar: LiveData<Int>
-        get() = _progressBar
+        get() = progressBarMut
 
     private var _transferFinished = MutableLiveData(false)
     val transferFinished: LiveData<Boolean>
@@ -86,13 +102,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // and calls cleanUpTransfer() on the new activity
     val finishTransfer = { _transferFinished.postValue(true) }
 
-    fun serverIsInitialized() = ::server.isInitialized
-    fun clientIsInitialized() = ::client.isInitialized
-    fun inputStreamIsInitialized() = ::inputStream.isInitialized
-    fun outputStreamIsInitialized() = ::outputStream.isInitialized
-    fun reservationIsInitialized() = ::reservation.isInitialized
-
-    fun isHosting(): Boolean {
+    private fun isHosting(): Boolean {
         return peer == Peer.iOS
                 || peer == Peer.macOS
                 || (peer == Peer.Android && mode == Mode.Receiving)
@@ -135,6 +145,231 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         outputText("Transfer complete\n")
     }
 
+    fun cleanUpTransfer() {
+        transferIsRunning = false
+        // cancel transfer
+        if (transferCoroutine != null) {
+            transferCoroutine!!.cancel()
+            transferCoroutine = null
+        }
+        // close tcp streams
+        if (this::inputStream.isInitialized) {
+            inputStream.close()
+        }
+        if (this::outputStream.isInitialized) {
+            outputStream.close()
+        }
+        // close sockets, release port
+        if (this::client.isInitialized) {
+            client.close()
+        }
+        if (this::server.isInitialized) {
+            server.close()
+        }
+        // tear down hotspot
+        if (this::reservation.isInitialized) {
+            reservation.close()
+        }
+        // stop bluetooth functions
+        bluetooth.stop(application)
+        // clean up UI
+        cleanUpUi()
+    }
+
+    override fun connectToPeer() {
+        ssid = ""
+        password = ""
+        // if we're hosting, startHotspot() will write the wifi details over bluetooth or display the QR code
+        // if we're joining and using bluetooth, we read peer's wifi characteristic here, then bluetoothReceiver's gattCallback's onCharacteristicRead will call gotSsid()
+        // if we're joining and not using bluetooth, barcodeLauncher will call joinHotspot()
+        // but who will call connectToPeer? file/folder pickers in MainActivity if not using bluetooth, or after we write OS if bluetooth
+        if (isHosting()) {
+            startHotspot()
+        } else { // joining hotspot
+            if (bluetooth.active) {
+                if (mode == Mode.Sending) {
+                    // we're peripheral, and we're joining, and already know peer's OS, so need to
+                    // wait for central to write the hotspot details. so nothing to do here.
+                } else {
+                    // we're central, so read wifi details
+                    bluetooth.bluetoothReceiver.read(SSID_CHARACTERISTIC_UUID)
+                }
+            } else {
+                // scan qr code
+                val options = ScanOptions()
+                options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                options.setPrompt("Start transfer on the other device and scan the QR code displayed.")
+                options.setOrientationLocked(false)
+                barcodeLauncher.launch(options)
+            }
+        }
+    }
+
+    // hotspot stuff
+    private val localOnlyHotspotCallback = object : WifiManager.LocalOnlyHotspotCallback() {
+        override fun onFailed(reason: Int) {
+            super.onFailed(reason)
+            outputText("Hotspot failed: $reason")
+        }
+
+        override fun onStarted(res: WifiManager.LocalOnlyHotspotReservation?) {
+            super.onStarted(res)
+
+            // check for cancellation
+            if (!transferIsRunning) {
+                res?.close()
+                return
+            }
+
+            if (res != null) {
+                reservation = res
+            } else {
+                outputText("Failed to get hotspot reservation")
+                cleanUpTransfer()
+                return
+            }
+
+            // get ssid and password
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                val info = reservation.wifiConfiguration
+                info?.let {
+                    ssid = it.SSID
+                    password = it.preSharedKey
+                }
+            } else {
+                val info = reservation.softApConfiguration
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    info.wifiSsid?.let { ssid = it.toString() }
+                } else {
+                    info.ssid?.let { ssid = it }
+                }
+                info.passphrase?.let { password = it }
+            }
+
+            // ensure no quotes around the ssid, not sure why this is necessary
+            ssid = ssid.replace("\"", "")
+
+            // set key
+            val hasher = MessageDigest.getInstance("SHA-256")
+            hasher.update(password.encodeToByteArray())
+            key = hasher.digest()
+
+            if (bluetooth.active) {
+                if (mode == Mode.Sending) {
+                    // we're peripheral, and hosting, so just need to wait for the central to read from our
+                    // wifi characteristic. nothing to do here.
+                } else {
+                    // write the wifi details to peer
+                    bluetooth.bluetoothReceiver.write(SSID_CHARACTERISTIC_UUID, ssid.toByteArray())
+                }
+            } else {
+                // android generates ssid and password for us
+                displayQrCode(ssid, password)
+            }
+
+            outputText("SSID: $ssid")
+            outputText("Password: $password")
+
+            transferCoroutine = GlobalScope.launch {
+                try {
+                    startTransfer()
+                } catch (e: Exception) {
+                    outputText("Transfer error: ${e.message}\n")
+                }
+                finishTransfer()
+            }
+
+        }
+
+        override fun onStopped() {
+            super.onStopped()
+            outputText("Hotspot stopped")
+        }
+    }
+
+    fun startHotspot() {
+        val requiredPermission = if (Build.VERSION.SDK_INT < 33) {
+            Manifest.permission.ACCESS_FINE_LOCATION
+        } else {
+            Manifest.permission.NEARBY_WIFI_DEVICES
+        }
+        if (ActivityCompat.checkSelfPermission(
+                application, requiredPermission
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissionLauncher.launch(requiredPermission)
+        } else {
+            try {
+                wifiManager.startLocalOnlyHotspot(localOnlyHotspotCallback, handler)
+                outputText("Started hotspot.")
+            } catch (e: Exception) {
+                e.message?.let { outputText(it) }
+                cleanUpTransfer()
+            }
+        }
+    }
+
+    fun joinHotspot() {
+        val callback = NetworkCallback()
+        outputText("Joining $ssid")
+        val specifier = WifiNetworkSpecifier.Builder()
+            .setSsid(ssid)
+            .setWpa2Passphrase(password)
+            .build()
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .setNetworkSpecifier(specifier)
+            .build()
+        val connectivityManager =
+            application.getSystemService(AppCompatActivity.CONNECTIVITY_SERVICE) as ConnectivityManager
+        callback.connectivityManager = connectivityManager
+        peerIP = null // we check this in NetworkCallback so that we only start the transfer once per joinHotspot invocation
+        connectivityManager.requestNetwork(request, callback)
+    }
+
+    override fun gotPeer(peerOS: String) {
+        peer = when (peerOS) {
+            "android" -> Peer.Android
+            "ios" -> Peer.iOS
+            "linux" -> Peer.Linux
+            "mac" -> Peer.macOS
+            "windows" -> Peer.Windows
+            else -> {
+                outputText("Error: peer sent an unsupported OS.")
+                return
+            }
+        }
+        if (mode == Mode.Sending) {
+            connectToPeer()
+        } else {
+            bluetooth.bluetoothReceiver.write(OS_CHARACTERISTIC_UUID, "android".toByteArray())
+        }
+    }
+
+    override fun gotSsid(ssid: String) {
+        this.ssid = if (ssid == NO_SSID) { "" } else ssid
+    }
+
+    override fun gotPassword(password: String) {
+        this.password = password
+        val (ssid, key) = getSsidAndKey(password)
+        if (this.ssid == "") {
+            this.ssid = ssid
+        }
+        this.key = key
+        joinHotspot()
+    }
+
+    override fun getWifiInfo(): Pair<String, String> {
+        // TODO: put mutex around this? and when setting it?
+        Log.i("Bluetooth", "In getWifiInfo")
+        if (ssid == "" || password == "") {
+            return Pair("", "")
+        }
+        return Pair(ssid, password)
+    }
+
     private suspend fun startTCP() {
         withContext(Dispatchers.IO) {
             if (isHosting()) {
@@ -174,8 +409,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } else {
                 // we make decision
-                // for this version, we're only compatible with the same
-                if (peerVersion != MAJOR_VERSION) {
+                // compatible with version 8. if transferring with higher version, that version will decide compatibility.
+                if (peerVersion < 8) {
                     throw Exception("Peer's version of Flying Carpet is not compatible. Please find links to download the newest version at https://flyingcarpet.spiegl.dev.")
                 }
             }
@@ -321,6 +556,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 //            super.onLosing(network, maxMsToLive)
 //            outputText("losing")
 //        }
+    }
+    override fun bluetoothFailed() {
+        enableBluetoothUi(false)
+        cleanUpTransfer()
     }
 }
 

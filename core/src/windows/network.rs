@@ -1,7 +1,6 @@
-use crate::{Mode, Peer, PeerResource, WiFiInterface, UI};
+use crate::{fc_error, FCError, Mode, Peer, PeerResource, WiFiInterface, UI};
 use regex::Regex;
 use std::env::current_exe;
-use std::error::Error;
 use std::ffi::{c_void, CString};
 use std::os::windows::process::CommandExt;
 use std::sync::mpsc;
@@ -14,7 +13,6 @@ use windows::Win32::NetworkManagement::IpHelper;
 use windows::Win32::NetworkManagement::WiFi::{
     self, WLAN_INTERFACE_INFO, WLAN_INTERFACE_INFO_LIST,
 };
-use windows::Win32::Networking::WinSock;
 use windows::Win32::System::Com::CoInitialize;
 use windows::Win32::System::Diagnostics::Debug::{
     self, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_IGNORE_INSERTS,
@@ -33,8 +31,8 @@ pub async fn connect_to_peer<T: UI>(
     password: String,
     interface: WiFiInterface,
     ui: &T,
-) -> Result<PeerResource, Box<dyn Error>> {
-    let hosting = is_hosting(peer, mode);
+) -> Result<PeerResource, FCError> {
+    let hosting = is_hosting(&peer, &mode);
     if hosting {
         if !check_for_firewall_rule()? {
             // open firewall
@@ -50,7 +48,7 @@ pub async fn connect_to_peer<T: UI>(
             let res = rx.recv().await;
             let res = res.expect("couldn't unwrap value over channel");
             match res {
-                Some(err_msg) => Err(format!("couldn't add firewall rule. {}", err_msg))?,
+                Some(err_msg) => fc_error(&format!("couldn't add firewall rule. {}", err_msg))?,
                 None => ui.output("Added firewall rule"),
             }
         } else {
@@ -58,10 +56,7 @@ pub async fn connect_to_peer<T: UI>(
         }
 
         // start hotspot
-        let hosted_network = match start_wifi_direct(&ssid, &password, ui) {
-            Ok(ap) => ap,
-            Err(e) => Err(e)?,
-        };
+        let hosted_network = start_wifi_direct(&ssid, &password, ui)?;
         Ok(PeerResource::WindowsHotspot(hosted_network))
     } else {
         let guid =
@@ -93,15 +88,18 @@ pub async fn connect_to_peer<T: UI>(
     }
 }
 
-fn start_wifi_direct<T: UI>(
-    ssid: &str,
-    password: &str,
-    ui: &T,
-) -> Result<WindowsHotspot, Box<dyn Error>> {
+fn start_wifi_direct<T: UI>(ssid: &str, password: &str, ui: &T) -> Result<WindowsHotspot, FCError> {
     // Make channels to receive messages from Windows Runtime
     let (message_tx, message_rx) = mpsc::channel::<String>();
     let (success_tx, success_rx) = mpsc::channel::<bool>();
-    let hosted_network = WlanHostedNetworkHelper::new(ssid, password, message_tx, success_tx)?;
+    // TODO: we should be able to use ? here, need to bump wifidirect-legacy-ap's windows-rs version?
+    let hosted_network = match WlanHostedNetworkHelper::new(ssid, password, message_tx, success_tx)
+    {
+        Ok(hn) => hn,
+        Err(e) => Err(FCError {
+            message: e.to_string(),
+        })?,
+    };
 
     let thread_ui = ui.clone();
 
@@ -124,48 +122,61 @@ fn start_wifi_direct<T: UI>(
             _inner: hosted_network,
         })
     } else {
-        Err("Failed to start WiFi Direct AP".into())
+        Err(FCError {
+            message: "Failed to start WiFi Direct AP".to_string(),
+        })
     }
 }
 
-pub fn stop_hotspot(peer_resource: Option<&PeerResource>, _ssid: Option<&str>) -> Result<(), Box<dyn Error>> {
+pub fn stop_hotspot(
+    peer_resource: Option<&PeerResource>,
+    _ssid: Option<&str>,
+) -> Result<String, FCError> {
     // if we're joining, not hosting, we don't need to do anything here. and on windows PeerResource should never be LinuxHotspot.
     match peer_resource {
-        Some(PeerResource::WindowsHotspot(hotspot)) => hotspot._inner.stop()?,
+        // TODO: we should be able to use ? here, need to bump wifidirect-legacy-ap's windows-rs version?
+        Some(PeerResource::WindowsHotspot(hotspot)) => {
+            if let Err(e) = hotspot._inner.stop() {
+                Err(FCError {
+                    message: e.to_string(),
+                })?;
+            }
+        }
         Some(PeerResource::WifiClient(_)) => {
             // TODO: delete network? no, letting the hotspot disappear is better because the client automatically goes back to its previous network?
         }
         _ => (),
     }
-    Ok(())
+    Ok("Hotspot stopped".to_string())
 }
 
 fn run_shell_execute(
     program: &str,
     parameters: Option<&str>,
     as_admin: bool,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), FCError> {
     let mode = rust_to_pcstr(if as_admin { "runas" } else { "open" });
     let program = rust_to_pcstr(program);
     let parameters = match parameters {
-        Some(p) => Some(rust_to_pcstr(p)),
-        None => None,
+        Some(p) => rust_to_pcstr(p),
+        None => PCSTR::null(),
     };
     unsafe {
         CoInitialize(None).unwrap();
         let res = ShellExecuteA(GetDesktopWindow(), mode, program, parameters, None, SW_HIDE);
-        if res.0 < 32 {
+        let res = res.0 as isize;
+        if res < 32 {
             let error_message = get_windows_error(GetLastError().0)?;
-            Err(error_message)?;
+            fc_error(&error_message)?;
         }
     }
     Ok(())
 }
 
 // returns Ok(Some(gateway)) if gateway found, Ok(None) if no gateway found but no error, and Err otherwise.
-fn find_gateway() -> Result<Option<String>, Box<dyn Error>> {
+fn find_gateway() -> Result<Option<String>, FCError> {
     let working_buffer_size = 15_000;
-    let family = WinSock::ADDRESS_FAMILY(2); // IPv4
+    let family = 2; // IPv4
     let flags = IpHelper::GAA_FLAG_INCLUDE_GATEWAYS;
     let mut ip_adapter_addresses_lh = vec![0u8; working_buffer_size];
     let mut pip_ip_adapter_addresses_lh =
@@ -181,7 +192,7 @@ fn find_gateway() -> Result<Option<String>, Box<dyn Error>> {
             &mut size,
         );
         if WIN32_ERROR(res) != ERROR_SUCCESS {
-            Err(format!(
+            fc_error(&format!(
                 "Could not get adapter addresses: {}",
                 get_windows_error(res)?
             ))?;
@@ -192,10 +203,21 @@ fn find_gateway() -> Result<Option<String>, Box<dyn Error>> {
                 if !gateway.is_null() {
                     let address = (*gateway).Address;
                     let sa_data = (*address.lpSockaddr).sa_data;
+
+                    // for some reason after the windows-rs version upgrade, sa_data were signed bytes
+                    // and there were negative numbers in the ip address, so have to convert to u8
+                    let mut unsigned_octets = [0u8; 4];
+                    for i in 2..=5 {
+                        unsigned_octets[i - 2] = sa_data[i] as u8;
+                    }
+
                     // TODO: do this properly? https://stackoverflow.com/questions/1276294/getting-ipv4-address-from-a-sockaddr-structure
                     let gateway = format!(
                         "{}.{}.{}.{}",
-                        sa_data[2].0, sa_data[3].0, sa_data[4].0, sa_data[5].0
+                        unsigned_octets[0],
+                        unsigned_octets[1],
+                        unsigned_octets[2],
+                        unsigned_octets[3]
                     );
                     return Ok(Some(gateway));
                 }
@@ -211,7 +233,7 @@ fn find_gateway() -> Result<Option<String>, Box<dyn Error>> {
 unsafe fn wlan_enum_multiple_interfaces(
     client_handle: HANDLE,
     p_interface_list: *mut *mut WLAN_INTERFACE_INFO_LIST,
-) -> Result<Vec<WLAN_INTERFACE_INFO>, Box<dyn Error>> {
+) -> Result<Vec<WLAN_INTERFACE_INFO>, FCError> {
     let res = WiFi::WlanEnumInterfaces(client_handle, None, p_interface_list);
     if WIN32_ERROR(res) != ERROR_SUCCESS {
         let err = format!(
@@ -219,7 +241,7 @@ unsafe fn wlan_enum_multiple_interfaces(
             get_windows_error(res)?
         );
         WiFi::WlanCloseHandle(client_handle, None);
-        Err(err)?;
+        fc_error(&err)?;
     }
     let interfaces = std::slice::from_raw_parts(
         &(**p_interface_list).InterfaceInfo[0],
@@ -228,14 +250,14 @@ unsafe fn wlan_enum_multiple_interfaces(
     Ok(interfaces.to_vec())
 }
 
-pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, Box<dyn Error>> {
+pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
     unsafe {
         // get client handle
         let mut client_handle = HANDLE::default();
         let mut negotiated_version = 0;
         let res = WiFi::WlanOpenHandle(2, None, &mut negotiated_version, &mut client_handle);
         if WIN32_ERROR(res) != ERROR_SUCCESS {
-            Err(format!("open handle error: {}", get_windows_error(res)?))?;
+            fc_error(&format!("open handle error: {}", get_windows_error(res)?))?;
         }
         // find wifi interface
         let mut interface_list = WiFi::WLAN_INTERFACE_INFO_LIST::default();
@@ -289,7 +311,7 @@ unsafe extern "system" fn wifi_status_callback(
 unsafe fn register_for_hotspot_connected_callback(
     tx: mpsc::Sender<bool>,
     client_handle: HANDLE,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), FCError> {
     // make orphaned with into_raw() and cast to *c_void
     // windows callback will reconstruct this box when it has something to say
     // TODO: should it be Box<Mutex<Sender<String>>> because Sender is !Sync?
@@ -308,7 +330,7 @@ unsafe fn register_for_hotspot_connected_callback(
         None,
     );
     if WIN32_ERROR(res) != ERROR_SUCCESS {
-        Err(format!(
+        fc_error(&format!(
             "Error registering WLAN notification callback: {}",
             get_windows_error(res)?
         ))?;
@@ -334,11 +356,7 @@ unsafe fn unregister_hotspot_callback(client_handle: HANDLE) {
     // don't really care if this failed, don't need to error handle here?
 }
 
-fn join_hotspot(
-    ssid: &str,
-    password: &str,
-    guid: &GUID,
-) -> Result<bool, Box<dyn std::error::Error>> {
+fn join_hotspot(ssid: &str, password: &str, guid: &GUID) -> Result<bool, FCError> {
     let mut client_handle = HANDLE::default();
 
     let xml = "<?xml version=\"1.0\"?>\r\n".to_string()
@@ -375,8 +393,9 @@ fn join_hotspot(
         + "		<enableRandomization>false</enableRandomization>\r\n"
         + "	</MacRandomization>\r\n"
         + "</WLANProfile>";
+    let xml_hstring = HSTRING::from(xml);
+    let str_profile = PCWSTR::from_raw(xml_hstring.as_ptr());
 
-    let str_profile = HSTRING::from(xml);
     let mut uc_ssid = [0u8; 32];
     let ssid_chars = ssid.as_bytes().to_vec();
     for i in 0..ssid_chars.len() {
@@ -388,7 +407,7 @@ fn join_hotspot(
     };
     let parameters = WiFi::WLAN_CONNECTION_PARAMETERS {
         wlanConnectionMode: WiFi::wlan_connection_mode_temporary_profile,
-        strProfile: PCWSTR::from(&str_profile),
+        strProfile: str_profile,
         pDot11Ssid: &mut dot11_ssid,
         pDesiredBssidList: std::ptr::null_mut(),
         dot11BssType: WiFi::dot11_BSS_type_any,
@@ -398,7 +417,7 @@ fn join_hotspot(
         let mut negotiated_version = 0;
         let mut res = WiFi::WlanOpenHandle(2, None, &mut negotiated_version, &mut client_handle);
         if WIN32_ERROR(res) != ERROR_SUCCESS {
-            Err(format!("open handle error: {}", get_windows_error(res)?))?;
+            fc_error(&format!("open handle error: {}", get_windows_error(res)?))?;
         }
 
         let (tx, rx) = mpsc::channel();
@@ -408,7 +427,7 @@ fn join_hotspot(
         if WIN32_ERROR(res) != ERROR_SUCCESS {
             unregister_hotspot_callback(client_handle);
             WiFi::WlanCloseHandle(client_handle, None);
-            Err(format!("Connect error: {}", get_windows_error(res)?))?
+            fc_error(&format!("Connect error: {}", get_windows_error(res)?))?
         }
 
         let hotspot_started = rx.recv()?;
@@ -418,7 +437,7 @@ fn join_hotspot(
     }
 }
 
-fn check_for_firewall_rule() -> Result<bool, Box<dyn Error>> {
+fn check_for_firewall_rule() -> Result<bool, FCError> {
     let path = &current_exe()?;
     let file_name = path
         .file_name()
@@ -436,7 +455,7 @@ fn check_for_firewall_rule() -> Result<bool, Box<dyn Error>> {
             let output_string = String::from_utf8_lossy(&output.stdout).to_string();
             let regex = Regex::new(r"Action:\s+Block")?;
             if regex.is_match(&output_string) {
-                Err("a Windows Firewall rule is blocking Flying Carpet connections. Please delete or modify the rule to allow incoming connections on TCP port 3290.")?;
+                fc_error("a Windows Firewall rule is blocking Flying Carpet connections. Please delete or modify the rule to allow incoming connections on TCP port 3290.")?;
             }
             let regex = Regex::new(r"Enabled:\s+Yes")?;
             Ok(regex.is_match(&output_string))
@@ -464,7 +483,7 @@ fn add_firewall_rule() -> Option<String> {
     }
 }
 
-unsafe fn get_windows_error(err: u32) -> Result<String, Box<dyn Error>> {
+unsafe fn get_windows_error(err: u32) -> Result<String, FCError> {
     let err = WIN32_ERROR(err);
     let msg_size = 1 << 10; // 1KB
     let mut buffer = vec![0u8; msg_size];
@@ -480,12 +499,12 @@ unsafe fn get_windows_error(err: u32) -> Result<String, Box<dyn Error>> {
         None,
     );
     if res == 0 {
-        Err("Could not get error message from Windows")?;
+        fc_error("Could not get error message from Windows")?;
     }
     Ok(error_message.to_string()?)
 }
 
-fn is_hosting(peer: Peer, mode: Mode) -> bool {
+pub(crate) fn is_hosting(peer: &Peer, mode: &Mode) -> bool {
     // we're windows, so we always host if mac, linux, ios, or android.
     match peer {
         Peer::Android | Peer::IOS | Peer::Linux | Peer::MacOS => true,

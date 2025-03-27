@@ -1,10 +1,13 @@
-const { dialog, os, path, tauri } = window.__TAURI__;
+const { core, dialog, os } = window.__TAURI__;
 import { QRCode } from './deps/qrcode.js'
 
 let aboutButton;
-let selectionBox;
+let canUseBluetooth = false;
+let usingBluetooth;
+let bluetoothSwitch;
+let peerLabel;
+let peerBox;
 let outputBox;
-let ssidBox;
 let startButton;
 let cancelButton;
 let progressBar;
@@ -18,6 +21,8 @@ let selectedFolder;
 // save UI if user refreshes
 window.onunload = () => {
   let uiState = {
+    usingBluetooth: usingBluetooth,
+    // canUseBluetooth:
     selectedMode: selectedMode,
     selectedPeer: selectedPeer,
     selectedFiles: selectedFiles,
@@ -25,7 +30,6 @@ window.onunload = () => {
     output: outputBox.innerText,
     transferRunning: startButton.style.display === 'none',
     passwordBoxValue: passwordBox.value,
-    ssidBoxValue: ssidBox.value,
     progressBarValue: progressBar.value,
     progressBarVisible: progressBar.style.display !== 'none',
   };
@@ -35,30 +39,35 @@ window.onunload = () => {
 
 window.addEventListener('DOMContentLoaded', async () => {
   aboutButton = document.getElementById('aboutButton');
-  selectionBox = document.getElementById('selectionBox');
+  peerLabel = document.getElementById('peerLabel');
+  peerBox = document.getElementById('peerBox');
   outputBox = document.getElementById('outputBox');
   startButton = document.getElementById('startButton');
   cancelButton = document.getElementById('cancelButton');
   progressBar = document.getElementById('progressBar');
+  bluetoothSwitch = document.getElementById('bluetoothSwitch');
 
-  appWindow = window.__TAURI__.window.appWindow;
+  appWindow = window.__TAURI__.window.getCurrentWindow();
+
+  // check for bluetooth support
+  let error = await core.invoke('check_support');
+  if (error != null) {
+    output(`Bluetooth initialization failed: ${error}. Disable the Bluetooth switch in Flying Carpet on the other device to run a transfer.`);
+    bluetoothSwitch.disabled = true;
+    bluetoothSwitch.checked = false;
+    usingBluetooth = false;
+    canUseBluetooth = false;
+  } else {
+    output('Bluetooth is supported.');
+    bluetoothSwitch.disabled = false;
+    bluetoothSwitch.checked = true;
+    usingBluetooth = true;
+    canUseBluetooth = true;
+  }
 
   // about button
   aboutButton.onclick = () => {
     alert(aboutMessage);
-  }
-
-  // hide unnecessary buttons for macOS
-  if (await os.type() === 'Darwin') {
-    document.getElementById('iosSelector').style.display = 'none';
-    document.getElementById('macSelector').style.display = 'none';
-  }
-
-  ssidBox = document.getElementById('ssidBox');
-  ssidBox.onfocus = () => {
-    if (ssidBox.value == '') {
-      ssidBox.value = 'AndroidShare_';
-    }
   }
 
   // output handler
@@ -79,32 +88,64 @@ window.addEventListener('DOMContentLoaded', async () => {
     enableUi();
   });
 
+  // show bluetooth PIN and allow user to choose whether to pair on windows
+  await appWindow.listen('showPin', async (event) => {
+    console.log(event);
+    let choice = await dialog.ask(`Is this code displayed on the other device?\n\n${event.payload.message}`, { title: 'Confirm Bluetooth PIN', type: 'info' });
+    console.log('choice:', choice);
+    await core.invoke('user_bluetooth_pair', {
+      choice: choice,
+    });
+    console.log('invoked user_bluetooth_pair');
+  });
+
+  // have Enter start/cancel transfer
+  document.getElementById('mainContainer').addEventListener("keyup", event => {
+    if (event.key !== "Enter") {
+      return;
+    }
+    if (startButton.style.display != 'none' && !startButton.disabled) {
+      startButton.click();
+    }
+    if (cancelButton.style.display != 'none') {
+      cancelButton.click();
+    }
+    event.preventDefault();
+  });
+
   // handle drag and drop
-  await appWindow.listen('tauri://file-drop', async event => {
+  await appWindow.onDragDropEvent(async event => {
+    if (event.payload.type != 'drop') {
+      return;
+    }
     if (selectedMode === 'send') {
-      selectedFiles = await tauri.invoke('expand_files', { paths: event.payload });
+      selectedFiles = await core.invoke('expand_files', { paths: event.payload.paths });
+      startTransfer(true);
     } else if (selectedMode === 'receive') {
       if (event.payload.length !== 1) {
         output('Error: if receiving, must drop only one destination folder.');
         return;
       }
-      let is_dir = await tauri.invoke('is_dir', { path: event.payload[0] });
+      let is_dir = await core.invoke('is_dir', { path: event.payload[0] });
       if (is_dir) {
         selectedFolder = event.payload[0];
       } else {
         output('Error: if receiving, must select folder as destination.');
       }
+      startTransfer(true);
     } else {
       output('Error: must select whether sending or receiving before dropping files or folder.');
     }
     checkStatus();
-  })
+  });
 
   checkStatus();
 
   // rehydrate UI if user refreshed
   let uiState = JSON.parse(sessionStorage.getItem('pageState'));
   if (uiState) {
+    usingBluetooth = uiState.usingBluetooth;
+    bluetoothSwitch.checked = usingBluetooth;
     selectedMode = uiState.selectedMode;
     if (selectedMode === 'send') {
       document.getElementById('sendButton').checked = true;
@@ -119,17 +160,16 @@ window.addEventListener('DOMContentLoaded', async () => {
       }
     });
     passwordBox.value = uiState.passwordBoxValue;
-    ssidBox.value = uiState.ssidBoxValue;
     selectedFiles = uiState.selectedFiles;
     selectedFolder = uiState.selectedFolder;
     outputBox.innerText = uiState.output;
     progressBar.style.display = uiState.progressBarVisible ? '' : 'none';
     progressBar.value = uiState.progressBarValue;
     modeChange(selectedMode);
-    updateSelectionBox();
     if (uiState.transferRunning) {
       disableUi();
     }
+    checkStatus();
   }
 });
 
@@ -148,41 +188,22 @@ function makeQRCode(str) {
   });
 }
 
-async function startTransfer() {
-  // handle password
-  let [needPassword, needSsid] = await needPasswordAndSsid();
-  let password;
-  if (needPassword) {
+async function startTransfer(filesSelected) {
+
+  // if we need password, make sure we have it before prompting for files/folder
+  let password = null;
+  if (await needPassword()) {
     password = document.getElementById('passwordBox').value;
     if (password.length < 8) {
       output('Must enter password from the other device.');
       return;
     }
-  } else {
-    password = await tauri.invoke('generate_password');
-    if (selectedPeer === 'ios' || selectedPeer === 'android') {
-      output('\nStart the transfer on the other device and scan the QR code when prompted.');
-      makeQRCode(password);
-    } else {
-      output(`Password: ${password}`);
-      alert(`\nStart the transfer on the other device and enter this password when prompted:\n${password}`);
-    }
-  }
-
-  // handle SSID if we're macOS connecting to Android
-  let ssid = needSsid
-    ? ssidBox.value
-    : null;
-
-  if (needSsid && ssid == '') {
-    output('Must enter SSID. It will be displayed once you start the transfer on the Android device.');
-    return;
   }
 
   // make sure we have a wifi interface and prompt for which if more than one
   let wifiInterface;
-  let interfaces = await tauri.invoke('get_wifi_interfaces');
-  console.log('interfaces:', interfaces);
+  let interfaces = await core.invoke('get_wifi_interfaces');
+  // console.log('interfaces:', interfaces);
   switch (interfaces.length) {
     case 0:
       output('No WiFi interfaces found. Flying Carpet only works over WiFi.');
@@ -204,89 +225,84 @@ async function startTransfer() {
         return;
       }
   }
+  
+  // get files or folder
+  if (!filesSelected) {
+    if (selectedMode == 'send') {
+      await selectFiles();
+      if (!selectedFiles) {
+        output('User cancelled.');
+        return;
+      }
+    } else if (selectedMode == 'receive') {
+      await selectFolder();
+      if (!selectedFolder) {
+        output('User cancelled.');
+        return;
+      }
+    } else {
+      output('Must select whether this device is sending or receiving.');
+      return;
+    }
+  }
+  
+  // if we're hosting, generate and display the password
+  if (!await needPassword()) {
+    if (!usingBluetooth) {
+      password = await core.invoke('generate_password');
+      if (selectedPeer === 'ios' || selectedPeer === 'android') {
+        output('\nStart the transfer on the other device and scan the QR code when prompted.');
+        makeQRCode(password);
+      } else {
+        output(`Password: ${password}`);
+        alert(`\nStart the transfer on the other device and enter this password when prompted:\n${password}`);
+      }
+    }
+  }
 
   // disable UI
   disableUi();
 
   // kick off transfer
-  await tauri.invoke('start_async', {
+  await core.invoke('start_async', {
     mode: selectedMode,
     peer: selectedPeer,
     password: password,
-    ssid: ssid,
     interface: wifiInterface,
     fileList: selectedFiles,
     receiveDir: selectedFolder,
+    usingBluetooth: usingBluetooth,
     window: appWindow,
   });
 }
 
 async function cancelTransfer() {
-  // let startState = startButton.disabled;
-  // startButton.disabled = true;
-  // cancelButton.disabled = true;
-  output(await tauri.invoke('cancel_transfer'));
-  // startButton.disabled = startState;
-  // cancelButton.disabled = false;
+  output(await core.invoke('cancel_transfer'));
 }
 
 let selectFiles = async () => {
-  let _selectedFiles = await dialog.open({
+  selectedFiles = await dialog.open({
     multiple: true,
     directory: false,
   });
-  if (_selectedFiles) { // don't let cancel clear selection
-    selectedFiles = _selectedFiles;
-  }
   checkStatus();
 }
 
 let selectFolder = async () => {
-  let _selectedFolder = await dialog.open({
+  selectedFolder = await dialog.open({
     multiple: false,
     directory: true,
   });
-  if (_selectedFolder) { // don't let cancel clear selection
-    selectedFolder = _selectedFolder;
-  }
   checkStatus();
 }
 
-let updateSelectionBox = () => {
-  let fileFolderBox = document.getElementById('fileFolderBox');
-  let height = fileFolderBox.clientHeight;
-  if (selectedFiles) {
-    let s = '';
-    for (let i in selectedFiles) {
-      s += selectedFiles[i] + '\n';
-    }
-    selectionBox.innerText = 'Selected Files:\n' + s;
-  } else if (selectedFolder) {
-    selectionBox.innerText = 'Selected Folder:\n' + selectedFolder;
-  } else {
-    selectionBox.innerText = 'Drag and drop files/folders here or use button';
-  }
-  fileFolderBox.height = height + 'px';
+let bluetoothChange = () => {
+  usingBluetooth = bluetoothSwitch.checked;
+  checkStatus();
 }
 
 let modeChange = async (button) => {
-  // make proper button visible depending on mode. leave "Select Files" button visible if no mode selected on refresh.
-  if (button === 'receive') {
-    document.getElementById('filesButton').style.display = 'none';
-    document.getElementById('folderButton').style.display = '';
-  } else {
-    document.getElementById('filesButton').style.display = '';
-    document.getElementById('folderButton').style.display = 'none';
-  }
-  // only reset files/folder if mode was changed
-  if (selectedMode != button) {
-    selectedFiles = null;
-    if (button === 'send') {
-      selectedFolder = null;
-    } else {
-      selectedFolder = await path.desktopDir();
-    }
-  }
+  startButton.innerText = button === 'receive' ? 'Select Folder' : 'Select Files';
   selectedMode = button;
   checkStatus();
 }
@@ -297,49 +313,45 @@ let peerChange = (button) => {
 }
 
 let checkStatus = () => {
-  updateSelectionBox();
-  document.getElementById('filesButton').disabled = !selectedMode;
-  document.getElementById('folderButton').disabled = !selectedMode;
-  showPasswordAndSsid();
-  startButton.disabled = !(selectedMode && selectedPeer
-    && (selectedFiles || selectedFolder));
+  showPassword();
+  if (usingBluetooth) {
+    peerLabel.style.display = 'none';
+    peerBox.style.display = 'none';
+    startButton.disabled = !selectedMode;
+  } else {
+    peerLabel.style.display = '';
+    peerBox.style.display = '';
+    startButton.disabled = !(selectedMode && selectedPeer);
+  }
 }
 
-let needPasswordAndSsid = async () => {
-  // if OS mac, always joining, always need password. also need ssid if peer == android.
+let needPassword = async () => {
+  if (usingBluetooth) {
+    return false;
+  }
   // if linux, joining windows, hosting mac/ios/android or linux if receiving.
   // if windows, always hosting unless windows and sending.
-  let showPassword, showSsid;
+  let showPassword;
+  console.log('os:', os.type());
   switch (await os.type()) {
-    case 'Darwin':
-      showPassword = true;
-      showSsid = selectedPeer === 'android';
-      break;
-    case 'Linux':
+    case 'linux':
       showPassword = selectedPeer === 'windows' || (selectedPeer === 'linux' && selectedMode === 'send');
-      showSsid = false;
       break;
-    case 'Windows_NT':
+    case 'windows':
       showPassword = selectedPeer === 'windows' && selectedMode === 'send';
-      showSsid = false;
       break;
     default:
-      alert('Error in shouldShowPasswordAndSsid()');
+      alert('Error in needPassword()');
   }
-  return [showPassword, showSsid];
+  return showPassword;
 }
 
-let showPasswordAndSsid = async () => {
-  let [showPassword, showSsid] = await needPasswordAndSsid();
+let showPassword = async () => {
+  let showPassword = await needPassword();
   if (showPassword) {
     document.getElementById('passwordBox').style.display = '';
   } else {
     document.getElementById('passwordBox').style.display = 'none';
-  }
-  if (showSsid) {
-    ssidBox.style.display = '';
-  } else {
-    ssidBox.style.display = 'none';
   }
 }
 
@@ -348,14 +360,17 @@ let enableUi = async () => {
   startButton.style.display = '';
   // hide cancel button
   cancelButton.style.display = 'none';
+  // enable bluetooth switch
+  if (canUseBluetooth) {
+    document.getElementById('bluetoothSwitch').disabled = false;
+  }
   // enable radio buttons, file/folder selection buttons
-  let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton', 'filesButton', 'folderButton'];
+  let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton'];
   for (let i in radioButtons) {
     document.getElementById(radioButtons[i]).disabled = false;
   }
-  // enable password and ssid boxes
+  // enable password box
   document.getElementById('passwordBox').disabled = false;
-  document.getElementById('ssidBox').disabled = false;
   // replace logo
   document.getElementById('qrcode').innerHTML = '<img src="assets/icon1024.png" style="width: 150px; height: 150px;">'
 }
@@ -365,29 +380,49 @@ let disableUi = async () => {
   startButton.style.display = 'none';
   // show cancel button
   cancelButton.style.display = '';
+  // disable bluetooth switch
+  document.getElementById('bluetoothSwitch').disabled = true;
   // disable radio buttons, file/folder selection buttons
-  let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton', 'filesButton', 'folderButton'];
+  let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton'];
   for (let i in radioButtons) {
     document.getElementById(radioButtons[i]).disabled = true;
   }
-  // disable password and ssid boxes
+  // disable password box
   document.getElementById('passwordBox').disabled = true;
-  document.getElementById('ssidBox').disabled = true;
 }
 
 window.startTransfer = startTransfer;
 window.cancelTransfer = cancelTransfer;
 window.selectFiles = selectFiles;
 window.selectFolder = selectFolder;
+window.bluetoothChange = bluetoothChange;
 window.modeChange = modeChange;
 window.peerChange = peerChange;
 
 const aboutMessage = `https://flyingcarpet.spiegl.dev
-Version: 8.0.1
+Version: 9.0.0
 theron@spiegl.dev
-Copyright (c) 2024, Theron Spiegl
+Copyright (c) 2025, Theron Spiegl
 All rights reserved.
 
-Flying Carpet performs file transfers between two laptops or phones (Android, iOS, Linux, Mac, Windows) via ad hoc WiFi. No access point or network gear is required. Just select a file, whether each device is sending or receiving, and the operating system of the other device. For mobile versions, search for "Flying Carpet File Transfer" in the Apple App Store or Google Play Store.
+Flying Carpet transfers files between two Android, iOS, Linux, macOS, and Windows devices over ad hoc WiFi. No access point or shared network is required, just two WiFi cards in close range. The only non-working pairings are from one Apple device (macOS or iOS) to another, because Apple no longer allows hotspots to be started programmatically.
+
+INSTRUCTIONS
+
+Turn Bluetooth on or off on both devices. If one side fails to initialize Bluetooth or has it turned off, the other side must disable the "Use Bluetooth" switch in Flying Carpet.
+
+Select Sending on one device and Receiving on the other. If not using Bluetooth, select the operating system of the other device. Click the "Start Transfer" button on each device. On the sending device, select the files or folder to send. On the receiving device, select the folder in which to receive files. (To send a folder, drag it onto the window instead of clicking "Start Transfer".)
+
+If using Bluetooth, confirm the 6-digit PIN on each side. The WiFi connection will be configured automatically. If not using Bluetooth, you will need to scan a QR code or type in a password.
+
+If prompted to join a WiFi network or modify WiFi settings, say Allow. On Windows you may have to grant permission to add a firewall rule. On macOS you may have to grant location permissions, which Apple requires to scan for WiFi networks. Flying Carpet does not read or collect your location, nor any other data.
+
+TROUBLESHOOTING
+
+If using Bluetooth fails, try manually unpairing the devices from one another and starting a new transfer.
+
+If sending from macOS to Linux, you must first initiate pairing from the macOS System Settings > Bluetooth menu. Otherwise, disable Bluetooth on both sides and enter the password manually when prompted.
+
+Flying Carpet may make multiple attempts to join the other device's hotspot.
 
 Licensed under the GPL3: https://www.gnu.org/licenses/gpl-3.0.html#license-text`

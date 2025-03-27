@@ -33,20 +33,20 @@ suspend fun MainViewModel.sendFile(file: DocumentFile, fileStream: InputStream, 
         bytesLeft -= bytesRead
         encryptAndSendChunk(buffer.sliceArray(0 until bytesRead))
         val percentDone = ((file.length() - bytesLeft).toDouble() / file.length()) * 100
-        _progressBar.postValue(percentDone.toInt())
+        progressBarMut.postValue(percentDone.toInt())
     }
 
     // send chunkSize of 0 to signal end of transfer
     withContext(Dispatchers.IO) {
         outputStream.write(zero)
     }
-    _progressBar.postValue(100)
+    progressBarMut.postValue(100)
 
     // listen for receiving end to confirm that they have everything
     readNBytes(8, inputStream)
 
     // stats
-    _progressBar.postValue(100)
+    progressBarMut.postValue(100)
     val end = System.currentTimeMillis()
     val seconds = (end - start) / 1000.0
     outputText("Sending took ${formatTime(seconds)}")
