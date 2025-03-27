@@ -1,5 +1,7 @@
 use std::{net::AddrParseError, string::FromUtf8Error};
 
+// TODO: use a macro or otherwise improve these
+
 #[derive(Debug)]
 pub struct FCError {
     pub message: String,

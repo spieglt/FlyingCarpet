@@ -405,7 +405,7 @@ theron@spiegl.dev
 Copyright (c) 2025, Theron Spiegl
 All rights reserved.
 
-Flying Carpet transfers files between two Android, iOS, Linux, macOS, and Windows devices over ad hoc WiFi. No access point or shared network is required, just two WiFi cards in close range. The only pairings that don't work are from one Apple device (macOS or iOS) to another, because Apple no longer allows hotspots to be started programmatically.
+Flying Carpet transfers files between two Android, iOS, Linux, macOS, and Windows devices over ad hoc WiFi. No access point or shared network is required, just two WiFi cards in close range. The only non-working pairings are from one Apple device (macOS or iOS) to another, because Apple no longer allows hotspots to be started programmatically.
 
 INSTRUCTIONS
 

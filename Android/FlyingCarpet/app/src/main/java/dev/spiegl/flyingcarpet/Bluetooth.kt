@@ -306,7 +306,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             .build()
         bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
         _status.postValue(true)
-        outputText("Called startScan")
+        outputText("Scanning for Bluetooth peripherals...")
     }
 
     private val leScanCallback = object : ScanCallback() {
@@ -321,8 +321,8 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 return
             }
             if (result != null) {
-                outputText("Found device: ${result.device}")
                 if (bluetoothReceiver.waitingForConnection) {
+                    outputText("Found device: ${result.device}")
                     bluetoothReceiver.waitingForConnection = false
                     bluetoothLeScanner.stopScan(this)
                     outputText("Stopped scanning")
@@ -342,7 +342,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
 //                        outputText("Called createBond()")
 //                    }
                 } else {
-                    outputText("Connected but not waiting for connection")
+//                    outputText("Connected but not waiting for connection")
                 }
             }
         }
@@ -498,7 +498,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             }
             val bondState = intent?.getIntExtra(EXTRA_BOND_STATE, -1)
             if (bondState != BOND_BONDED) {
-                outputText("Not bonded")
+                Log.i("Bluetooth", "Not bonded")
                 return
             }
             // outputText("Device: $peerDevice")

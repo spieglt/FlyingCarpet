@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="style.css" />
   </head>
 
-  <body style="height: 98%;">
+  <body style="height: 100%;">
     <div class="verticalContainer" id="mainContainer" style="height: 100%;">
 
       <!-- top bar -->
@@ -60,18 +60,8 @@
         <label class="btn btn-outline-primary" for="windowsButton">Windows</label>
       </div>
 
-      <!-- file/folder selection -->
-      <!-- <div id="fileFolderBox" style="display: flex; overflow-y: auto; resize: vertical; height: 80px; min-height: 80px; padding: 5px;">
-        <fieldset class="horizontalContainer" style="flex-grow: 1; border: solid black;">
-          <legend>Step 3: Select Files to Send or Destination Folder</legend>
-          <button type="button" id="filesButton" onclick="selectFiles()">Select Files</button>
-          <button type="button" id="folderButton" onclick="selectFolder()" style="display: none;">Select Folder</button>
-          <div id="selectionBox" style="flex-grow: 1; overflow-y: auto; padding: 5px;"></div>
-        </fieldset>
-      </div> -->
-
       <!-- password box -->
-      <input type="text" placeholder="Password (start transfer on other end):" id="passwordBox" style="display: none; padding: 5px;" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <input type="password" placeholder="Password (start transfer on other end):" id="passwordBox" style="display: none; padding: 5px; margin: 10px;" autocapitalize="off" autocorrect="off" spellcheck="false">
 
       <!-- start/cancel buttons -->
       <button type="button" id="startButton" class="btn btn-success" onclick="startTransfer(false)" style="margin: 10px; min-height: 25px;" disabled>Select Files</button>
@@ -83,7 +73,7 @@
       </div>
 
       <!-- progress bar -->
-      <progress id="progressBar" value="0" max="100" style="display: none; width: 100%; margin-top: 5px; -webkit-appearance: none; appearance: none; height: 15px; min-height: 15px;"></progress>
+      <progress id="progressBar" value="0" max="100" style="display: none; appearance: none; width: 100%; margin-top: 5px; margin-bottom: 5px; padding-left: 5px; padding-right: 5px; height: 15px; min-height: 15px;"></progress>
     </div>
   </body>
 </html>

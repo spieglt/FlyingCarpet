@@ -254,7 +254,6 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             hasher.update(password.encodeToByteArray())
             key = hasher.digest()
 
-
             if (bluetooth.active) {
                 if (mode == Mode.Sending) {
                     // we're peripheral, and hosting, so just need to wait for the central to read from our

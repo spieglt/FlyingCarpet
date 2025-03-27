@@ -54,7 +54,7 @@ suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
 
     // stats
     progressBarMut.postValue(100)
-    outputText("Received $newFilename.")
+    // outputText("Received $newFilename.")
     val end = System.currentTimeMillis()
     val seconds = (end - start) / 1000.0
     outputText("Receiving took ${formatTime(seconds)}")

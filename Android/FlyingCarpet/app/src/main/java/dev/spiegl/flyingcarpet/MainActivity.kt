@@ -342,6 +342,7 @@ class MainActivity : AppCompatActivity() {
             val qrCode = findViewById<ImageView>(id.qrCodeView)
             viewModel.qrBitmap = getQrCodeBitmap(ssid, password)
             qrCode.setImageBitmap(viewModel.qrBitmap)
+            qrCode.bringToFront()
         } else { // peer is macOS, because if windows or linux we wouldn't be hosting
             val alertFragment = Alert(ssid, password)
             alertFragment.show(supportFragmentManager, "alert")
