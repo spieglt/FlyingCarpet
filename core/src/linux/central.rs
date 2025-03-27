@@ -3,7 +3,7 @@ use bluer::{
         remote::{Characteristic, CharacteristicWriteRequest},
         WriteOp,
     },
-    Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, Error, ErrorKind, Result,
+    Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, ErrorKind, Result,
     Uuid,
 };
 use futures::{pin_mut, StreamExt};
@@ -55,10 +55,10 @@ pub async fn find_characteristics(device: &Device) -> Result<HashMap<&str, Chara
             println!("    Connected");
         } else {
             println!("    Already connected");
-            Err(Error {
-                kind: ErrorKind::AlreadyConnected,
-                message: "Already connected".to_string(),
-            })?
+            // Err(Error {
+            //     kind: ErrorKind::AlreadyConnected,
+            //     message: "Already connected".to_string(),
+            // })?
         }
 
         // bond?

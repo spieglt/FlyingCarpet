@@ -421,7 +421,7 @@ TROUBLESHOOTING
 
 If using Bluetooth fails, try manually unpairing the devices from one another and starting a new transfer.
 
-If sending from macOS to Linux, disable Bluetooth on both sides.
+If sending from macOS to Linux, you must first initiate pairing from the macOS System Settings > Bluetooth menu. Otherwise, disable Bluetooth on both sides and enter the password manually when prompted.
 
 Flying Carpet may make multiple attempts to join the other device's hotspot.
 

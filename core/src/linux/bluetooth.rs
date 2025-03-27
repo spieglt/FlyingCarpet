@@ -57,22 +57,28 @@ pub async fn negotiate_bluetooth<T: UI>(
     struct ConnectedPeripheral {
         adapter: Adapter,
         address: Address,
+        is_macos: bool,
     }
 
     impl Drop for ConnectedPeripheral {
         fn drop(&mut self) {
+            // don't want to unpair from the peripheral if it's macOS. macOS won't allow linux to enumerate services if linux as central initiates the connection,
+            // so users must pair from the macOS system menu manually if they want to send to linux with bluetooth. if we unpair here, they'd have to manually pair
+            // for each transfer.
+            if self.is_macos {
+                return;
+            }
             let adapter = self.adapter.clone();
             let address = self.address.clone();
-            // TODO: use std channel here to block?
-            // let (tx, mut rx) = sync::mpsc::channel::<()>(1);
+            // let (tx, rx) = std::sync::mpsc::channel::<()>();
             spawn(async move {
                 match adapter.remove_device(address).await {
                     Ok(_) => println!("Removed device {}", address),
                     Err(e) => println!("Failed to unpair from peripheral: {}", e),
                 };
-                // tx.send(()).await.expect("Could not send on tx when dropping ConnectedPeripheral");
+                // tx.send(()).expect("Could not send on tx when dropping ConnectedPeripheral");
             });
-            // rx.blocking_recv();
+            // rx.recv().expect("Could not receive when trying to drop ConnectedPeripheral");
         }
     }
 
@@ -152,24 +158,22 @@ pub async fn negotiate_bluetooth<T: UI>(
         let device = central::scan(&adapter).await?;
         ui.output("Found device");
 
-        let connected_peripheral = ConnectedPeripheral{adapter, address: device.address()};
+        let mut connected_peripheral = ConnectedPeripheral{adapter, address: device.address(), is_macos: false};
 
         let characteristics = match find_characteristics(&device).await {
             Ok(c) => c,
             Err(e) => {
                 println!("    Device failed: {}", e);
-                let _ = connected_peripheral.adapter.remove_device(device.address()).await;
                 Err(e)?
             }
         };
         let info = match exchange_info(characteristics, mode).await {
             Ok(i) => i,
             Err(e) => {
-                let _ = connected_peripheral.adapter.remove_device(device.address()).await;
                 Err(e)?
             }
         };
-        connected_peripheral.adapter.remove_device(device.address()).await?;
+        connected_peripheral.is_macos = info.0 == "mac".to_string();
         Ok(info)
     }
 }

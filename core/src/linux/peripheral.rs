@@ -70,38 +70,6 @@ fn get_os_characteristic(tx: mpsc::Sender<BluetoothMessage>) -> Characteristic {
             })),
             ..Default::default()
         }),
-        // notify: Some(CharacteristicNotify {
-        //     notify: true,
-        //     method: CharacteristicNotifyMethod::Fun(Box::new(move |mut notifier| {
-        //         // let value = value_notify.clone();
-        //         async move {
-        //             tokio::spawn(async move {
-        //                 println!(
-        //                     "Notification session start with confirming={:?}",
-        //                     notifier.confirming()
-        //                 );
-        //                 loop {
-        //                     {
-        //                         let mut value = value.lock().await;
-        //                         println!("Notifying with value {:x?}", &*value);
-        //                         if let Err(err) = notifier.notify(value.to_vec()).await {
-        //                             println!("Notification error: {}", &err);
-        //                             break;
-        //                         }
-        //                         println!("Decrementing each element by one");
-        //                         for v in &mut *value {
-        //                             *v = v.saturating_sub(1);
-        //                         }
-        //                     }
-        //                     sleep(Duration::from_secs(5)).await;
-        //                 }
-        //                 println!("Notification session stop");
-        //             });
-        //         }
-        //         .boxed()
-        //     })),
-        //     ..Default::default()
-        // }),
         ..Default::default()
     }
 }
