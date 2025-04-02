@@ -4,12 +4,20 @@ plugins {
 }
 
 android {
-    compileSdk 34
+    compileSdk 35
+
+    // https://github.com/spieglt/FlyingCarpet/issues/99
+    dependenciesInfo {
+        // Disables dependency metadata when building APKs.
+        includeInApk = false
+        // Disables dependency metadata when building Android App Bundles.
+        includeInBundle = false
+    }
 
     defaultConfig {
         applicationId "dev.spiegl.flyingcarpet"
         minSdk 29
-        targetSdk 34
+        targetSdk 35
         versionCode 15
         versionName "9.0.0"
 

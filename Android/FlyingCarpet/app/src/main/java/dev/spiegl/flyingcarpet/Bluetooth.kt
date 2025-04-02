@@ -260,7 +260,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         val settings = settingsBuilder.build()
 
         val data = AdvertiseData.Builder()
-            .setIncludeDeviceName(true)
+            .setIncludeDeviceName(bluetoothManager.adapter.name.length <= 8)
             .setIncludeTxPowerLevel(false)
             .addServiceUuid(ParcelUuid(SERVICE_UUID))
             .build()

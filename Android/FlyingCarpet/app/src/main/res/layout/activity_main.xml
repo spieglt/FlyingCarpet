@@ -254,7 +254,7 @@
 
     <CheckBox
         android:id="@+id/sendFolderCheckBox"
-        android:layout_width="109dp"
+        android:layout_width="0dp"
         android:layout_height="25dp"
         android:layout_marginStart="8dp"
         android:layout_marginTop="1dp"
