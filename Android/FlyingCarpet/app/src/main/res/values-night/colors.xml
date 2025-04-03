@@ -5,4 +5,5 @@
     <color name="cancelButtonColor">#FF0000</color>
     <color name="bluetoothColor">#FFFFFF</color>
     <color name="buttonColor">#6200EE</color>
+    <color name="statusBarColor">#000000</color>
 </resources>

@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    compileSdk 35
+    compileSdk 34
 
     // https://github.com/spieglt/FlyingCarpet/issues/99
     dependenciesInfo {
@@ -17,9 +17,9 @@ android {
     defaultConfig {
         applicationId "dev.spiegl.flyingcarpet"
         minSdk 29
-        targetSdk 35
-        versionCode 15
-        versionName "9.0.0"
+        targetSdk 34
+        versionCode 16
+        versionName "9.0.2"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
