@@ -12,4 +12,5 @@
     <color name="startButtonStrokeColor">#000000</color>
     <color name="cancelButtonColor">#B00020</color>
     <color name="bluetoothColor">#000000</color>
+    <color name="buttonColor">#005C50</color>
 </resources>
