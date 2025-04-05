@@ -4,7 +4,7 @@
 
 <a href="https://play.google.com/store/apps/details?id=dev.spiegl.flyingcarpet"><img alt="Get it on Google Play" src="screenshots/google-play.png" height="80"/></a>&nbsp;&nbsp;<a href="https://f-droid.org/packages/dev.spiegl.flyingcarpet"><img src="screenshots/f-droid.png" alt="Get it on F-Droid" height="80"></a>
 
-Or if you prefer to sideload, `android_FlyingCarpet_9.0.3.apk` is available on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page.
+Or if you prefer to sideload, `android_FlyingCarpet_9.0.3.apk` is available on the [releases](https://github.com/spieglt/FlyingCarpet/releases/latest) page.
 
 ### Download for iOS:
 
@@ -12,7 +12,7 @@ Or if you prefer to sideload, `android_FlyingCarpet_9.0.3.apk` is available on t
 
 Or search the App Store for "Flying Carpet File Transfer".
 
-### Linux, macOS, and Windows versions are available on the [releases](https://github.com/spieglt/FlyingCarpet/releases) page. Installers and standalone executable versions available.
+### Linux, macOS, and Windows versions are available on the [releases](https://github.com/spieglt/FlyingCarpet/releases/latest) page. Installers and standalone executable versions available.
 
 # Flying Carpet
 
@@ -28,7 +28,7 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 
 ## Use:
 
-**Linux:** Download the `.AppImage` file from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page for a standalone version, or if you're on a Debian-based distribution, download the `.deb` file and install it with `apk` or `dpkg`.
+**Linux:** Download the `.AppImage` file from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page for a standalone version, or if you're on a Debian-based distribution, download the `.deb` file and install it with `dpkg`.
 
 **macOS:** Download the `.dmg` disk image file from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page. Double-click to mount it and drag the `.app` bundle inside to your Applications folder. Or if you use Homebrew, run `brew install flying-carpet`.
 
@@ -79,7 +79,7 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 
 ## Complaints at Apple
 
-+ Requiring location permissions to use `scanForNetworks(withSSID:)` but not mentioning it in the [documentation](https://developer.apple.com/documentation/corewlan/cwinterface/scanfornetworks(withssid:)) is annoying.
++ The [documentation](https://developer.apple.com/documentation/corewlan/cwinterface/scanfornetworks(withssid:)) for `scanForNetworks(withSSID:)` does not mention that it requires location permissions.
 
 + There should be a way to programmatically start hotspots, or at least read the current hotspot configuration with the user's permission.
 
