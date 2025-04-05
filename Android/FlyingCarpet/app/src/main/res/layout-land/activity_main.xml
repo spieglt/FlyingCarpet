@@ -6,24 +6,32 @@
     android:layout_height="match_parent"
     tools:context="dev.spiegl.flyingcarpet.MainActivity">
 
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/bluetoothSwitch"
+        style="@style/Widget.Material3.CompoundButton.MaterialSwitch"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_marginStart="22dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="8dp"
+        android:text="@string/bluetooth"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toStartOf="@+id/bluetoothIcon"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/peerGroup"
+        app:thumbTint="@color/bluetooth_switch_thumb"
+        app:trackTint="@color/bluetooth_switch_track" />
+
     <ImageView
         android:id="@+id/bluetoothIcon"
         android:layout_width="30dp"
         android:layout_height="30dp"
-        android:layout_marginTop="10dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="24dp"
         app:layout_constraintStart_toEndOf="@+id/bluetoothSwitch"
-        app:layout_constraintTop_toBottomOf="@+id/textView2"
+        app:layout_constraintTop_toBottomOf="@id/peerGroup"
         app:srcCompat="@android:drawable/stat_sys_data_bluetooth"
         app:tint="@color/bluetoothColor" />
-
-    <androidx.appcompat.widget.SwitchCompat
-        android:id="@+id/bluetoothSwitch"
-        android:layout_width="wrap_content"
-        android:layout_height="48dp"
-        android:layout_marginStart="37dp"
-        android:text="@string/bluetooth"
-        app:layout_constraintStart_toEndOf="@+id/startButton"
-        app:layout_constraintTop_toBottomOf="@+id/peerGroup" />
 
     <TextView
         android:id="@+id/aboutButton"
@@ -69,12 +77,13 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.476"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/startButton" />
+        app:layout_constraintTop_toBottomOf="@id/startButton" />
 
     <Button
         android:id="@+id/startButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
         android:text="@string/selectFiles"
         android:textColor="@color/white"
         app:layout_constraintEnd_toEndOf="parent"
@@ -269,14 +278,14 @@
         android:id="@+id/sendFolderCheckBox"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="48dp"
+        android:layout_marginStart="32dp"
+        android:layout_marginTop="16dp"
         android:buttonTint="@color/darkGreenBlue"
         android:text="@string/sendFolderText"
         android:textColorLink="@color/darkGreenBlue"
         android:visibility="invisible"
         app:buttonIconTint="@color/black"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="@+id/peerGroup" />
+        app:layout_constraintStart_toEndOf="@+id/startButton"
+        app:layout_constraintTop_toBottomOf="@+id/peerGroup" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

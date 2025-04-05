@@ -541,11 +541,12 @@ class MainActivity : AppCompatActivity() {
 }
 
 // TODO:
+//   share sheet
+//   open folder button after receiving
 //   need to not start peripheral when receiving, or central when sending? other how to check if we can initialize?
 //   one permission check for all permissions?
 //   transfer "completing" if receiving end quit?
 //   test what happens if wifi is turned off - done. hotspot still runs, not sure about joining.
-//   if hotspot already in use, don't request again - hit start transfer twice - not a problem because of cancel button/ui? and error is caught and transfer cleaned up in this case?
 //   don't show progress bar till transfer starts?
 
 // https://developers.google.com/ml-kit/code-scanner

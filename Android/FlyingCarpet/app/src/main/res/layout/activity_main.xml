@@ -286,8 +286,8 @@
         android:textSize="14sp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textView"
-        app:thumbTint="@color/white"
-        app:trackTint="@color/buttonColor" />
+        app:thumbTint="@color/bluetooth_switch_thumb"
+        app:trackTint="@color/bluetooth_switch_track" />
 
     <ImageView
         android:id="@+id/bluetoothIcon"

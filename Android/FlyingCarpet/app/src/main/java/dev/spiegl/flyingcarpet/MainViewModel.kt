@@ -70,6 +70,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     lateinit var outputStream: OutputStream // outgoing TCP stream to peer
     var transferCoroutine: Job? = null
     var transferIsRunning = false
+    var hotspotRunning = false
     lateinit var wifiManager: WifiManager
     lateinit var reservation: WifiManager.LocalOnlyHotspotReservation
     lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
@@ -170,6 +171,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         if (this::reservation.isInitialized) {
             reservation.close()
         }
+        hotspotRunning = false
         // stop bluetooth functions
         bluetooth.stop(application)
         // clean up UI
@@ -210,10 +212,14 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         override fun onFailed(reason: Int) {
             super.onFailed(reason)
             outputText("Hotspot failed: $reason")
+            hotspotRunning = false
         }
 
         override fun onStarted(res: WifiManager.LocalOnlyHotspotReservation?) {
             super.onStarted(res)
+
+            // set flag so we know not to start this twice
+            hotspotRunning = true
 
             // check for cancellation
             if (!transferIsRunning) {
@@ -284,6 +290,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         override fun onStopped() {
             super.onStopped()
             outputText("Hotspot stopped")
+            hotspotRunning = false
         }
     }
 
@@ -300,8 +307,12 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             requestPermissionLauncher.launch(requiredPermission)
         } else {
             try {
-                wifiManager.startLocalOnlyHotspot(localOnlyHotspotCallback, handler)
-                outputText("Started hotspot.")
+                if (!hotspotRunning) {
+                    wifiManager.startLocalOnlyHotspot(localOnlyHotspotCallback, handler)
+                    outputText("Started hotspot.")
+                } else {
+                    Log.e("Flying Carpet", "startHotspot() called when hotspot already running")
+                }
             } catch (e: Exception) {
                 e.message?.let { outputText(it) }
                 cleanUpTransfer()
