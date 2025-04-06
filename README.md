@@ -20,7 +20,7 @@ Send and receive files between Android, iOS, Linux, macOS, and Windows over ad h
 
 Don't have a flash drive? Don't have access to a wireless network? Need to move a file larger than 2GB between different filesystems but don't want to set up a network share? Try it out!
 
-[Demo video](https://youtu.be/-RKiSmo-Bns)
+[Demo video](https://youtu.be/52Xkrx2BXrg)
 
 ## Screenshots:
 
