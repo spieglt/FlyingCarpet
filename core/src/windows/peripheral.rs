@@ -34,6 +34,7 @@ pub(crate) struct BluetoothPeripheral {
     // the main thread with tx.
     pub ssid: Arc<Mutex<Option<String>>>,
     pub password: Arc<Mutex<Option<String>>>,
+    pub connection_ready: Arc<Mutex<bool>>,
 }
 
 impl BluetoothPeripheral {
@@ -53,6 +54,7 @@ impl BluetoothPeripheral {
             service_provider,
             ssid: Arc::new(Mutex::new(None)),
             password: Arc::new(Mutex::new(None)),
+            connection_ready: Arc::new(Mutex::new(false)),
         })
     }
 
@@ -153,6 +155,7 @@ impl BluetoothPeripheral {
         // ssid read handler
         let callback_ssid = self.ssid.clone();
         let callback_tx = self.tx.clone();
+        let connection_ready = self.connection_ready.clone();
         let ssid_read_callback = CharacteristicReadHandler::new(
             move |_gatt_local_characteristic, gatt_read_requested_event_args| {
                 println!("received ssid read request");
@@ -171,6 +174,12 @@ impl BluetoothPeripheral {
                 request.RespondWithValue(&writer.DetachBuffer()?)?;
                 println!("peer read our ssid: {}", ssid);
                 if ssid != NO_SSID {
+                    // Set connection ready flag to indicate iOS device has started the connection process
+                    {
+                        let mut is_ready = connection_ready.blocking_lock();
+                        *is_ready = true;
+                    }
+                    
                     if let Err(e) = callback_tx.blocking_send(BluetoothMessage::PeerReadSsid) {
                         println!("Could not send on Bluetooth tx: {}", e);
                     };
@@ -207,6 +216,7 @@ impl BluetoothPeripheral {
         // password read handler
         let callback_password = self.password.clone();
         let callback_tx = self.tx.clone();
+        let connection_ready = self.connection_ready.clone();
         let password_read_callback = CharacteristicReadHandler::new(
             move |_gatt_local_characteristic, gatt_read_requested_event_args| {
                 println!("received password read request");
@@ -216,14 +226,30 @@ impl BluetoothPeripheral {
                 let deferral = args.GetDeferral()?;
                 let request = args.GetRequestAsync()?.get()?;
                 let writer = DataWriter::new()?;
+                
+                // Check if connection is ready (SSID was previously read)
+                let is_ready = {
+                    let ready = connection_ready.blocking_lock();
+                    *ready
+                };
+                
+                // If the iOS device hasn't read the SSID yet, we need to delay
+                // This ensures the connection sequence happens in the correct order
+                if !is_ready {
+                    // Add a small delay to allow iOS device to process the SSID first
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
+                
                 let callback_password = callback_password.blocking_lock();
                 let callback_password = match callback_password.as_ref() {
                     Some(p) => p,
-                    None => &"".to_string(), // bizarre
+                    None => &"".to_string(),
                 };
                 writer.WriteBytes(callback_password.as_bytes())?;
                 request.RespondWithValue(&writer.DetachBuffer()?)?;
                 println!("peer read our password: {}", callback_password);
+                
+                // Send a more detailed message about the connection stage
                 if let Err(e) = callback_tx.blocking_send(BluetoothMessage::PeerReadPassword) {
                     println!("Could not send on Bluetooth tx: {}", e);
                 };

@@ -106,20 +106,27 @@ pub async fn negotiate_bluetooth<T: UI>(
                 *peripheral_password = Some(password.clone());
             }
             println!("set peripheral ssid and password");
-            println!("waiting for ssid to be read...");
-            process_bluetooth_message(BluetoothMessage::PeerReadSsid, &mut rx, ui).await?;
-            println!("waiting for password to be read...");
-            process_bluetooth_message(BluetoothMessage::PeerReadPassword, &mut rx, ui).await?;
-            Ok((peer_os, ssid.clone(), password))
-        } else {
-            // if joining, receive writes
-            // receive ssid
-            let msg = process_bluetooth_message(BluetoothMessage::SSID(String::new()), &mut rx, ui)
-                .await?;
-            if let BluetoothMessage::SSID(ssid) = msg {
-                peer_ssid = ssid;
-            } else {
-                fc_error(&format!(
+            let password = generate_password();
+            let (_, ssid) = get_key_and_ssid(&password);
+            {
+                let mut peripheral_ssid = peripheral.ssid.lock().await;
+                *peripheral_ssid = Some(ssid.clone());
+                let mut peripheral_password = peripheral.password.lock().await;
+                *peripheral_password = Some(password.clone());
+                
+                // Reset connection_ready flag before starting new connection
+                let mut connection_ready = peripheral.connection_ready.lock().await;
+                *connection_ready = false;
+            }
+            
+            println!("set peripheral ssid and password");
+            ui.output("Waiting for iOS device to establish connection...");
+            
+            // Wait for SSID to be read with adaptive retry
+            let mut retry_count = 0;
+            const MAX_RETRIES: u8 = 3;
+            
+            println!("waiting for ss
                     "Peripheral received incorrect BluetoothMessage. Expected SSID, got {:?}",
                     msg
                 ))?;

@@ -23,6 +23,8 @@ pub enum BluetoothMessage {
     Password(String),
     PeerReadSsid,
     PeerReadPassword,
+    ConnectionReady,
+    ConnectionRetry,
     OtherError(String),
 }
 
