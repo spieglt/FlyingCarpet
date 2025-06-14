@@ -96,8 +96,8 @@ impl Transfer {
 pub async fn start_transfer<T: UI>(
     mode: String,
     using_bluetooth: bool,
-    mut peer: Option<String>,
-    mut password: Option<String>,
+    peer: Option<String>,
+    password: Option<String>,
     interface: WiFiInterface,
     file_list: Option<Vec<String>>,
     receive_dir: Option<String>,
@@ -125,44 +125,49 @@ pub async fn start_transfer<T: UI>(
     // for windows and linux, the central/client api can read and write synchronously, and we always know the ssid before starting hotspot, so we can just do that here before connecting to peer?
     // for servers/peripherals, does it matter? callbacks in both cases?
 
-    if using_bluetooth {
-        match negotiate_bluetooth(&mode, ble_ui_rx, ui).await {
-            Ok((p, _ssid, pw)) => {
-                peer = Some(p);
-                if password.is_none() {
-                    password = Some(pw);
-                }
-            }
+    let (_ssid, pw, peer_resource) = if using_bluetooth {
+        // need to not finish negotiating bluetooth until hotspot is started...
+        // after the bluetooth section here, we just set peer and password, set state ssid, and connect to peer
+        // can we connect to peer inside bluetooth? that would mean refactoring connect_to_peer() inside negotiate_bluetooth().
+        // also, we only need to call connect_to_peer() from within negotiate_bluetooth() if we're hosting: if we're joining, bluetooth peer will write to us, or we will read from it.
+        // in either case, we're ready to try to connect to the hotspot as soon as we have the data.
+        // joining + sending == peripheral needs to know, central will write. joining + receiving == we're central and need data, will read from peripheral.
+        // is it a problem to connect_to_peer() from inside negotiate_bluetooth() when joining? not really, just makes error handling more complicated, don't need to 
+        // output that we had a bluetooth error if it was a wifi error.
+
+        match negotiate_bluetooth(&mode, ble_ui_rx, ui, interface, state_ssid).await {
+            Ok((_peer, ssid, pw, peer_resource)) => (ssid, pw, peer_resource),
             Err(e) => {
                 ui.output(&format!("Could not establish Bluetooth connection: {}", e));
                 println!("Could not establish Bluetooth connection: {}", e);
                 return None;
             }
         }
-    }
+    } else {
+        let peer = Peer::from(
+            peer.expect("Neither UI nor Bluetooth peer present.")
+                .as_str(),
+        );
+        let password = password.expect("Missing password in start_transfer().");
 
-    let peer = Peer::from(
-        peer.expect("Neither UI nor Bluetooth peer present.")
-            .as_str(),
-    );
-    let password = password.expect("Missing password in start_transfer().");
+        let (_, ssid) = get_key_and_ssid(&password);
 
-    let (key, ssid) = get_key_and_ssid(&password);
+        {
+            let mut _state_ssid = state_ssid.lock().expect("Couldn't lock state_ssid");
+            *_state_ssid = Some(ssid.clone());
+        }
 
-    {
-        let mut _state_ssid = state_ssid.lock().expect("Couldn't lock state_ssid");
-        *_state_ssid = Some(ssid.clone());
-    }
-
-    // start hotspot or connect to peer's
-    let peer_resource =
-        match network::connect_to_peer(peer, mode.clone(), ssid, password, interface, ui).await {
+        // start hotspot or connect to peer's
+        let peer_resource = match network::connect_to_peer(peer, mode.clone(), ssid.clone(), password.clone(), interface, ui).await {
             Ok(p) => p,
             Err(e) => {
                 ui.output(&format!("Error connecting to peer: {}", e));
                 return None;
             }
         };
+        (ssid, password, peer_resource)
+    };
+    let (key, _) = get_key_and_ssid(&pw);
 
     tokio::task::yield_now().await;
 
@@ -194,7 +199,6 @@ pub async fn start_transfer<T: UI>(
     };
 
     // store the hotspot in tauri's state
-    // has to be in its own block here or tokio complains that this "mutex guard" is held across an await... who knows
     {
         let mut hotspot_value = hotspot.lock().expect("Couldn't lock hotspot mutex");
         *hotspot_value = Some(peer_resource);

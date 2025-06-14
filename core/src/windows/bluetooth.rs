@@ -2,14 +2,11 @@ mod central;
 mod peripheral;
 
 use crate::{
-    error::{fc_error, FCError},
-    network::{self, is_hosting},
-    utils::{generate_password, get_key_and_ssid, BluetoothMessage},
-    Mode, Peer, UI,
+    error::{fc_error, FCError}, network::{self, is_hosting}, utils::{generate_password, get_key_and_ssid, BluetoothMessage}, Mode, Peer, PeerResource, WiFiInterface, UI
 };
 use central::BluetoothCentral;
 use peripheral::BluetoothPeripheral;
-use std::mem::discriminant;
+use std::{mem::discriminant, sync::{Arc, Mutex}};
 use tokio::{sync::mpsc, time};
 use windows::{
     core::HSTRING,
@@ -67,7 +64,9 @@ pub async fn negotiate_bluetooth<T: UI>(
     mode: &Mode,
     ble_ui_rx: mpsc::Receiver<bool>,
     ui: &T,
-) -> Result<(String, String, String), FCError> {
+    interface: WiFiInterface,
+    state_ssid: Arc<Mutex<Option<String>>>,
+) -> Result<(String, String, String, PeerResource), FCError> {
     let (tx, mut rx) = mpsc::channel(1);
     let mut peripheral = BluetoothPeripheral::new(tx.clone())?;
     let mut central = BluetoothCentral::new(tx.clone())?;
@@ -107,10 +106,25 @@ pub async fn negotiate_bluetooth<T: UI>(
             }
             println!("set peripheral ssid and password");
             println!("waiting for ssid to be read...");
+
+            // this is where central reads our ssid, so need to start hotspot here.
+            let peer = Peer::from(peer_os.as_str());
+            let (_key, ssid) = get_key_and_ssid(&password);
+
+            // TODO: where else do we need to store state_ssid?
+            // just do it once in lib.rs
+            {
+                let mut _state_ssid = state_ssid.lock().expect("Couldn't lock state_ssid");
+                *_state_ssid = Some(ssid.clone());
+            }
+
+            // start hotspot or connect to peer's
+            let peer_resource = network::connect_to_peer(peer, mode.clone(), ssid.clone(), password.clone(), interface, ui).await?;
+
             process_bluetooth_message(BluetoothMessage::PeerReadSsid, &mut rx, ui).await?;
             println!("waiting for password to be read...");
             process_bluetooth_message(BluetoothMessage::PeerReadPassword, &mut rx, ui).await?;
-            Ok((peer_os, ssid.clone(), password))
+            Ok((peer_os, ssid.clone(), password, peer_resource))
         } else {
             // if joining, receive writes
             // receive ssid
@@ -136,9 +150,14 @@ pub async fn negotiate_bluetooth<T: UI>(
                     msg
                 ))?;
             }
+
+            // start hotspot or connect to peer's
+            let peer = Peer::from(peer_os.as_str());
+            let peer_resource = network::connect_to_peer(peer, mode.clone(), peer_ssid.clone(), peer_password.clone(), interface, ui).await?;
+
             // keep everything in scope until peer has had a chance to read the password
             time::sleep(time::Duration::from_secs(1)).await;
-            Ok((peer_os, peer_ssid, peer_password))
+            Ok((peer_os, peer_ssid, peer_password, peer_resource))
         }
     } else {
         // acting as central
@@ -192,10 +211,14 @@ pub async fn negotiate_bluetooth<T: UI>(
         println!("wrote OS");
 
         // read or write ssid and password
-        let (ssid, password) = if network::is_hosting(&Peer::from(peer.as_str()), mode) {
+        let (ssid, password, peer_resource) = if network::is_hosting(&Peer::from(peer.as_str()), mode) {
             println!("hosting, writing wifi info to peer");
             let password = generate_password();
             let (_, ssid) = get_key_and_ssid(&password);
+
+            let peer = Peer::from(peer.as_str());
+            let peer_resource = network::connect_to_peer(peer, mode.clone(), ssid.clone(), password.clone(), interface, ui).await?;
+
             if let Err(e) = central.write(SSID_CHARACTERISTIC_UUID, &ssid).await {
                 if let Err(unpair_error) = central.unpair().await {
                     println!("Error unpairing: {}", unpair_error);
@@ -208,7 +231,7 @@ pub async fn negotiate_bluetooth<T: UI>(
                 }
                 Err(e)?
             }
-            (ssid, password)
+            (ssid, password, peer_resource)
         } else {
             println!("joining, reading wifi info from peer");
             let ssid = match central.read(SSID_CHARACTERISTIC_UUID).await {
@@ -229,13 +252,16 @@ pub async fn negotiate_bluetooth<T: UI>(
                     Err(e)?
                 }
             };
-            (ssid, password)
+
+            let peer = Peer::from(peer.as_str());
+            let peer_resource = network::connect_to_peer(peer, mode.clone(), ssid.clone(), password.clone(), interface, ui).await?;
+            (ssid, password, peer_resource)
         };
         // unpair after every transfer because windows has trouble enumerating services of already-paired devices?
         // if let Err(unpair_error) = central.unpair().await {
         //     println!("Error unpairing: {}", unpair_error);
         // }
-        Ok((peer, ssid, password))
+        Ok((peer, ssid, password, peer_resource))
     }
 }
 
