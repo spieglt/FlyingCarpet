@@ -132,7 +132,7 @@ pub async fn start_transfer<T: UI>(
         // also, we only need to call connect_to_peer() from within negotiate_bluetooth() if we're hosting: if we're joining, bluetooth peer will write to us, or we will read from it.
         // in either case, we're ready to try to connect to the hotspot as soon as we have the data.
         // joining + sending == peripheral needs to know, central will write. joining + receiving == we're central and need data, will read from peripheral.
-        // is it a problem to connect_to_peer() from inside negotiate_bluetooth() when joining? not really, just makes error handling more complicated, don't need to 
+        // is it a problem to connect_to_peer() from inside negotiate_bluetooth() when joining? not really, just makes error handling more complicated, don't need to
         // output that we had a bluetooth error if it was a wifi error.
 
         match negotiate_bluetooth(&mode, ble_ui_rx, ui, interface, state_ssid).await {
@@ -158,7 +158,16 @@ pub async fn start_transfer<T: UI>(
         }
 
         // start hotspot or connect to peer's
-        let peer_resource = match network::connect_to_peer(peer, mode.clone(), ssid.clone(), password.clone(), interface, ui).await {
+        let peer_resource = match network::connect_to_peer(
+            peer,
+            mode.clone(),
+            ssid.clone(),
+            password.clone(),
+            interface,
+            ui,
+        )
+        .await
+        {
             Ok(p) => p,
             Err(e) => {
                 ui.output(&format!("Error connecting to peer: {}", e));

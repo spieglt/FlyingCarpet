@@ -3,8 +3,7 @@ use bluer::{
         remote::{Characteristic, CharacteristicWriteRequest},
         WriteOp,
     },
-    Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, ErrorKind, Result,
-    Uuid,
+    Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, ErrorKind, Result, Uuid,
 };
 use futures::{pin_mut, StreamExt};
 use std::{

@@ -158,7 +158,11 @@ pub async fn negotiate_bluetooth<T: UI>(
         let device = central::scan(&adapter).await?;
         ui.output("Found device");
 
-        let mut connected_peripheral = ConnectedPeripheral{adapter, address: device.address(), is_macos: false};
+        let mut connected_peripheral = ConnectedPeripheral {
+            adapter,
+            address: device.address(),
+            is_macos: false,
+        };
 
         let characteristics = match find_characteristics(&device).await {
             Ok(c) => c,
@@ -169,9 +173,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         };
         let info = match exchange_info(characteristics, mode).await {
             Ok(i) => i,
-            Err(e) => {
-                Err(e)?
-            }
+            Err(e) => Err(e)?,
         };
         connected_peripheral.is_macos = info.0 == "mac".to_string();
         Ok(info)
