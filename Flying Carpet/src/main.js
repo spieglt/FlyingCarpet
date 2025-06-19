@@ -419,6 +419,8 @@ If prompted to join a WiFi network or modify WiFi settings, say Allow. On Window
 
 TROUBLESHOOTING
 
+Android and iOS devices must be kept awake with Flying Carpet in the foreground for the duration of the transfer, or the WiFi connection may drop.
+
 If using Bluetooth fails, try manually unpairing the devices from one another and starting a new transfer.
 
 If sending from macOS to Linux, you must first initiate pairing from the macOS System Settings > Bluetooth menu. Otherwise, disable Bluetooth on both sides and enter the password manually when prompted.

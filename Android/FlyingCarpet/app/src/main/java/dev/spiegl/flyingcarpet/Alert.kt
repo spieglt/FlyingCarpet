@@ -50,6 +50,8 @@ const val AboutMessage = """
     When prompted to join a WiFi network or modify WiFi settings, say Allow. On Windows you may have to grant permission to add a firewall rule. On macOS you may have to grant location permissions, which Apple requires to scan for WiFi networks. Flying Carpet does not read or collect your location, nor any other data.
     
     TROUBLESHOOTING
+
+    Android and iOS devices must be kept awake with Flying Carpet in the foreground for the duration of the transfer, or the WiFi connection may drop.
     
     If using Bluetooth fails, try manually unpairing the devices from one another and starting a new transfer.
     

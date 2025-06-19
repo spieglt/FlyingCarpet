@@ -49,6 +49,8 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 
 ## Restrictions:
 
++ Android and iOS devices must be kept open and awake, with the Flying Carpet app in the foreground for the duration of the transfer, or the WiFi connection may drop.
+
 + Apple devices can only transfer to/from Android, Linux, and Windows as they can no longer programmatically run hotspots. Use AirDrop instead for Apple-to-Apple transfers.
 
 + To use Bluetooth to send from macOS to Linux, the devices must be manually paired first, with the connection initiated by macOS[^1]. The "Use Bluetooth" switch can be turned off on both sides of the transfer when sending from macOS to Linux, to enter the WiFi information manually instead.
@@ -67,7 +69,7 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 
 ## Planned Features
 
-+ Add Flying Carpet shortcut to iOS Share menu.
++ Add Flying Carpet shortcut to iOS and Android share menus.
 
 ## Questions That Could Be Asked at Some Point:
 
