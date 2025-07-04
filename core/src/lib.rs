@@ -434,6 +434,7 @@ async fn confirm_version(
 }
 
 // TODO:
+// linux still not deleting wifi network after transfer
 // drag and drop shouldn't work when already in transfer
 // linux can't receive from windows or android if already paired/connected, service not found. but then it disconnects and next transfer works. unpair after every transfer?
 // don't write ssid over bluetooth till hotspot has started, so that peer (especially iOS) doesn't start trying too early.
