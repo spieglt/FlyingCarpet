@@ -16,10 +16,7 @@ use super::SERVICE_UUID;
 use crate::{
     bluetooth::{
         OS, OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID, SSID_CHARACTERISTIC_UUID,
-    },
-    network::is_hosting,
-    utils::{generate_password, get_key_and_ssid},
-    Mode, Peer,
+    }, error::FCError, network::{self, is_hosting}, utils::{generate_password, get_key_and_ssid}, Mode, Peer, PeerResource, WiFiInterface, UI
 };
 
 pub async fn find_characteristics(device: &Device) -> Result<HashMap<&str, Characteristic>> {
@@ -191,10 +188,12 @@ pub async fn scan(adapter: &Adapter) -> bluer::Result<Device> {
     })
 }
 
-pub async fn exchange_info(
+pub async fn exchange_info<T: UI>(
     characteristics: HashMap<&str, Characteristic>,
     mode: &Mode,
-) -> bluer::Result<(String, String, String)> {
+    interface: WiFiInterface,
+    ui: &T,
+) -> std::result::Result<(String, String, String, PeerResource), FCError> {
     // have to use this with write_ext() for the write requests: iOS wouldn't receive unconfirmed writes, which WriteOp::Request provides.
     // not sure if iOS requires it or if i did somehow. bluer seems to default to WriteOp::Command which has no confirmation.
     let write_req = CharacteristicWriteRequest {
@@ -221,6 +220,19 @@ pub async fn exchange_info(
         // write ssid and password
         let password = generate_password();
         let (_, ssid) = get_key_and_ssid(&password);
+
+        // start hotspot
+        let peer = Peer::from(peer_os.as_str());
+        let peer_resource = network::connect_to_peer(
+            peer,
+            mode.clone(),
+            ssid.clone(),
+            password.clone(),
+            interface,
+            ui,
+        )
+        .await?;
+
         ssid_char.write_ext(ssid.as_bytes(), &write_req).await?;
         // let CharacteristicWriteRequest
         // ssid_char.write_ext(value, req);
@@ -231,7 +243,7 @@ pub async fn exchange_info(
             .await?;
         println!("Wrote password to peer");
         sleep(Duration::from_secs(1)).await;
-        Ok((peer_os, ssid, password))
+        Ok((peer_os, ssid, password, peer_resource))
     } else {
         // read ssid and password
         let ssid = ssid_char.read().await?;
@@ -240,6 +252,18 @@ pub async fn exchange_info(
         let password = password_char.read().await?;
         let password = String::from_utf8(password).expect("Password was not UTF-8");
         println!("Peer's password: {}", password);
-        Ok((peer_os, ssid, password))
+
+        // join hotspot
+        let peer = Peer::from(peer_os.as_str());
+        let peer_resource = network::connect_to_peer(
+            peer,
+            mode.clone(),
+            ssid.clone(),
+            password.clone(),
+            interface,
+            ui,
+        )
+        .await?;
+        Ok((peer_os, ssid, password, peer_resource))
     }
 }

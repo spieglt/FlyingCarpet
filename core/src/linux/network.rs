@@ -19,6 +19,7 @@ pub fn is_hosting(peer: &Peer, mode: &Mode) -> bool {
     }
 }
 
+// TODO: factor connect_to_peer() out into join_hotspot() and start_hotspot()
 pub async fn connect_to_peer<T: UI>(
     peer: Peer,
     mode: Mode,

@@ -3,14 +3,18 @@ mod peripheral;
 
 use bluer::{Adapter, Address, Session};
 use central::{exchange_info, find_characteristics};
-use std::{mem::discriminant, time::Duration};
+use std::{
+    mem::discriminant,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tokio::{spawn, sync::mpsc, time::sleep};
 
 use crate::{
     error::{fc_error, FCError},
-    network::is_hosting,
+    network::{self, is_hosting},
     utils::{generate_password, get_key_and_ssid, BluetoothMessage},
-    Mode, Peer, UI,
+    Mode, Peer, PeerResource, WiFiInterface, UI,
 };
 
 impl From<bluer::Error> for FCError {
@@ -48,7 +52,9 @@ pub async fn negotiate_bluetooth<T: UI>(
     mode: &Mode,
     _ble_ui_rx: mpsc::Receiver<bool>, // only used on windows
     ui: &T,
-) -> Result<(String, String, String), FCError> {
+    interface: WiFiInterface,
+    state_ssid: Arc<Mutex<Option<String>>>,
+) -> Result<(String, String, String, PeerResource), FCError> {
     // TODO: dedup with check_support(), but can't return adapter from it because windows doesn't, unless we stub which is annoying to pass it back into this.
     let session = Session::new().await?;
     let adapter = session.default_adapter().await?;
@@ -105,12 +111,34 @@ pub async fn negotiate_bluetooth<T: UI>(
         println!("Removing advertisement");
         drop(adv_handle);
 
-        if is_hosting(&Peer::from(peer_os.as_str()), mode) {
+        let peer_resource = if is_hosting(&Peer::from(peer_os.as_str()), mode) {
+
+            // this is where central reads our ssid, so need to start hotspot here.
+            let peer = Peer::from(peer_os.as_str());
+
+            // TODO: where else do we need to store state_ssid?
+            {
+                let mut _state_ssid = state_ssid.lock().expect("Couldn't lock state_ssid");
+                *_state_ssid = Some(ssid.clone());
+            }
+
+            // start hotspot or connect to peer's
+            let peer_resource = network::connect_to_peer(
+                peer,
+                mode.clone(),
+                ssid.clone(),
+                password.clone(),
+                interface,
+                ui,
+            )
+            .await?;
+
             // wait for peer to read our ssid and password
             process_bluetooth_message(BluetoothMessage::PeerReadSsid, &mut rx, ui).await?;
             println!("Peer read SSID");
             process_bluetooth_message(BluetoothMessage::PeerReadPassword, &mut rx, ui).await?;
             println!("Peer read password");
+            peer_resource
         } else {
             // wait for peer to write its ssid and password
             ssid = match process_bluetooth_message(
@@ -145,13 +173,26 @@ pub async fn negotiate_bluetooth<T: UI>(
                 })?,
             };
             println!("Peer's password: {}", password);
-        }
+
+            // start hotspot or connect to peer's
+            let peer = Peer::from(peer_os.as_str());
+            let peer_resource = network::connect_to_peer(
+                peer,
+                mode.clone(),
+                ssid.clone(),
+                password.clone(),
+                interface,
+                ui,
+            )
+            .await?;
+            peer_resource
+        };
 
         sleep(Duration::from_secs(1)).await;
         println!("Removing GATT service");
         drop(app_handle);
 
-        Ok((peer_os, ssid, password))
+        Ok((peer_os, ssid, password, peer_resource))
     } else {
         // acting as central
         ui.output("Started Bluetooth scan, waiting for sending device...");
@@ -171,7 +212,7 @@ pub async fn negotiate_bluetooth<T: UI>(
                 Err(e)?
             }
         };
-        let info = match exchange_info(characteristics, mode).await {
+        let info = match exchange_info(characteristics, mode, interface, ui).await {
             Ok(i) => i,
             Err(e) => Err(e)?,
         };
