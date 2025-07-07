@@ -24,7 +24,7 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 
 ## Screenshots:
 
-<img src="screenshots/android.png" width="240"> <img src="screenshots/ios.png" width="240"> <img src="screenshots/linux.png" width="360"> <br> <img src="screenshots/mac.png" width="420"> <img src="screenshots/windows.png" width="360">
+<img src="screenshots/android.png" width="240"> <img src="screenshots/ios.png" width="240"> <img src="screenshots/linux.png" width="280"> <br> <img src="screenshots/mac.png" width="360"> <img src="screenshots/windows.png" width="360">
 
 ## Use:
 
