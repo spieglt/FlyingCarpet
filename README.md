@@ -2,13 +2,13 @@
 
 ### Download for Android:
 
-<a href="https://play.google.com/store/apps/details?id=dev.spiegl.flyingcarpet"><img alt="Get it on Google Play" src="screenshots/google-play.png" height="80"/></a>&nbsp;&nbsp;<a href="https://f-droid.org/packages/dev.spiegl.flyingcarpet"><img src="screenshots/f-droid.png" alt="Get it on F-Droid" height="80"></a>
+<a href="https://play.google.com/store/apps/details?id=dev.spiegl.flyingcarpet"><img alt="Get it on Google Play" src="screenshots/google-play.png" width="240"/></a>&nbsp;&nbsp;<a href="https://f-droid.org/packages/dev.spiegl.flyingcarpet"><img src="screenshots/f-droid.png" alt="Get it on F-Droid" width="240"></a>
 
 Or if you prefer to sideload, `android_FlyingCarpet_9.0.3.apk` is available on the [releases](https://github.com/spieglt/FlyingCarpet/releases/latest) page.
 
 ### Download for iOS:
 
-<a href="https://apps.apple.com/us/app/flying-carpet-file-transfer/id1637377410"><img alt="Get it on Apple App Store" src="screenshots/app-store.png" height="60"/></a>
+<a href="https://apps.apple.com/us/app/flying-carpet-file-transfer/id1637377410"><img alt="Get it on Apple App Store" src="screenshots/app-store.png" width="240"/></a>
 
 Or search the App Store for "Flying Carpet File Transfer".
 
@@ -24,7 +24,7 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 
 ## Screenshots:
 
-<img src="screenshots/android.png" height=500> <img src="screenshots/ios.png" height=500> <img src="screenshots/linux.png" height=500> <br> <img src="screenshots/mac.png" height=500> <img src="screenshots/windows.png" height=500>
+<img src="screenshots/android.png" width="240"> <img src="screenshots/ios.png" width="240"> <img src="screenshots/linux.png" width="360"> <br> <img src="screenshots/mac.png" width="420"> <img src="screenshots/windows.png" width="360">
 
 ## Use:
 
