@@ -1,0 +1,3 @@
+<i>Flying Carpet</i> bietet direkte Dateiübertragung über Ad-hoc-WLAN. Keine gemeinsame Netzwerk- oder Mobilfunkverbindung erforderlich, nur zwei Geräte mit WiFi-Chips in unmittelbarer Nähe. Android, iOS, Linux, macOS und Windows werden unterstützt.
+
+Sie haben kein Flash-Laufwerk? Sie haben keinen Zugriff auf ein drahtloses Netzwerk? Müssen Sie eine Datei mit mehr als 2 GB zwischen verschiedenen Dateisystemen verschieben, möchten aber keine Dateifreigabe einrichten? Versuchen Sie es!

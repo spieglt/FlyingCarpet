@@ -1,0 +1,1 @@
+Direkte Dateiübertragung über Ad-hoc-WLAN. Android/iOS/Linux/Mac/Windows.
