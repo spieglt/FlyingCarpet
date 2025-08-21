@@ -1,0 +1,725 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+# إعداد الخيارات للتعامل مع الأخطاء
+set -euo pipefail
+IFS=$'\n\t'
+clear
+
+echo "====== بدء إعداد وتشغيل نظام درع الأمة الذكي المتكامل بأداء متقدم ======"
+
+# تعريف المسارات
+PROJECT_DIR="$HOME/smart_shield_project"
+BACKEND_DIR="$PROJECT_DIR/backend"
+FRONTEND_DIR="$PROJECT_DIR/frontend"
+DB_DIR="$PROJECT_DIR/db"
+LOG_DIR="$PROJECT_DIR/logs"
+VENV_DIR="$PROJECT_DIR/venv"
+CONFIG_FILE="$PROJECT_DIR/.env"
+LOGFILE="$LOG_DIR/setup_$(date +'%Y%m%d-%H%M%S').log"
+
+# إنشاء المجلدات
+mkdir -p "$PROJECT_DIR" "$BACKEND_DIR" "$FRONTEND_DIR" "$DB_DIR" "$LOG_DIR" "$PROJECT_DIR/scripts"
+
+echo "[1] تحديث النظام وتثبيت الحزم الأساسية..." | tee -a "$LOGFILE"
+pkg update -y && pkg upgrade -y | tee -a "$LOGFILE"
+pkg install -y python clang git openssl libffi libsqlite termux-api curl wget nano redis | tee -a "$LOGFILE"
+
+echo "[2] إنشاء وتفعيل البيئة الافتراضية..." | tee -a "$LOGFILE"
+if [ ! -d "$VENV_DIR" ]; then
+    python3 -m venv "$VENV_DIR" | tee -a "$LOGFILE"
+fi
+source "$VENV_DIR/bin/activate"
+pip install --upgrade pip setuptools wheel | tee -a "$LOGFILE"
+
+echo "[3] إعداد ملف متطلبات النظام..." | tee -a "$LOGFILE"
+cat > "$PROJECT_DIR/requirements.txt" <<EOF
+fastapi==0.115.0
+uvicorn[standard]==0.20.0
+requests==2.32.3
+python-dotenv==1.0.1
+transformers==4.44.2
+torch==2.4.1
+sqlalchemy==2.0.35
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+redis==5.1.1
+aiohttp==3.10.5
+APScheduler==3.9.1
+email-validator==1.3.1
+aiosmtplib==1.1.6
+python-multipart==0.0.5
+cryptography==41.0.3
+PyJWT==2.7.0
+fastapi-users[sqlalchemy2]==11.3.3
+fastapi-security==0.2.1
+bitsandbytes==0.43.3
+accelerate==0.34.2
+EOF
+
+echo "[4] تثبيت التبعيات..." | tee -a "$LOGFILE"
+pip install -r "$PROJECT_DIR/requirements.txt" --extra-index-url https://download.pytorch.org/whl/cpu | tee -a "$LOGFILE"
+
+# إنشاء ملف .env مع الإعدادات الافتراضية
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "[5] كتابة ملف .env مع المفاتيح الافتراضية (عدلها لاحقاً)..." | tee -a "$LOGFILE"
+    cat > "$CONFIG_FILE" <<EOL
+XAI_API_KEY=
+HUGGINGFACE_API_KEY=
+NOTIFICATION_EMAIL=your_email@example.com
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_smtp_email@gmail.com
+SMTP_PASSWORD=your_smtp_app_password
+JWT_SECRET_KEY=$(openssl rand -hex 64)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+EOL
+    chmod 600 "$CONFIG_FILE"
+else
+    echo "[5] ملف .env موجود مسبقاً." | tee -a "$LOGFILE"
+fi
+source "$CONFIG_FILE"
+
+echo "[6] إنشاء ملفات النظام الأساسية..." | tee -a "$LOGFILE"
+
+# backend/database.py
+cat > "$BACKEND_DIR/database.py" <<'PYTHON_DB'
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from datetime import datetime
+import os
+
+Base = declarative_base()
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+    id = Column(Integer, primary_key=True, index=True)
+    source = Column(String(128))
+    amount = Column(Float)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+class ThreatAnalysis(Base):
+    __tablename__ = "threat_analyses"
+    id = Column(Integer, primary_key=True, index=True)
+    news_snippet = Column(String(2048))
+    transaction_amount = Column(Float)
+    threat_level = Column(String(64))
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "db", "smart_shield.db")
+engine = create_engine(f"sqlite:///{db_path.replace(os.sep, '/')}")
+Base.metadata.create_all(engine)
+SessionLocal = sessionmaker(bind=engine)
+PYTHON_DB
+
+# backend/main.py
+cat > "$BACKEND_DIR/main.py" <<'PYTHON_API'
+import logging
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+import random, os, requests, redis, aiohttp, asyncio
+from transformers import pipeline
+from datetime import datetime
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from backend.database import SessionLocal, Transaction, ThreatAnalysis
+from dotenv import load_dotenv
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import aiosmtplib
+from email.message import EmailMessage
+
+logging.basicConfig(filename="logs/app.log", level=logging.INFO,
+                    format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+load_dotenv(dotenv_path="../.env")
+
+XAI_API_KEY = os.getenv("XAI_API_KEY")
+HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
+NOTIFICATION_EMAIL = os.getenv("NOTIFICATION_EMAIL")
+SMTP_HOST = os.getenv("SMTP_HOST")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+ALGORITHM = "HS256"
+
+app = FastAPI(title="درع الأمة الذكي - النظام المتكامل", version="6.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8080"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+try:
+    redis_client = redis.Redis(host=os.getenv("REDIS_HOST", "localhost"),
+                               port=int(os.getenv("REDIS_PORT", 6379)),
+                               decode_responses=True)
+    redis_client.ping()
+    logger.info("متصل بخادم Redis بنجاح")
+except Exception as e:
+    logger.warning(f"فشل الاتصال بـ Redis: {e}. سيتم استخدام تخزين محلي مبسط")
+    redis_client = None
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+scheduler = AsyncIOScheduler()
+scheduler.start()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+async def send_email(subject: str, content: str, to_email: str):
+    if not all([SMTP_HOST, SMTP_USER, SMTP_PASSWORD]):
+        logger.warning("بيانات SMTP ناقصة، لم يتم إرسال البريد الإلكتروني.")
+        return
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = SMTP_USER
+    msg["To"] = to_email
+    msg.set_content(content)
+    try:
+        await aiosmtplib.send(msg, hostname=SMTP_HOST, port=SMTP_PORT,
+                              start_tls=True, username=SMTP_USER, password=SMTP_PASSWORD)
+        logger.info(f"تم إرسال رسالة تنبيه عبر البريد إلى {to_email}")
+    except Exception as ex:
+        logger.error(f"فشل إرسال البريد الإلكتروني: {ex}")
+
+class ThreatData(BaseModel):
+    news_snippet: str
+    transaction_amount: float
+
+finance_sources = [
+    {"name": "أوقاف إسلامية", "ratio": 0.30, "range": (5000, 10000)},
+    {"name": "تبرعات المقاومين", "ratio": 0.20, "range": (2000, 5000)},
+    {"name": "استثمارات استراتيجية", "ratio": 0.25, "range": (3000, 8000)},
+    {"name": "تمويل تجاري", "ratio": 0.25, "range": (10000, 20000)},
+]
+
+try:
+    local_model = pipeline("text-classification", model="distilbert-base-uncased",
+                           device=-1)  # CPU فقط لـ Termux
+    logger.info("تم تحميل نموذج DistilBERT بنجاح")
+except Exception as e:
+    local_model = None
+    logger.warning(f"فشل تحميل النموذج المحلي: {e}. سيتم استخدام القواعد البرمجية.")
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+async def verify_token(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        if not username:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="اعتماد غير صالح")
+        return username
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="اعتماد غير صالح")
+
+@app.post("/token", summary="تسجيل دخول المستخدم")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    if form_data.username == "admin" and form_data.password == "smartshield2025":
+        token = jwt.encode({"sub": form_data.username}, JWT_SECRET_KEY, algorithm=ALGORITHM)
+        return {"access_token": token, "token_type": "bearer"}
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="بيانات اعتماد غير صحيحة")
+
+@app.get("/add_transaction", summary="جمع تمويل جديد")
+def add_transaction(db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
+    source = random.choice(finance_sources)
+    amount = random.uniform(*source["range"]) * source["ratio"]
+    transaction = Transaction(source=source["name"], amount=amount)
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+    logger.info(f"تم إنشاء معاملة جديدة من {source['name']} بمبلغ {amount:.2f}")
+    return {"source": transaction.source, "amount": transaction.amount,
+            "timestamp": int(transaction.timestamp.timestamp() * 1000)}
+
+@app.get("/launch_defense", summary="إطلاق دفاع يدوي")
+def launch_defense(current_user: str = Depends(verify_token)):
+    success = random.random() > 0.2
+    if success:
+        logger.info("تم تحييد التهديد بنجاح")
+        return {"success": True, "message": "تم تحييد التهديد بنجاح."}
+    else:
+        logger.error("فشل تحييد التهديد")
+        return {"success": False, "message": "فشل في تحييد التهديد، يرجى المحاولة لاحقا."}
+
+@app.post("/analyze_threat", summary="تحليل تهديد نصي")
+async def analyze_threat(data: ThreatData, db: Session = Depends(get_db),
+                        current_user: str = Depends(verify_token)):
+    cache_key = f"threat:{data.news_snippet}:{data.transaction_amount}"
+    if redis_client and redis_client.exists(cache_key):
+        threat_level = redis_client.get(cache_key)
+        logger.info("تم جلب مستوى التهديد من التخزين المؤقت")
+    else:
+        prompt = (f"قيم مستوى خطورة التهديد التالي: '{data.news_snippet}'. "
+                  f"مبلغ التمويل: {data.transaction_amount} دولار. "
+                  f"صنف المستوى: منخفض، متوسط، مرتفع، حرج.")
+        threat_level = "منخفض"
+        if XAI_API_KEY:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        "https://api.x.ai/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"},
+                        json={
+                            "model": "grok",
+                            "messages": [{"role": "user", "content": prompt}],
+                            "max_tokens": 50,
+                            "temperature": 0.7
+                        }) as resp:
+                        resp.raise_for_status()
+                        result = await resp.json()
+                        threat_level = result["choices"][0]["message"]["content"].strip()
+                        logger.info("تحليل عبر Grok API ناجح")
+            except Exception as ex:
+                logger.error(f"فشل Grok API: {ex}")
+        elif HUGGINGFACE_API_KEY:
+            try:
+                resp = requests.post(
+                    "https://api-inference.huggingface.co/models/distilbert-base-uncased",
+                    headers={"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"},
+                    json={"inputs": prompt})
+                resp.raise_for_status()
+                threat_level = resp.json()[0]["label"]
+                logger.info("تحليل عبر HuggingFace API ناجح")
+            except Exception as ex:
+                logger.error(f"فشل HuggingFace API: {ex}")
+        elif local_model:
+            try:
+                result = local_model(data.news_snippet)[0]["label"]
+                threat_level = "مرتفع" if result == "POSITIVE" else "منخفض"
+                logger.info("تحليل عبر النموذج المحلي ناجح")
+            except Exception as ex:
+                logger.error(f"فشل نموذج التحليل المحلي: {ex}")
+        else:
+            keywords = {
+                "حرج": ["هجوم إرهابي", "تفجير", "سلاح نووي", "حرب شاملة"],
+                "مرتفع": ["هجوم", "عنف", "تدمير", "تمويل مشبوه"],
+                "متوسط": ["تهديد", "خطر", "تحذير", "مخاطر"],
+                "منخفض": []
+            }
+            for level, words in keywords.items():
+                if any(word in data.news_snippet for word in words):
+                    threat_level = level
+                    break
+            if data.transaction_amount > 10000 and threat_level != "حرج":
+                threat_level = "مرتفع" if threat_level == "منخفض" else threat_level
+            logger.info("تحليل عبر قواعد برمجية")
+
+        if redis_client:
+            redis_client.setex(cache_key, 3600, threat_level)
+        db.add(ThreatAnalysis(news_snippet=data.news_snippet,
+                              transaction_amount=data.transaction_amount,
+                              threat_level=threat_level))
+        db.commit()
+
+        if NOTIFICATION_EMAIL and threat_level in ["مرتفع", "حرج"]:
+            await send_email(f"تنبيه تهديد {threat_level}",
+                             f"تم اكتشاف تهديد: {data.news_snippet}",
+                             NOTIFICATION_EMAIL)
+    return {"threat_level": threat_level}
+
+def scheduled_collect_funds():
+    with SessionLocal() as db:
+        source = random.choice(finance_sources)
+        amount = random.uniform(*source["range"]) * source["ratio"]
+        transaction = Transaction(source=source["name"], amount=amount)
+        db.add(transaction)
+        db.commit()
+        logger.info(f"تم جمع التمويل تلقائيًا: {source['name']} - {amount:.2f} دولار")
+
+scheduler.add_job(scheduled_collect_funds, 'interval', minutes=5)
+
+@app.get("/generate_report", summary="توليد تقرير التمويل")
+def generate_report(db: Session = Depends(get_db), current_user: str = Depends(verify_token)):
+    transactions = db.query(Transaction).order_by(Transaction.timestamp.desc()).limit(10).all()
+    total_funds = sum(t.amount for t in db.query(Transaction).all())
+    source_totals = {}
+    for t in db.query(Transaction).all():
+        source_totals[t.source] = source_totals.get(t.source, 0) + t.amount
+
+    report_lines = [
+        "تقرير التمويل - درع الأمة الذكي",
+        f"التاريخ: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"إجمالي الأموال المجمعة: {total_funds:.2f} دولار",
+        f"عدد المعاملات: {db.query(Transaction).count()}",
+        "تفاصيل المعاملات (آخر 10):",
+    ]
+    for t in transactions:
+        line = f"- {t.source}: {t.amount:.2f} دولار ({t.timestamp.strftime('%Y-%m-%d %H:%M:%S')})"
+        report_lines.append(line)
+    report_lines.append("إجمالي التمويل حسب المصدر:")
+    for source, total in source_totals.items():
+        report_lines.append(f"- {source}: {total:.2f} دولار")
+    report_text = "\n".join(report_lines)
+    logger.info("تم إنشاء تقرير التمويل")
+    return {"report_text": report_text, "chart_data": source_totals}
+PYTHON_API
+
+# frontend/index.html
+cat > "$FRONTEND_DIR/index.html" <<'HTML_FRONTEND'
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>درع الأمة الذكي - النسخة المتطورة</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body { font-family: 'Tajawal', sans-serif; background: linear-gradient(135deg, #1a2a3a, #2c3e50); color: white; margin: 0; padding: 20px; }
+.container { max-width: 900px; margin: auto; background: rgba(0,0,0,0.4); border-radius: 12px; padding: 20px; }
+header { text-align: center; margin-bottom: 25px; }
+header h1 { color: #f1c40f; font-size: 2.5rem; }
+.card { background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 20px; padding: 15px; }
+.stat { font-size: 1.3rem; margin: 5px 0; }
+.alert { margin-top: 10px; }
+#threatInput { margin-top: 10px; width: 100%; }
+.lang-toggle { position: absolute; top: 20px; left: 20px; }
+canvas { max-width: 100%; margin-top: 20px; }
+</style>
+</head>
+<body>
+<div class="lang-toggle"><button id="langToggle" class="btn btn-secondary">English</button></div>
+<div class="container">
+<header><h1>درع الأمة الذكي</h1><p>تمويل ذكي - دفاع ذكي - تحليل آلي</p></header>
+
+<div class="card" id="loginCard">
+<h2>تسجيل الدخول</h2>
+<input id="username" class="form-control mb-2" placeholder="اسم المستخدم (admin)" />
+<input id="password" type="password" class="form-control mb-2" placeholder="كلمة المرور (smartshield2025)" />
+<button id="btnLogin" class="btn btn-primary">تسجيل الدخول</button>
+</div>
+
+<div class="card d-none" id="financeCard">
+<h2>التمويل التلقائي</h2>
+<div class="stat" id="totalFunds">إجمالي التمويل: 0 دولار</div>
+<button id="btnAddTransaction" class="btn btn-primary">جمع تمويل جديد</button>
+<div id="transactions"></div>
+</div>
+
+<div class="card d-none" id="defenseCard">
+<h2>نظام الدفاع</h2>
+<button id="btnLaunchDefense" class="btn btn-success">إطلاق دفاع يدوي</button>
+<button id="btnAnalyzeThreat" class="btn btn-warning">تحليل تهديد (ذكاء اصطناعي)</button>
+<textarea id="threatInput" class="form-control" placeholder="أدخل نص التهديد هنا..." rows="4"></textarea>
+<button id="btnGenerateReport" class="btn btn-info mt-2">توليد تقرير</button>
+<pre id="reportOutput" style="white-space: pre-wrap; margin-top:10px;"></pre>
+<canvas id="fundingChart"></canvas>
+<div id="alerts"></div>
+</div>
+</div>
+
+<script>
+const apiUrl = "http://localhost:8000";
+let token = null;
+let totalFunds = 0;
+let transactions = [];
+let isEnglish = false;
+
+function toggleLanguage() {
+    isEnglish = !isEnglish;
+    const elements = {
+        "header h1": isEnglish ? "Smart Nation Shield" : "درع الأمة الذكي",
+        "header p": isEnglish ? "Smart Funding - Smart Defense - AI Analysis" : "تمويل ذكي - دفاع ذكي - تحليل آلي",
+        "#loginCard h2": isEnglish ? "Login" : "تسجيل الدخول",
+        "#username[placeholder]": isEnglish ? "Username (admin)" : "اسم المستخدم (admin)",
+        "#password[placeholder]": isEnglish ? "Password (smartshield2025)" : "كلمة المرور (smartshield2025)",
+        "#btnLogin": isEnglish ? "Login" : "تسجيل الدخول",
+        "#financeCard h2": isEnglish ? "Automatic Funding" : "التمويل التلقائي",
+        "#totalFunds": isEnglish ? `Total Funding: ${totalFunds.toFixed(2)} USD` : `إجمالي التمويل: ${totalFunds.toFixed(2)} دولار`,
+        "#btnAddTransaction": isEnglish ? "Collect New Funding" : "جمع تمويل جديد",
+        "#defenseCard h2": isEnglish ? "Defense System" : "نظام الدفاع",
+        "#btnLaunchDefense": isEnglish ? "Launch Manual Defense" : "إطلاق دفاع يدوي",
+        "#btnAnalyzeThreat": isEnglish ? "Analyze Threat (AI)" : "تحليل تهديد (ذكاء اصطناعي)",
+        "#threatInput[placeholder]": isEnglish ? "Enter threat text here..." : "أدخل نص التهديد هنا...",
+        "#btnGenerateReport": isEnglish ? "Generate Report" : "توليد تقرير",
+        "#langToggle": isEnglish ? "عربي" : "English"
+    };
+    for (const [selector, text] of Object.entries(elements)) {
+        if (selector.includes("[placeholder]")) {
+            document.querySelector(selector.replace("[placeholder]", "")).placeholder = text;
+        } else {
+            document.querySelector(selector).textContent = text;
+        }
+    }
+    document.documentElement.dir = isEnglish ? "ltr" : "rtl";
+    document.documentElement.lang = isEnglish ? "en" : "ar";
+}
+
+function addTransactionUI(tx) {
+    const div = document.createElement("div");
+    div.className = "alert alert-success";
+    div.textContent = isEnglish
+        ? `${tx.source} - ${tx.amount.toFixed(2)} USD - ${new Date(tx.timestamp).toLocaleString()}`
+        : `${tx.source} - ${tx.amount.toFixed(2)} دولار - ${new Date(tx.timestamp).toLocaleString()}`;
+    transactionsElem.prepend(div);
+}
+
+function addAlert(message, type = "info") {
+    const div = document.createElement("div");
+    div.className = `alert alert-${type}`;
+    div.textContent = isEnglish ? message.replace(/يرجى|تم|حدث|خطأ/g, (m) => ({
+        "يرجى": "Please",
+        "تم": "Done",
+        "حدث": "An error occurred",
+        "خطأ": "Error"
+    })[m] || m) : message;
+    alertsElem.prepend(div);
+    setTimeout(() => div.remove(), 6000);
+}
+
+async function login() {
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value.trim();
+    if (!username || !password) {
+        addAlert(isEnglish ? "Please enter username and password." : "يرجى إدخال اسم المستخدم وكلمة المرور.", "warning");
+        return;
+    }
+    try {
+        const res = await fetch(`${apiUrl}/token`, {
+            method: "POST",
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: new URLSearchParams({username, password})
+        });
+        if (!res.ok) throw new Error(isEnglish ? "Login failed" : "فشل تسجيل الدخول");
+        const data = await res.json();
+        token = data.access_token;
+        document.getElementById("loginCard").classList.add("d-none");
+        document.getElementById("financeCard").classList.remove("d-none");
+        document.getElementById("defenseCard").classList.remove("d-none");
+        addAlert(isEnglish ? "Login successful" : "تم تسجيل الدخول بنجاح", "success");
+    } catch {
+        addAlert(isEnglish ? "Login failed. Check your credentials." : "فشل تسجيل الدخول. تحقق من بياناتك.", "danger");
+    }
+}
+
+async function addFinanceTransaction() {
+    if (!token) {
+        addAlert(isEnglish ? "Please login first." : "يرجى تسجيل الدخول أولاً.", "warning");
+        return;
+    }
+    try {
+        const res = await fetch(`${apiUrl}/add_transaction`, {headers: {Authorization: `Bearer ${token}`}});
+        if (!res.ok) throw new Error(isEnglish ? "Error collecting funds" : "خطأ في جمع التمويل");
+        const tx = await res.json();
+        totalFunds += tx.amount;
+        totalFundsElem.textContent = isEnglish
+            ? `Total Funding: ${totalFunds.toFixed(2)} USD`
+            : `إجمالي التمويل: ${totalFunds.toFixed(2)} دولار`;
+        transactions.unshift(tx);
+        addTransactionUI(tx);
+        addAlert(isEnglish
+            ? `Collected ${tx.amount.toFixed(2)} USD from ${tx.source}`
+            : `تم جمع ${tx.amount.toFixed(2)} دولار من ${tx.source}`, "success");
+    } catch {
+        addAlert(isEnglish ? "An error occurred while collecting funds." : "حدث خطأ أثناء جمع التمويل.", "danger");
+    }
+}
+
+async function launchDefense() {
+    if (!token) {
+        addAlert(isEnglish ? "Please login first." : "يرجى تسجيل الدخول أولاً.", "warning");
+        return;
+    }
+    try {
+        const res = await fetch(`${apiUrl}/launch_defense`, {headers: {Authorization: `Bearer ${token}`}});
+        const data = await res.json();
+        addAlert(isEnglish ? data.message.replace("تم تحييد", "Threat neutralized").replace("فشل في تحييد", "Failed to neutralize") : data.message,
+                 data.success ? "success" : "danger");
+    } catch {
+        addAlert(isEnglish ? "An error occurred while launching defense." : "حدث خطأ أثناء إطلاق الدفاع.", "danger");
+    }
+}
+
+async function analyzeThreat() {
+    if (!token) {
+        addAlert(isEnglish ? "Please login first." : "يرجى تسجيل الدخول أولاً.", "warning");
+        return;
+    }
+    const threat = threatInput.value.trim();
+    if (!threat) {
+        addAlert(isEnglish ? "Please enter threat text." : "يرجى إدخال نص التهديد.", "warning");
+        return;
+    }
+    try {
+        const res = await fetch(`${apiUrl}/analyze_threat`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({news_snippet: threat, transaction_amount: totalFunds})
+        });
+        if (!res.ok) throw new Error(isEnglish ? "Error analyzing threat" : "خطأ في تحليل التهديد");
+        const data = await res.json();
+        const threatLevels = {
+            "منخفض": "Low",
+            "متوسط": "Medium",
+            "مرتفع": "High",
+            "حرج": "Critical"
+        };
+        addAlert(isEnglish
+            ? `Threat Level: ${threatLevels[data.threat_level] || data.threat_level}`
+            : `مستوى التهديد: ${data.threat_level}`,
+            data.threat_level === "حرج" ? "danger" : "info");
+    } catch {
+        addAlert(isEnglish ? "An error occurred while analyzing threat." : "حدث خطأ أثناء تحليل التهديد.", "danger");
+    }
+}
+
+async function generateReport() {
+    if (!token) {
+        addAlert(isEnglish ? "Please login first." : "يرجى تسجيل الدخول أولاً.", "warning");
+        return;
+    }
+    try {
+        const res = await fetch(`${apiUrl}/generate_report`, {headers: {Authorization: `Bearer ${token}`}});
+        if (!res.ok) throw new Error(isEnglish ? "Error generating report" : "خطأ في إنشاء التقرير");
+        const data = await res.json();
+        reportOutput.textContent = isEnglish
+            ? data.report_text.replace("تقرير التمويل", "Funding Report")
+                             .replace("إجمالي الأموال", "Total Funds")
+                             .replace("عدد المعاملات", "Number of Transactions")
+                             .replace("تفاصيل المعاملات", "Transaction Details")
+                             .replace("إجمالي التمويل حسب المصدر", "Total Funding by Source")
+                             .replace("دولار", "USD")
+            : data.report_text;
+        const ctx = document.getElementById("fundingChart").getContext("2d");
+        new Chart(ctx, {
+            type: "pie",
+            data: {
+                labels: Object.keys(data.chart_data),
+                datasets: [{data: Object.values(data.chart_data), backgroundColor: ["#ff6384","#36a2eb","#ffce56","#4bc0c0"]}]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+        addAlert(isEnglish ? "Report generated successfully" : "تم إنشاء التقرير بنجاح", "success");
+    } catch {
+        addAlert(isEnglish ? "An error occurred while generating report." : "حدث خطأ أثناء توليد التقرير.", "danger");
+    }
+}
+
+const totalFundsElem = document.getElementById("totalFunds");
+const transactionsElem = document.getElementById("transactions");
+const alertsElem = document.getElementById("alerts");
+const reportOutput = document.getElementById("reportOutput");
+const threatInput = document.getElementById("threatInput");
+
+document.getElementById("btnLogin").addEventListener("click", login);
+document.getElementById("btnAddTransaction").addEventListener("click", addFinanceTransaction);
+document.getElementById("btnLaunchDefense").addEventListener("click", launchDefense);
+document.getElementById("btnAnalyzeThreat").addEventListener("click", analyzeThreat);
+document.getElementById("btnGenerateReport").addEventListener("click", generateReport);
+document.getElementById("langToggle").addEventListener("click", toggleLanguage);
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+HTML_FRONTEND
+
+echo "[7] التحقق من المنافذ..." | tee -a "$LOGFILE"
+for port in 8000 8080 6379; do
+    if lsof -ti tcp:$port &>/dev/null; then
+        pid=$(lsof -ti tcp:$port)
+        echo "تحذير: المنفذ $port مستخدم (PID=$pid). يتم إغلاقه..." | tee -a "$LOGFILE"
+        kill -9 "$pid"
+    fi
+done
+
+echo "[8] بدء تشغيل خادم Redis..." | tee -a "$LOGFILE"
+redis-server --daemonize yes || { echo "فشل تشغيل Redis" | tee -a "$LOGFILE"; exit 1; }
+
+echo "[9] بدء تشغيل خادم FastAPI وHTTP Frontend..." | tee -a "$LOGFILE"
+uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload &
+UVICORN_PID=$!
+sleep 2
+if ! ps -p $UVICORN_PID > /dev/null; then
+    echo "فشل تشغيل FastAPI" | tee -a "$LOGFILE"
+    exit 1
+fi
+
+python3 -m http.server --directory "$FRONTEND_DIR" 8080 &
+HTTP_PID=$!
+sleep 2
+if ! ps -p $HTTP_PID > /dev/null; then
+    echo "فشل تشغيل خادم HTTP" | tee -a "$LOGFILE"
+    exit 1
+fi
+
+# تنظيف الخوادم عند الإغلاق
+trap "echo 'إيقاف الخوادم...' | tee -a $LOGFILE; kill -9 $UVICORN_PID $HTTP_PID 2>/dev/null; redis-cli shutdown 2>/dev/null; exit" EXIT INT TERM
+
+# فتح الواجهة في متصفح أندرويد
+if command -v termux-open &>/dev/null; then
+    echo "فتح الواجهة في المتصفح..." | tee -a "$LOGFILE"
+    termux-open http://localhost:8080/index.html
+else
+    echo "افتح المتصفح واذهب إلى http://localhost:8080/index.html" | tee -a "$LOGFILE"
+fi
+
+echo -e "\n==== النظام قيد التشغيل ====" | tee -a "$LOGFILE"
+echo "لتسجيل الدخول: اسم المستخدم: admin، كلمة المرور: smartshield2025" | tee -a "$LOGFILE"
+echo "لإيقاف الخدمات: kill -9 $UVICORN_PID $HTTP_PID; redis-cli shutdown" | tee -a "$LOGFILE"
+echo "السجلات: $LOGFILE" | tee -a "$LOGFILE"
+
+# الانتظار للحفاظ على السكريبت نشطًا
+wait# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+# This workflow will install Deno then run `deno lint` and `deno test`.
+# For more information see: https://github.com/denoland/setup-deno
+
+name: Deno
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup repo
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        # uses: denoland/setup-deno@v1
+        uses: denoland/setup-deno@61fe2df320078202e33d7d5ad347e7dcfa0e8f31  # v1.1.2
+        with:
+          deno-version: v1.x
+
+      # Uncomment this step to verify the use of 'deno fmt' on each commit.
+      # - name: Verify formatting
+      #   run: deno fmt --check
+
+      - name: Run linter
+        run: deno lint
+
+      - name: Run tests
+        run: deno test -A
