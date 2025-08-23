@@ -2,7 +2,7 @@
 
 ### Download for Android:
 
-<a href="https://play.google.com/store/apps/details?id=dev.spiegl.flyingcarpet"><img alt="Get it on Google Play" src="screenshots/google-play.png" width="240"/></a>&nbsp;&nbsp;<a href="https://f-droid.org/packages/dev.spiegl.flyingcarpet"><img src="screenshots/f-droid.png" alt="Get it on F-Droid" width="240"></a>
+<a href="https://play.google.com/store/apps/details?id=dev.spiegl.flyingcarpet"><img alt="Get it on Google Play" src="screenshots/google-play.png" width="240"/></a>&nbsp;&nbsp;<a href="https://f-droid.org/packages/dev.spiegl.flyingcarpet"><img src="screenshots/f-droid.png" alt="Get it on F-Droid" width="240"></a>&nbsp;&nbsp;<a href="https://apt.izzysoft.de/packages/dev.spiegl.flyingcarpet"><img alt="Get it at IzzyOnDroid" src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png" width="240"/></a>
 
 Or if you prefer to sideload, `android_FlyingCarpet_9.0.3.apk` is available on the [releases](https://github.com/spieglt/FlyingCarpet/releases/latest) page.
 
