@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+TruthGuardian 2.0 - نظام مراقبة وحماية متقدم لـ Termux
+"""
+
+import os
+import sys
+import time
+import logging
+import hashlib
+import json
+import yaml
+import threading
+from datetime import datetime
+import telegram
+from dotenv import load_dotenv
+
+# إعداد تسجيل الأحداث
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s][%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+log = logging.getLogger()
+
+# تحميل متغيرات البيئة
+load_dotenv()
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+tg_bot = telegram.Bot(token=TELEGRAM_TOKEN) if TELEGRAM_TOKEN else None
+
+# تحميل ملف التكوين
+CONFIG_PATH = os.path.join(os.environ["HOME"], "truthguardian_config.yaml")
+DEFAULT_CONFIG = {
+    "monitored_files": [
+        "/etc/passwd",
+        "/etc/hosts",
+        f"{os.environ['HOME']}/.bashrc"
+    ],
+    "scan_interval": 30,
+    "log_interval": 300,
+    "suspicious_patterns": ["password", "secret", "key", "token", "auth"]
+}
+
+def load_config():
+    try:
+        if os.path.exists(CONFIG_PATH):
+            with open(CONFIG_PATH, 'r') as f:
+                return yaml.safe_load(f)
+        else:
+            with open(CONFIG_PATH, 'w') as f:
+                yaml.safe_dump(DEFAULT_CONFIG, f)
+            return DEFAULT_CONFIG
+    except Exception as e:
+        log.error(f"خطأ في تحميل التكوين: {e}")
+        return DEFAULT_CONFIG
+
+# ===============================
+# مراقبة النظام
+# ===============================
+class SystemMonitor:
+    def __init__(self):
+        self.metrics = {}
+
+    def get_cpu_usage(self):
+        def get_cpu_stats():
+            try:
+                with open('/proc/stat') as f:
+                    line = f.readline()
+                if line.startswith('cpu '):
+                    parts = line.split()
+                    return sum(int(p) for p in parts[1:]), int(parts[4])
+            except:
+                return 0, 0
+
+        total1, idle1 = get_cpu_stats()
+        time.sleep(1.0)  # زيادة الفاصل الزمني لتحسين الدقة
+        total2, idle2 = get_cpu_stats()
+        total_diff = total2 - total1
+        idle_diff = idle2 - idle1
+        return 100 * (total_diff - idle_diff) / total_diff if total_diff > 0 else 0
+
+    def get_memory_usage(self):
+        try:
+            with open('/proc/meminfo') as f:
+                lines = f.readlines()
+            mem_info = {line.split()[0].rstrip(':'): int(line.split()[1]) for line in lines if len(line.split()) >= 2}
+            total = mem_info.get('MemTotal', 0)
+            available = mem_info.get('MemAvailable', 0)
+            return 100 * (total - available) / total if total > 0 else 0
+        except:
+            return 0
+
+    def get_network_usage(self):
+        try:
+            with open('/proc/net/dev') as f:
+                lines = f.readlines()
+            for line in lines:
+                if 'wlan0' in line:  # افتراض واجهة الشبكة
+                    parts = line.split()
+                    return int(parts[1]), int(parts[9])  # bytes received, sent
+            return 0, 0
+        except:
+            return 0, 0
+
+    def collect_metrics(self):
+        rx1, tx1 = self.get_network_usage()
+        time.sleep(1.0)
+        rx2, tx2 = self.get_network_usage()
+        self.metrics = {
+            'timestamp': datetime.now().isoformat(),
+            'cpu_usage': round(self.get_cpu_usage(), 2),
+            'memory_usage': round(self.get_memory_usage(), 2),
+            'network_rx': round((rx2 - rx1) / 1024, 2),  # KB/s
+            'network_tx': round((tx2 - tx1) / 1024, 2)   # KB/s
+        }
+        return self.metrics
+
+# ===============================
+# سلامة الملفات
+# ===============================
+class FileIntegrityChecker:
+    def __init__(self):
+        self.checksums = {}
+
+    def calculate_hash(self, filepath):
+        try:
+            hasher = hashlib.sha256()
+            with open(filepath, 'rb') as f:
+                for chunk in iter(lambda: f.read(8192), b""):  # زيادة حجم القطعة
+                    hasher.update(chunk)
+            return hasher.hexdigest()
+        except Exception as e:
+            log.error(f"خطأ في حساب التجزئة لـ {filepath}: {e}")
+            return None
+
+    def monitor_file(self, filepath):
+        current_hash = self.calculate_hash(filepath)
+        if current_hash is None:
+            return False
+        if filepath in self.checksums:
+            if self.checksums[filepath] != current_hash:
+                log.warning(f"⚠️ تغيير في الملف: {filepath}")
+                if tg_bot and TELEGRAM_CHAT_ID:
+                    tg_bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=f"⚠️ تم تغيير الملف: {filepath}")
+                return False
+        else:
+            log.info(f"بدء مراقبة الملف: {filepath}")
+        self.checksums[filepath] = current_hash
+        return True
+
+# ===============================
+# النظام الرئيسي
+# ===============================
+class TruthGuardian:
+    def __init__(self):
+        self.config = load_config()
+        self.monitor = SystemMonitor()
+        self.integrity_checker = FileIntegrityChecker()
+        self.running = False
+        self.monitored_files = [f for f in self.config['monitored_files'] if os.path.exists(f)]
+
+    def start(self):
+        log.info("🚀 بدء تشغيل TruthGuardian 2.0")
+        self.running = True
+        log.info(f"جاري مراقبة {len(self.monitored_files)} ملف")
+
+        # تشغيل المراقبة في خيط منفصل
+        monitor_thread = threading.Thread(target=self.run_monitoring)
+        monitor_thread.start()
+        monitor_thread.join()
+
+    def run_monitoring(self):
+        iteration = 0
+        while self.running:
+            try:
+                iteration += 1
+                log.info(f"=== دورة المراقبة #{iteration} ===")
+
+                # جمع بيانات النظام
+                metrics = self.monitor.collect_metrics()
+                log.info(f"📊 الأداء: CPU={metrics['cpu_usage']}%, RAM={metrics['memory_usage']}%, "
+                        f"RX={metrics['network_rx']} KB/s, TX={metrics['network_tx']} KB/s")
+
+                # مراقبة الملفات
+                for filepath in self.monitored_files:
+                    self.integrity_checker.monitor_file(filepath)
+
+                # حفظ السجلات
+                if iteration % (self.config['log_interval'] // self.config['scan_interval']) == 0:
+                    self.save_logs(metrics)
+
+                time.sleep(self.config['scan_interval'])
+
+            except KeyboardInterrupt:
+                log.info("تم إيقاف التشغيل بواسطة المستخدم")
+                self.stop()
+            except Exception as e:
+                log.error(f"خطأ غير متوقع: {e}")
+                time.sleep(60)
+
+    def save_logs(self, metrics):
+        try:
+            log_dir = os.path.join(os.environ['HOME'], 'truthguardian_logs')
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, f"log_{datetime.now().strftime('%Y%m%d_%H%M')}.json")
+            with open(log_file, 'w') as f:
+                json.dump({
+                    'timestamp': datetime.now().isoformat(),
+                    'metrics': metrics,
+                    'monitored_files': self.monitored_files,
+                    'file_checksums': self.integrity_checker.checksums
+                }, f, indent=2)
+            log.info(f"تم حفظ السجلات في: {log_file}")
+        except Exception as e:
+            log.error(f"خطأ في حفظ السجلات: {e}")
+
+    def stop(self):
+        log.info("🛑 إيقاف TruthGuardian 2.0")
+        self.running = False
+
+# ===============================
+# نقطة الدخول
+# ===============================
+def main():
+    print("=" * 50)
+    print("TruthGuardian 2.0 - نظام المراقبة والحماية المتقدم")
+    print("مصمم خصيصًا لـ Termux")
+    print("=" * 50)
+
+    system = TruthGuardian()
+    try:
+        system.start()
+    except Exception as e:
+        log.error(f"فشل تشغيل النظام: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
