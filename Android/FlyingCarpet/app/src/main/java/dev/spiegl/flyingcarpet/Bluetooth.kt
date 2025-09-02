@@ -69,7 +69,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         get() = _status
 
     fun stop(application: Context) {
-        if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
+        {
             return
         }
         _status.postValue(false)
@@ -293,7 +295,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
     }
 
     fun scan() {
-        if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
+        {
             outputText("Missing permission BLUETOOTH_SCAN")
             return
         }
@@ -316,7 +320,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         // and store those in itself.
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             super.onScanResult(callbackType, result)
-            if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
+            {
                 outputText("Missing permission BLUETOOTH_SCAN")
                 return
             }
