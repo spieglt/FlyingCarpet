@@ -89,7 +89,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
     // peripheral
 
     fun initializePeripheral(application: Context): Boolean {
-        if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
+        {
             return false
         }
         if (bluetoothManager.adapter == null) {
@@ -137,7 +139,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             characteristic: BluetoothGattCharacteristic?
         ) {
             super.onCharacteristicReadRequest(device, requestId, offset, characteristic)
-            if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
+            {
                 return
             }
             if (characteristic == null) {
@@ -197,7 +201,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             )
 
             Log.i("Bluetooth", "Central peer wrote something: \"${value?.toString(Charsets.UTF_8)}\"")
-            if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
+            {
                 return
             }
             if (characteristic == null) {
@@ -246,7 +252,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
     }
 
     fun advertise() {
-        if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED)
+        {
             return
         }
         // BluetoothLeAdvertiser
@@ -438,7 +446,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             }
 
             override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
-                if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                    && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
+                {
                     return
                 }
                 super.onServicesDiscovered(gatt, status)
@@ -464,7 +474,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
 
             override fun onServiceChanged(gatt: BluetoothGatt) {
                 super.onServiceChanged(gatt)
-                if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                    && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
+                {
                     return
                 }
                 outputText("Services changed")
@@ -478,7 +490,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 newState: Int
             ) {
                 super.onConnectionStateChange(gatt, status, newState)
-                if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                    && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
+                {
                     return
                 }
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
@@ -529,7 +543,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         // use to read peripheral's characteristic
         fun read(characteristicUuid: UUID) {
             // outputText("Reading $characteristicUuid")
-            if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
+            {
                 outputText("No permission")
                 return
             }
@@ -545,7 +561,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             // outputText("Writing to $characteristicUuid")
             // val writeType = if (waitForResponse) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             val writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-            if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
+            {
                 return
             }
             val characteristic = when (characteristicUuid) {
