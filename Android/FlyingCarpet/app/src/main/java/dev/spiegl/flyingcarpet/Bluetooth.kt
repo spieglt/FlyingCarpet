@@ -76,7 +76,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         }
         _status.postValue(false)
         // central
-        bluetoothLeScanner.stopScan(leScanCallback)
+        if (this::bluetoothLeScanner.isInitialized) {
+            bluetoothLeScanner.stopScan(leScanCallback)
+        }
         bluetoothReceiver.bluetoothGatt = null
         // peripheral
         bluetoothManager.adapter.bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
