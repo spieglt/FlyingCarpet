@@ -81,11 +81,15 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         }
         bluetoothReceiver.bluetoothGatt = null
         // peripheral
-        bluetoothManager.adapter.bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
+        if (this::bluetoothManager.isInitialized) {
+            bluetoothManager.adapter.bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
+        }
         // this prevents android from sending twice? but disabling it leaves it advertising or offering services even after the stopAdvertising() above?
         // need to clear services and replace between transfers?
         // bluetoothGattServer.close()
-        bluetoothGattServer.clearServices()
+        if (this::bluetoothGattServer.isInitialized) {
+            bluetoothGattServer.clearServices()
+        }
     }
 
     // peripheral
