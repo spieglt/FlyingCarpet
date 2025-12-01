@@ -33,7 +33,7 @@
   },
   "productName": "FlyingCarpet",
   "mainBinaryName": "FlyingCarpet",
-  "version": "9.0.0",
+  "version": "9.0.9",
   "identifier": "dev.spiegl",
   "plugins": {},
   "app": {
