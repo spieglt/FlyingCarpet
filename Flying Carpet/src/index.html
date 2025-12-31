@@ -26,9 +26,15 @@
           <img src="assets/icon1024.png" style="width: 150px; height: 150px;">
         </div>
       </div>
-      <div class="form-check form-switch" style="margin: 10px;">
-        <input class="form-check-input"  style="width: 40px; height: 20px; margin-right: 5px;" type="checkbox" role="switch" id="bluetoothSwitch" onchange="bluetoothChange()">
-        <label class="form-check-label" for="bluetoothSwitch">Use Bluetooth</label>
+      <div class="horizontalContainer" style="flex-grow: 0; margin: 10px;">
+        <div class="form-check form-switch" style="margin: 10px;">
+          <input class="form-check-input"  style="width: 40px; height: 20px; margin-right: 5px;" type="checkbox" role="switch" id="bluetoothSwitch" onchange="bluetoothChange()">
+          <label class="form-check-label" for="bluetoothSwitch">Use Bluetooth</label>
+        </div>
+        <div class="form-check" style="margin: 10px; float: right; display: none" id="sendFolderDiv">
+          <input class="form-check-input" type="checkbox" value="" id="sendFolderCheckbox">
+          <label class="form-check-label" for="sendFolder">Send Folder</label>
+        </div>
       </div>
 
       <!-- mode box -->
@@ -69,7 +75,7 @@
 
       <!-- output box -->
       <div id="outputBox" class="horizontalContainer" style="flex-grow: 9; flex-shrink: 9; overflow-y: auto; padding: 5px; margin-top: 5px;">
-        Welcome to Flying Carpet!<br>Once other options are selected, drag and drop can be used to send a folder.
+        Welcome to Flying Carpet!<br>Once other options are selected, drag and drop can be used to start a transfer.
       </div>
 
       <!-- progress bar -->

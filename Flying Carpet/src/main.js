@@ -5,6 +5,7 @@ let aboutButton;
 let canUseBluetooth = false;
 let usingBluetooth;
 let bluetoothSwitch;
+let sendFolderCheckbox;
 let peerLabel;
 let peerBox;
 let outputBox;
@@ -23,6 +24,7 @@ window.onunload = () => {
   let uiState = {
     usingBluetooth: usingBluetooth,
     // canUseBluetooth:
+    sendingFolder: sendFolderCheckbox.checked,
     selectedMode: selectedMode,
     selectedPeer: selectedPeer,
     selectedFiles: selectedFiles,
@@ -46,6 +48,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   cancelButton = document.getElementById('cancelButton');
   progressBar = document.getElementById('progressBar');
   bluetoothSwitch = document.getElementById('bluetoothSwitch');
+  sendFolderCheckbox = document.getElementById('sendFolderCheckbox');
 
   appWindow = window.__TAURI__.window.getCurrentWindow();
 
@@ -146,6 +149,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (uiState) {
     usingBluetooth = uiState.usingBluetooth;
     bluetoothSwitch.checked = usingBluetooth;
+    sendFolderCheckbox.checked = uiState.sendingFolder;
     selectedMode = uiState.selectedMode;
     if (selectedMode === 'send') {
       document.getElementById('sendButton').checked = true;
@@ -229,10 +233,22 @@ async function startTransfer(filesSelected) {
   // get files or folder
   if (!filesSelected) {
     if (selectedMode == 'send') {
-      await selectFiles();
-      if (!selectedFiles) {
-        output('User cancelled.');
-        return;
+      if (sendFolderCheckbox.checked) {
+        let folder = await dialog.open({
+          multiple: false,
+          directory: true,
+        });
+        if (!folder) {
+          output('User cancelled.');
+          return;
+        }
+        selectedFiles = await core.invoke('expand_files', { paths: [folder] });
+      } else {
+        await selectFiles();
+        if (!selectedFiles) {
+          output('User cancelled.');
+          return;
+        }
       }
     } else if (selectedMode == 'receive') {
       await selectFolder();
@@ -303,6 +319,7 @@ let bluetoothChange = () => {
 
 let modeChange = async (button) => {
   startButton.innerText = button === 'receive' ? 'Select Folder' : 'Select Files';
+  document.getElementById('sendFolderDiv').style.display = button === 'send' ? '' : 'none';
   selectedMode = button;
   checkStatus();
 }
@@ -364,6 +381,8 @@ let enableUi = async () => {
   if (canUseBluetooth) {
     document.getElementById('bluetoothSwitch').disabled = false;
   }
+  // enable send folder box
+  document.getElementById('sendFolderCheckbox').disabled = false;
   // enable radio buttons, file/folder selection buttons
   let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton'];
   for (let i in radioButtons) {
@@ -382,6 +401,8 @@ let disableUi = async () => {
   cancelButton.style.display = '';
   // disable bluetooth switch
   document.getElementById('bluetoothSwitch').disabled = true;
+  // disable send folder box
+  document.getElementById('sendFolderCheckbox').disabled = true;
   // disable radio buttons, file/folder selection buttons
   let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton'];
   for (let i in radioButtons) {
