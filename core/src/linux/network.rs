@@ -54,6 +54,7 @@ pub async fn connect_to_peer<T: UI>(
 
 fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), FCError> {
     let nmcli = "nmcli";
+    let user_str = &format!("user:{}", get_username());
     let commands = vec![
         vec![
             "con",
@@ -68,6 +69,8 @@ fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), FCEr
             "yes",
             "ssid",
             ssid,
+            "connection.permissions",
+            &user_str,
         ],
         vec![
             "con",
@@ -125,6 +128,7 @@ pub fn stop_hotspot(
 
 async fn join_hotspot<T: UI>(ssid: &str, password: &str, interface: &str, ui: &T) -> Result<(), FCError> {
     let nmcli = "nmcli";
+    let user_str = &format!("user:{}", get_username());
     let commands = vec![
         vec![
             "con",
@@ -139,6 +143,8 @@ async fn join_hotspot<T: UI>(ssid: &str, password: &str, interface: &str, ui: &T
             "yes",
             "ssid",
             ssid,
+            "connection.permissions",
+            &user_str,
         ],
         vec!["con", "modify", ssid, "wifi-sec.key-mgmt", "wpa-psk"],
         vec!["con", "modify", ssid, "wifi-sec.psk", password],
@@ -195,6 +201,12 @@ fn find_gateway(interface: &str) -> Result<String, FCError> {
     let output = run_command("sh", Some(vec!["-c", &route_command]))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     Ok(stdout.trim().to_string())
+}
+
+fn get_username() -> String {
+    std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "user".to_string())
 }
 
 #[cfg(test)]

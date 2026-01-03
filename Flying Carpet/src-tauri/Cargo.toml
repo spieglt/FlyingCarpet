@@ -1,6 +1,6 @@
 [package]
 name = "flying-carpet"
-version = "9.0.9"
+version = "9.0.10"
 description = "Encrypted file transfer over ad hoc WiFi between Android, iOS, Linux, macOS, and Windows"
 authors = ["Theron Spiegl"]
 license = "GPL-3.0-only"
