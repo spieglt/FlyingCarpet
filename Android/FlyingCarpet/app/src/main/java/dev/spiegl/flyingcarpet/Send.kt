@@ -1,5 +1,6 @@
 package dev.spiegl.flyingcarpet
 
+import android.app.Application
 import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,11 +13,12 @@ import javax.crypto.spec.SecretKeySpec
 
 suspend fun MainViewModel.sendFile(file: DocumentFile, fileStream: InputStream, filePath: String) {
     val start = System.currentTimeMillis()
-    outputText("File size: ${makeSizeReadable(file.length())}")
+    val app = getApplication<Application>()
+    outputText(app.getString(R.string.file_size_label, makeSizeReadable(app, file.length())))
     sendFileDetails(file, filePath)
     val needTransfer = checkForFileSending(file)
     if (!needTransfer) {
-        outputText("Recipient already has this file, skipping.")
+        outputText(app.getString(R.string.recipient_has_file))
         return
     }
     var bytesLeft = file.length()
@@ -26,7 +28,7 @@ suspend fun MainViewModel.sendFile(file: DocumentFile, fileStream: InputStream, 
             fileStream.read(buffer)
         }
         if (bytesRead == -1) {
-            outputText("Hit EOF, shouldn't have.")
+            outputText(app.getString(R.string.hit_eof))
             break
         }
 
@@ -49,10 +51,10 @@ suspend fun MainViewModel.sendFile(file: DocumentFile, fileStream: InputStream, 
     progressBarMut.postValue(100)
     val end = System.currentTimeMillis()
     val seconds = (end - start) / 1000.0
-    outputText("Sending took ${formatTime(seconds)}")
+    outputText(app.getString(R.string.sending_took, formatTime(app, seconds)))
     val megabits = 8 * (file.length() / 1_000_000.0)
     val mbps = megabits / seconds
-    outputText("Speed: %.2fmbps".format(mbps))
+    outputText(app.getString(R.string.speed_mbps, mbps))
 
     // write double confirmation
     withContext(Dispatchers.IO) {

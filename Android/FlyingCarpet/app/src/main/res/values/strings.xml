@@ -19,4 +19,96 @@
     <string name="versionNumber">Version 9</string>
     <string name="sendFolderText">Send Folder</string>
     <string name="bluetooth">Use Bluetooth</string>
+
+    <!-- MainActivity -->
+    <string name="no_files_selected">No files selected.</string>
+    <string name="could_not_open_file">Could not open file</string>
+    <string name="could_not_open_file_stream">Could not open file stream</string>
+    <string name="could_not_get_document_file">Could not get DocumentFile from selected directory.</string>
+    <string name="no_folder_selected">No folder selected.</string>
+    <string name="permission_granted">Permission granted.</string>
+    <string name="wifi_permission_required">The Android WifiManager requires %1$s permission to start hotspot. This data is not collected. Start transfer again if you would like to grant permission.</string>
+    <string name="scan_cancelled">Scan cancelled, exiting transfer.</string>
+    <string name="must_select_mode">Must select whether this device is sending or receiving.</string>
+    <string name="must_select_peer">Must select operating system of other device.</string>
+    <string name="missing_permission">Missing permission: %1$s</string>
+    <string name="all_permissions_granted">All permissions granted</string>
+    <string name="have_permission">Have permission %1$s: %2$s</string>
+    <string name="bluetooth_permissions_granted">Bluetooth permissions granted</string>
+    <string name="bluetooth_initialized">Bluetooth initialized</string>
+    <string name="device_cant_use_bluetooth">Device can\'t use Bluetooth</string>
+    <string name="scan_qr_prompt">Start transfer on the other device and scan the QR code displayed.</string>
+    <string name="fine_location">fine location</string>
+    <string name="nearby_device">nearby device</string>
+
+    <!-- MainViewModel -->
+    <string name="starting_transfer">\nStarting Transfer</string>
+    <string name="separator">=========================</string>
+    <string name="sending_file_of">Sending file %1$d of %2$d. Filename: %3$s.</string>
+    <string name="receiving_file_of">Receiving file %1$d of %2$d</string>
+    <string name="transfer_complete">Transfer complete\n</string>
+    <string name="hotspot_failed">Hotspot failed: %1$d</string>
+    <string name="failed_hotspot_reservation">Failed to get hotspot reservation</string>
+    <string name="ssid_label">SSID: %1$s</string>
+    <string name="password_label">Password: %1$s</string>
+    <string name="transfer_error">Transfer error: %1$s\n</string>
+    <string name="hotspot_stopped">Hotspot stopped</string>
+    <string name="started_hotspot">Started hotspot.</string>
+    <string name="joining_ssid">Joining %1$s</string>
+    <string name="unsupported_peer_os">Error: peer sent an unsupported OS.</string>
+    <string name="disconnected_from_hotspot">Disconnected from hotspot</string>
+    <string name="failed_connect_hotspot">Failed to connect to hotspot</string>
+    <string name="both_selected_mode">Both ends of the transfer selected %1$s</string>
+    <string name="version_not_compatible">Peer\'s version of Flying Carpet is not compatible. Please find links to download the newest version at https://flyingcarpet.spiegl.dev.</string>
+    <string name="peer_connection_closed">Peer connection closed</string>
+
+    <!-- Send/Receive -->
+    <string name="file_size_label">File size: %1$s</string>
+    <string name="recipient_has_file">Recipient already has this file, skipping.</string>
+    <string name="hit_eof">Hit EOF, shouldn\'t have.</string>
+    <string name="sending_took">Sending took %1$s</string>
+    <string name="speed_mbps">Speed: %1$.2fmbps</string>
+    <string name="filename_and_size">Filename: %1$s.  Size: %2$s</string>
+    <string name="file_already_exists">The same file already exists at this location, skipping.</string>
+    <string name="receiving_took">Receiving took %1$s</string>
+    <string name="didnt_receive_confirmation">Didn\'t receive confirmation from peer</string>
+
+    <!-- Bluetooth -->
+    <string name="bt_device_connected">Device connected</string>
+    <string name="bt_stopped_advertising">Stopped advertising</string>
+    <string name="bt_device_disconnected">Device disconnected</string>
+    <string name="bt_invalid_characteristic">Invalid characteristic</string>
+    <string name="bt_advertiser_started">Advertiser started</string>
+    <string name="bt_advertiser_failed">Advertiser failed to start: %1$d</string>
+    <string name="bt_missing_scan_permission">Missing permission BLUETOOTH_SCAN</string>
+    <string name="bt_scanning">Scanning for Bluetooth peripherals…</string>
+    <string name="bt_found_device">Found device: %1$s</string>
+    <string name="bt_stopped_scanning">Stopped scanning</string>
+    <string name="bt_wifi_read_retry">Could not read peer\'s WiFi characteristic. trying again…</string>
+    <string name="bt_wrote_os">Wrote OS to peer</string>
+    <string name="bt_wrote_ssid">Wrote SSID to peer</string>
+    <string name="bt_wrote_password">Wrote password to peer</string>
+    <string name="bt_discovered_services">Discovered services</string>
+    <string name="bt_service_not_found">Did not find service</string>
+    <string name="bt_services_changed">Services changed</string>
+    <string name="bt_connected">Connected</string>
+    <string name="bt_no_permission">No permission</string>
+    <string name="bt_bad_characteristic">Bad characteristic: %1$s</string>
+
+    <!-- Alert -->
+    <string name="macos_wifi_info">Start the transfer on macOS and enter these when prompted:\n\nSSID: %1$s\nPassword: %2$s</string>
+    <string name="about_title">About Flying Carpet</string>
+    <string name="ok">OK</string>
+
+    <!-- Utilities -->
+    <string name="size_bytes">%1$.0f bytes</string>
+    <string name="size_kb">%1$.2fKB</string>
+    <string name="size_mb">%1$.2fMB</string>
+    <string name="size_gb">%1$.2fGB</string>
+    <string name="time_minutes_seconds">%1$d minutes %2$.2f seconds</string>
+    <string name="time_minute_seconds">%1$d minute %2$.2f seconds</string>
+    <string name="time_seconds">%1$.2f seconds</string>
+
+    <!-- About message -->
+    <string name="about_message">https://flyingcarpet.spiegl.dev\nVersion 9.0.8\ntheron@spiegl.dev\nCopyright 2025, Theron Spiegl, all rights reserved.\n\nFlying Carpet transfers files between two Android, iOS, Linux, macOS, and Windows devices over ad hoc WiFi. No access point or shared network is required, just two WiFi cards in close range. The only pairings that don\'t work are from one Apple device (macOS or iOS) to another, because Apple no longer allows hotspots to be started programmatically.\n\nINSTRUCTIONS\n\nTurn Bluetooth on or off on both devices. If one side fails to initialize Bluetooth or has it turned off, the other side must disable the \"Use Bluetooth\" switch in Flying Carpet.\n\nSelect Sending on one device and Receiving on the other. If not using Bluetooth, select the operating system of the other device. Click the \"Start Transfer\" button on each device. On the sending device, select the files or folder to send. On the receiving device, select the folder in which to receive files. (To send a folder, drag it onto the window instead of clicking \"Start Transfer\".)\n\nIf using Bluetooth, confirm the 6-digit PIN on each side. The WiFi connection will be configured automatically. If not using Bluetooth, you will need to scan a QR code or type in a password.\n\nWhen prompted to join a WiFi network or modify WiFi settings, say Allow. On Windows you may have to grant permission to add a firewall rule. On macOS you may have to grant location permissions, which Apple requires to scan for WiFi networks. Flying Carpet does not read or collect your location, nor any other data.\n\nTROUBLESHOOTING\n\nIf using Bluetooth fails, try manually unpairing the devices from one another and starting a new transfer.\n\nIf sending from macOS to Linux, disable Bluetooth on both sides.\n\nFlying Carpet may make multiple attempts to join the other device\'s hotspot.\n\nLicensed under the GPL3: https://www.gnu.org/licenses/gpl-3.0.html#license-text</string>
 </resources>

@@ -1,0 +1,107 @@
+<resources>
+    <string name="app_name">Flying Carpet</string>
+    <string name="send">发送</string>
+    <string name="receive">接收</string>
+    <string name="android">Android</string>
+    <string name="ios">iOS</string>
+    <string name="linux">Linux</string>
+    <string name="mac">macOS</string>
+    <string name="windows">Windows</string>
+    <string name="step1">选择此设备的模式</string>
+    <string name="welcome">欢迎使用 Flying Carpet！</string>
+    <string name="selectFiles">选择文件</string>
+    <string name="cancel">取消传输</string>
+    <string name="selectFolder">选择文件夹</string>
+    <string name="step2">选择另一台设备的操作系统</string>
+    <string name="qrCodeDescription">Flying Carpet 图标 / 二维码</string>
+    <string name="programTitle">Flying Carpet</string>
+    <string name="about">关于</string>
+    <string name="versionNumber">版本 9</string>
+    <string name="sendFolderText">发送文件夹</string>
+    <string name="bluetooth">使用蓝牙</string>
+
+    <string name="no_files_selected">未选择文件。</string>
+    <string name="could_not_open_file">无法打开文件</string>
+    <string name="could_not_open_file_stream">无法打开文件流</string>
+    <string name="could_not_get_document_file">无法从所选目录获取 DocumentFile。</string>
+    <string name="no_folder_selected">未选择文件夹。</string>
+    <string name="permission_granted">权限已授予。</string>
+    <string name="wifi_permission_required">Android WifiManager 需要 %1$s 权限来启动热点。此数据不会被收集。如果您想授予权限，请重新开始传输。</string>
+    <string name="scan_cancelled">扫描已取消，退出传输。</string>
+    <string name="must_select_mode">必须选择此设备是发送还是接收。</string>
+    <string name="must_select_peer">必须选择另一台设备的操作系统。</string>
+    <string name="missing_permission">缺少权限: %1$s</string>
+    <string name="all_permissions_granted">所有权限已授予</string>
+    <string name="have_permission">拥有权限 %1$s: %2$s</string>
+    <string name="bluetooth_permissions_granted">蓝牙权限已授予</string>
+    <string name="bluetooth_initialized">蓝牙已初始化</string>
+    <string name="device_cant_use_bluetooth">设备无法使用蓝牙</string>
+    <string name="scan_qr_prompt">在另一台设备上开始传输，然后扫描显示的二维码。</string>
+    <string name="fine_location">精确位置</string>
+    <string name="nearby_device">附近设备</string>
+
+    <string name="starting_transfer">\n开始传输</string>
+    <string name="separator">=========================</string>
+    <string name="sending_file_of">正在发送第 %1$d 个文件，共 %2$d 个。文件名: %3$s。</string>
+    <string name="receiving_file_of">正在接收第 %1$d 个文件，共 %2$d 个</string>
+    <string name="transfer_complete">传输完成\n</string>
+    <string name="hotspot_failed">热点失败: %1$d</string>
+    <string name="failed_hotspot_reservation">无法获取热点预留</string>
+    <string name="ssid_label">SSID: %1$s</string>
+    <string name="password_label">密码: %1$s</string>
+    <string name="transfer_error">传输错误: %1$s\n</string>
+    <string name="hotspot_stopped">热点已停止</string>
+    <string name="started_hotspot">热点已启动。</string>
+    <string name="joining_ssid">正在加入 %1$s</string>
+    <string name="unsupported_peer_os">错误：对端发送了不支持的操作系统。</string>
+    <string name="disconnected_from_hotspot">已断开热点连接</string>
+    <string name="failed_connect_hotspot">连接热点失败</string>
+    <string name="both_selected_mode">两端都选择了 %1$s</string>
+    <string name="version_not_compatible">对端的 Flying Carpet 版本不兼容。请访问 https://flyingcarpet.spiegl.dev 下载最新版本。</string>
+    <string name="peer_connection_closed">对端连接已关闭</string>
+
+    <string name="file_size_label">文件大小: %1$s</string>
+    <string name="recipient_has_file">接收方已有此文件，跳过。</string>
+    <string name="hit_eof">遇到文件结尾，不应该发生。</string>
+    <string name="sending_took">发送耗时 %1$s</string>
+    <string name="speed_mbps">速度: %1$.2fmbps</string>
+    <string name="filename_and_size">文件名: %1$s。大小: %2$s</string>
+    <string name="file_already_exists">同名文件已存在于此位置，跳过。</string>
+    <string name="receiving_took">接收耗时 %1$s</string>
+    <string name="didnt_receive_confirmation">未收到对端确认</string>
+
+    <string name="bt_device_connected">设备已连接</string>
+    <string name="bt_stopped_advertising">已停止广播</string>
+    <string name="bt_device_disconnected">设备已断开</string>
+    <string name="bt_invalid_characteristic">无效特征</string>
+    <string name="bt_advertiser_started">广播器已启动</string>
+    <string name="bt_advertiser_failed">广播器启动失败: %1$d</string>
+    <string name="bt_missing_scan_permission">缺少 BLUETOOTH_SCAN 权限</string>
+    <string name="bt_scanning">正在扫描蓝牙外设…</string>
+    <string name="bt_found_device">已找到设备: %1$s</string>
+    <string name="bt_stopped_scanning">已停止扫描</string>
+    <string name="bt_wifi_read_retry">无法读取对端WiFi特征，正在重试…</string>
+    <string name="bt_wrote_os">已向对端写入操作系统</string>
+    <string name="bt_wrote_ssid">已向对端写入SSID</string>
+    <string name="bt_wrote_password">已向对端写入密码</string>
+    <string name="bt_discovered_services">已发现服务</string>
+    <string name="bt_service_not_found">未找到服务</string>
+    <string name="bt_services_changed">服务已更改</string>
+    <string name="bt_connected">已连接</string>
+    <string name="bt_no_permission">无权限</string>
+    <string name="bt_bad_characteristic">无效特征: %1$s</string>
+
+    <string name="macos_wifi_info">在 macOS 上开始传输，并在提示时输入以下信息：\n\nSSID: %1$s\n密码: %2$s</string>
+    <string name="about_title">关于 Flying Carpet</string>
+    <string name="ok">确定</string>
+
+    <string name="size_bytes">%1$.0f 字节</string>
+    <string name="size_kb">%1$.2fKB</string>
+    <string name="size_mb">%1$.2fMB</string>
+    <string name="size_gb">%1$.2fGB</string>
+    <string name="time_minutes_seconds">%1$d 分 %2$.2f 秒</string>
+    <string name="time_minute_seconds">%1$d 分 %2$.2f 秒</string>
+    <string name="time_seconds">%1$.2f 秒</string>
+
+    <string name="about_message">https://flyingcarpet.spiegl.dev\n版本 9.0.8\ntheron@spiegl.dev\nCopyright 2025, Theron Spiegl，保留所有权利。\n\nFlying Carpet 通过临时WiFi在两台 Android、iOS、Linux、macOS 和 Windows 设备之间传输文件。不需要接入点或共享网络，只需两张近距离的WiFi网卡。唯一不支持的配对是两台 Apple 设备（macOS 或 iOS）之间的传输，因为 Apple 不再允许以编程方式启动热点。\n\n使用说明\n\n在两台设备上开启或关闭蓝牙。如果一方蓝牙初始化失败或已关闭，另一方必须在 Flying Carpet 中禁用\"使用蓝牙\"开关。\n\n在一台设备上选择发送，在另一台上选择接收。如果不使用蓝牙，请选择另一台设备的操作系统。点击每台设备上的\"开始传输\"按钮。在发送设备上选择要发送的文件或文件夹。在接收设备上选择接收文件的文件夹。（要发送文件夹，将其拖放到窗口上而不是点击\"开始传输\"。）\n\n如果使用蓝牙，请确认两端的6位PIN码。WiFi连接将自动配置。如果不使用蓝牙，您需要扫描二维码或输入密码。\n\n如果提示加入WiFi网络或修改WiFi设置，请选择允许。在 Windows 上您可能需要授权添加防火墙规则。在 macOS 上您可能需要授予位置权限，这是 Apple 扫描WiFi网络所必需的。Flying Carpet 不会读取或收集您的位置或任何其他数据。\n\n故障排除\n\n如果使用蓝牙失败，请尝试手动取消两台设备的配对，然后开始新的传输。\n\n如果从 macOS 发送到 Linux，请在两端禁用蓝牙。\n\nFlying Carpet 可能会多次尝试加入另一台设备的热点。\n\n根据 GPL3 许可: https://www.gnu.org/licenses/gpl-3.0.html#license-text</string>
+</resources>

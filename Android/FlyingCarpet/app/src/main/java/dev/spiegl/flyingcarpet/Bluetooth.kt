@@ -129,12 +129,12 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             Log.i("Bluetooth", "In serverCallback")
             super.onConnectionStateChange(device, status, newState)
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                outputText("Device connected")
+                outputText(application.getString(R.string.bt_device_connected))
                 val bluetoothLeAdvertiser = bluetoothManager.adapter.bluetoothLeAdvertiser
                 bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
-                outputText("Stopped advertising")
+                outputText(application.getString(R.string.bt_stopped_advertising))
             } else {
-                outputText("Device disconnected")
+                outputText(application.getString(R.string.bt_device_disconnected))
             }
         }
 
@@ -174,7 +174,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     )
                 }
                 else -> {
-                    outputText("Invalid characteristic")
+                    outputText(application.getString(R.string.bt_invalid_characteristic))
                     bluetoothGattServer.sendResponse(
                         device,
                         requestId,
@@ -236,7 +236,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     }
                 }
                 else -> {
-                    outputText("Invalid characteristic")
+                    outputText(application.getString(R.string.bt_invalid_characteristic))
                     bluetoothGattServer.sendResponse(
                         device,
                         requestId,
@@ -287,12 +287,12 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             super.onStartSuccess(settingsInEffect)
             _status.postValue(true)
-            outputText("Advertiser started")
+            outputText(application.getString(R.string.bt_advertiser_started))
         }
 
         override fun onStartFailure(errorCode: Int) {
             super.onStartFailure(errorCode)
-            outputText("Advertiser failed to start: $errorCode")
+            outputText(application.getString(R.string.bt_advertiser_failed, errorCode))
             active = false
             bluetoothFailed()
         }
@@ -312,7 +312,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
             && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
         {
-            outputText("Missing permission BLUETOOTH_SCAN")
+            outputText(application.getString(R.string.bt_missing_scan_permission))
             return
         }
         val scanFilter = ScanFilter.Builder()
@@ -324,7 +324,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             .build()
         bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
         _status.postValue(true)
-        outputText("Scanning for Bluetooth peripherals...")
+        outputText(application.getString(R.string.bt_scanning))
     }
 
     private val leScanCallback = object : ScanCallback() {
@@ -337,15 +337,15 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
                 && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
             {
-                outputText("Missing permission BLUETOOTH_SCAN")
+                outputText(application.getString(R.string.bt_missing_scan_permission))
                 return
             }
             if (result != null) {
                 if (bluetoothReceiver.waitingForConnection) {
-                    outputText("Found device: ${result.device}")
+                    outputText(application.getString(R.string.bt_found_device, result.device.toString()))
                     bluetoothReceiver.waitingForConnection = false
                     bluetoothLeScanner.stopScan(this)
-                    outputText("Stopped scanning")
+                    outputText(application.getString(R.string.bt_stopped_scanning))
                     //                address = result.device.address
                     bluetoothReceiver.result = result
 
@@ -411,7 +411,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                         if (ssid == "") {
                             // peripheral hasn't stood up its hotspot yet, have to wait.
                             // kill a second, then read again, which will loop us back here.
-                            outputText("Could not read peer's WiFi characteristic. trying again...")
+                            outputText(application.getString(R.string.bt_wifi_read_retry))
                             Thread.sleep(1000)
                             read(SSID_CHARACTERISTIC_UUID)
                             return
@@ -435,17 +435,17 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 super.onCharacteristicWrite(gatt, characteristic, status)
                 when (characteristic?.uuid) {
                     OS_CHARACTERISTIC_UUID -> {
-                        outputText("Wrote OS to peer")
+                        outputText(application.getString(R.string.bt_wrote_os))
                         connectToPeer()
                     }
                     SSID_CHARACTERISTIC_UUID -> {
-                        outputText("Wrote SSID to peer")
+                        outputText(application.getString(R.string.bt_wrote_ssid))
                         val (_, password) = getWifiInfo()
                         // outputText("Fetched password = $password")
                         write(PASSWORD_CHARACTERISTIC_UUID, password.toByteArray())
                     }
                     PASSWORD_CHARACTERISTIC_UUID -> {
-                        outputText("Wrote password to peer")
+                        outputText(application.getString(R.string.bt_wrote_password))
                         // we told the peripheral the password, now just have to wait for them to join the hotspot
                     }
                 }
@@ -458,13 +458,13 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     return
                 }
                 super.onServicesDiscovered(gatt, status)
-                outputText("Discovered services")
+                outputText(application.getString(R.string.bt_discovered_services))
                 for (service in gatt?.services!!) {
                     // outputText("Service: ${service.uuid}")
                 }
                 val service = gatt.getService(SERVICE_UUID)
                 if (service == null) {
-                    outputText("Did not find service")
+                    outputText(application.getString(R.string.bt_service_not_found))
 //                    outputText("Trying to find services again")
 //                    Thread.sleep(1000)
 //                    gatt.discoverServices()
@@ -485,7 +485,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 {
                     return
                 }
-                outputText("Services changed")
+                outputText(application.getString(R.string.bt_services_changed))
                 // TODO: should this be enabled? does it cause problems? https://developer.android.com/reference/android/bluetooth/BluetoothGattCallback#onServiceChanged(android.bluetooth.BluetoothGatt)
                 // gatt.discoverServices()
             }
@@ -503,7 +503,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 }
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     bluetoothGatt = gatt
-                    outputText("Connected")
+                    outputText(application.getString(R.string.bt_connected))
                     // this was the reason android couldn't connect to macOS? no, was the setLegacy(false). diagnosed by comparing nRF Connect logs from Flying Carpet pairings to nRF Connect pairings.
                     Thread.sleep(1600)
                     gatt?.discoverServices()
@@ -552,7 +552,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
                 && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
             {
-                outputText("No permission")
+                outputText(application.getString(R.string.bt_no_permission))
                 return
             }
             when (characteristicUuid) {
@@ -577,7 +577,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 SSID_CHARACTERISTIC_UUID -> ssidCharacteristic
                 PASSWORD_CHARACTERISTIC_UUID -> passwordCharacteristic
                 else -> {
-                    outputText("Bad characteristic: $characteristicUuid")
+                    outputText(application.getString(R.string.bt_bad_characteristic, characteristicUuid.toString()))
                     return
                 }
             }

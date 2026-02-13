@@ -52,7 +52,7 @@ class MainActivity : AppCompatActivity() {
             viewModel.fileStreams = mutableListOf()
             viewModel.filePaths = mutableListOf()
             if (uris.isEmpty()) {
-                viewModel.outputText("No files selected.")
+                viewModel.outputText(getString(R.string.no_files_selected))
                 viewModel.cleanUpTransfer()
                 return@registerForActivityResult
             }
@@ -61,7 +61,7 @@ class MainActivity : AppCompatActivity() {
                 if (file != null) {
                     viewModel.files.add(file)
                 } else {
-                    viewModel.outputText("Could not open file")
+                    viewModel.outputText(getString(R.string.could_not_open_file))
                     viewModel.cleanUpTransfer()
                     return@registerForActivityResult
                 }
@@ -69,7 +69,7 @@ class MainActivity : AppCompatActivity() {
                 if (stream != null) {
                     viewModel.fileStreams.add(stream)
                 } else {
-                    viewModel.outputText("Could not open file stream")
+                    viewModel.outputText(getString(R.string.could_not_open_file_stream))
                     viewModel.cleanUpTransfer()
                     return@registerForActivityResult
                 }
@@ -100,7 +100,7 @@ class MainActivity : AppCompatActivity() {
                     viewModel.fileStreams = mutableListOf()
                     viewModel.filePaths = mutableListOf()
                     val dir = DocumentFile.fromTreeUri(applicationContext, it) ?: run {
-                        viewModel.outputText("Could not get DocumentFile from selected directory.")
+                        viewModel.outputText(getString(R.string.could_not_get_document_file))
                         viewModel.cleanUpTransfer()
                         return@registerForActivityResult
                     }
@@ -114,7 +114,7 @@ class MainActivity : AppCompatActivity() {
                         if (stream != null) {
                             viewModel.fileStreams.add(stream)
                         } else {
-                            viewModel.outputText("Could not open file stream")
+                            viewModel.outputText(getString(R.string.could_not_open_file_stream))
                             viewModel.cleanUpTransfer()
                             return@registerForActivityResult
                         }
@@ -135,7 +135,7 @@ class MainActivity : AppCompatActivity() {
                     viewModel.connectToPeer()
                 }
             } ?: run {
-                viewModel.outputText("No folder selected.")
+                viewModel.outputText(getString(R.string.no_folder_selected))
                 viewModel.cleanUpTransfer()
                 return@registerForActivityResult
             }
@@ -146,20 +146,16 @@ class MainActivity : AppCompatActivity() {
         return registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (isGranted) {
                 // Permission is granted. Continue the action or workflow in your app.
-                viewModel.outputText("Permission granted.")
+                viewModel.outputText(getString(R.string.permission_granted))
                 // start hotspot here
                 viewModel.startHotspot()
             } else {
                 val permission = if (Build.VERSION.SDK_INT < 33) {
-                    "fine location"
+                    getString(R.string.fine_location)
                 } else {
-                    "nearby device"
+                    getString(R.string.nearby_device)
                 }
-                viewModel.outputText(
-                    "The Android WifiManager requires $permission permission to start hotspot. "
-                            + "This data is not collected. "
-                            + "Start transfer again if you would like to grant permission."
-                )
+                viewModel.outputText(getString(R.string.wifi_permission_required, permission))
                 viewModel.cleanUpTransfer()
             }
         }
@@ -168,7 +164,7 @@ class MainActivity : AppCompatActivity() {
     private fun getBarcodeLauncher(): ActivityResultLauncher<ScanOptions> {
         return registerForActivityResult(ScanContract()) { result ->
             if (result.contents == null) {
-                viewModel.outputText("Scan cancelled, exiting transfer.")
+                viewModel.outputText(getString(R.string.scan_cancelled))
                 viewModel.cleanUpTransfer()
             } else {
                 val ssidAndPassword = result.contents.split(';')
@@ -253,7 +249,7 @@ class MainActivity : AppCompatActivity() {
                 id.sendButton -> Mode.Sending
                 id.receiveButton -> Mode.Receiving
                 else -> {
-                    viewModel.outputText("Must select whether this device is sending or receiving.")
+                    viewModel.outputText(getString(R.string.must_select_mode))
                     viewModel.cleanUpTransfer()
                     return@setOnClickListener
                 }
@@ -269,7 +265,7 @@ class MainActivity : AppCompatActivity() {
                     id.macButton -> Peer.macOS
                     id.windowsButton -> Peer.Windows
                     else -> {
-                        viewModel.outputText("Must select operating system of other device.")
+                        viewModel.outputText(getString(R.string.must_select_peer))
                         viewModel.cleanUpTransfer()
                         return@setOnClickListener
                     }
@@ -449,11 +445,11 @@ class MainActivity : AppCompatActivity() {
     private fun checkForBluetoothPermissions(): Boolean {
         for (permission in permissions) {
             if (ActivityCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-                viewModel.outputText("Missing permission: $permission")
+                viewModel.outputText(getString(R.string.missing_permission, permission))
                 return false
             }
         }
-        viewModel.outputText("All permissions granted")
+        viewModel.outputText(getString(R.string.all_permissions_granted))
         return true
     }
 
@@ -464,13 +460,13 @@ class MainActivity : AppCompatActivity() {
         bluetoothRequestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results: Map<String, Boolean> ->
             var allPermissionsGranted = true
             for (result in results) {
-                viewModel.outputText("Have permission ${result.key}: ${result.value}")
+                viewModel.outputText(getString(R.string.have_permission, result.key, result.value.toString()))
                 if (!result.value) {
                     allPermissionsGranted = false
                 }
             }
             if (allPermissionsGranted) {
-                viewModel.outputText("Bluetooth permissions granted")
+                viewModel.outputText(getString(R.string.bluetooth_permissions_granted))
                 initializeBluetooth()
             } else {
 //                viewModel.outputText("To use Flying Carpet, either grant Bluetooth permissions to the app, or turn off the Use Bluetooth switch.")
@@ -496,9 +492,9 @@ class MainActivity : AppCompatActivity() {
         registerReceiver(viewModel.bluetooth.bluetoothReceiver, filter)
 
         if (initializeBluetooth()) {
-            viewModel.outputText("Bluetooth initialized")
+            viewModel.outputText(getString(R.string.bluetooth_initialized))
         } else {
-            viewModel.outputText("Device can't use Bluetooth")
+            viewModel.outputText(getString(R.string.device_cant_use_bluetooth))
             bluetoothSwitch.isChecked = false
             bluetoothSwitch.isEnabled = false
         }
@@ -533,7 +529,6 @@ class MainActivity : AppCompatActivity() {
 
     // disable Bluetooth if a callback fails
     private fun enableBluetoothUi(enabled: Boolean) {
-        viewModel.outputText("fired")
         bluetoothSwitch.isChecked = enabled
         bluetoothSwitch.isEnabled = enabled
         bluetoothIcon.isVisible = enabled

@@ -1,0 +1,107 @@
+<resources>
+    <string name="app_name">Flying Carpet</string>
+    <string name="send">Enviar</string>
+    <string name="receive">Recibir</string>
+    <string name="android">Android</string>
+    <string name="ios">iOS</string>
+    <string name="linux">Linux</string>
+    <string name="mac">macOS</string>
+    <string name="windows">Windows</string>
+    <string name="step1">Seleccionar modo para este dispositivo</string>
+    <string name="welcome">¡Bienvenido a Flying Carpet!</string>
+    <string name="selectFiles">Seleccionar archivos</string>
+    <string name="cancel">Cancelar transferencia</string>
+    <string name="selectFolder">Seleccionar carpeta</string>
+    <string name="step2">Seleccionar SO del otro dispositivo</string>
+    <string name="qrCodeDescription">Logo de Flying Carpet / código QR</string>
+    <string name="programTitle">Flying Carpet</string>
+    <string name="about">Acerca de</string>
+    <string name="versionNumber">Versión 9</string>
+    <string name="sendFolderText">Enviar carpeta</string>
+    <string name="bluetooth">Usar Bluetooth</string>
+
+    <string name="no_files_selected">No se seleccionaron archivos.</string>
+    <string name="could_not_open_file">No se pudo abrir el archivo</string>
+    <string name="could_not_open_file_stream">No se pudo abrir el flujo del archivo</string>
+    <string name="could_not_get_document_file">No se pudo obtener DocumentFile del directorio seleccionado.</string>
+    <string name="no_folder_selected">No se seleccionó carpeta.</string>
+    <string name="permission_granted">Permiso concedido.</string>
+    <string name="wifi_permission_required">El WifiManager de Android requiere permiso de %1$s para iniciar el punto de acceso. Estos datos no se recopilan. Inicie la transferencia nuevamente si desea conceder el permiso.</string>
+    <string name="scan_cancelled">Escaneo cancelado, saliendo de la transferencia.</string>
+    <string name="must_select_mode">Debe seleccionar si este dispositivo envía o recibe.</string>
+    <string name="must_select_peer">Debe seleccionar el sistema operativo del otro dispositivo.</string>
+    <string name="missing_permission">Permiso faltante: %1$s</string>
+    <string name="all_permissions_granted">Todos los permisos concedidos</string>
+    <string name="have_permission">Tiene permiso %1$s: %2$s</string>
+    <string name="bluetooth_permissions_granted">Permisos Bluetooth concedidos</string>
+    <string name="bluetooth_initialized">Bluetooth inicializado</string>
+    <string name="device_cant_use_bluetooth">El dispositivo no puede usar Bluetooth</string>
+    <string name="scan_qr_prompt">Inicie la transferencia en el otro dispositivo y escanee el código QR mostrado.</string>
+    <string name="fine_location">ubicación precisa</string>
+    <string name="nearby_device">dispositivo cercano</string>
+
+    <string name="starting_transfer">\nIniciando transferencia</string>
+    <string name="separator">=========================</string>
+    <string name="sending_file_of">Enviando archivo %1$d de %2$d. Nombre: %3$s.</string>
+    <string name="receiving_file_of">Recibiendo archivo %1$d de %2$d</string>
+    <string name="transfer_complete">Transferencia completada\n</string>
+    <string name="hotspot_failed">Punto de acceso falló: %1$d</string>
+    <string name="failed_hotspot_reservation">No se pudo obtener la reserva del punto de acceso</string>
+    <string name="ssid_label">SSID: %1$s</string>
+    <string name="password_label">Contraseña: %1$s</string>
+    <string name="transfer_error">Error de transferencia: %1$s\n</string>
+    <string name="hotspot_stopped">Punto de acceso detenido</string>
+    <string name="started_hotspot">Punto de acceso iniciado.</string>
+    <string name="joining_ssid">Uniéndose a %1$s</string>
+    <string name="unsupported_peer_os">Error: el par envió un SO no compatible.</string>
+    <string name="disconnected_from_hotspot">Desconectado del punto de acceso</string>
+    <string name="failed_connect_hotspot">No se pudo conectar al punto de acceso</string>
+    <string name="both_selected_mode">Ambos extremos seleccionaron %1$s</string>
+    <string name="version_not_compatible">La versión de Flying Carpet del par no es compatible. Encuentre enlaces para descargar la versión más reciente en https://flyingcarpet.spiegl.dev.</string>
+    <string name="peer_connection_closed">Conexión del par cerrada</string>
+
+    <string name="file_size_label">Tamaño del archivo: %1$s</string>
+    <string name="recipient_has_file">El destinatario ya tiene este archivo, omitiendo.</string>
+    <string name="hit_eof">Fin de archivo alcanzado, no debería ocurrir.</string>
+    <string name="sending_took">El envío tardó %1$s</string>
+    <string name="speed_mbps">Velocidad: %1$.2fmbps</string>
+    <string name="filename_and_size">Nombre: %1$s.  Tamaño: %2$s</string>
+    <string name="file_already_exists">El mismo archivo ya existe en esta ubicación, omitiendo.</string>
+    <string name="receiving_took">La recepción tardó %1$s</string>
+    <string name="didnt_receive_confirmation">No se recibió confirmación del par</string>
+
+    <string name="bt_device_connected">Dispositivo conectado</string>
+    <string name="bt_stopped_advertising">Anuncio detenido</string>
+    <string name="bt_device_disconnected">Dispositivo desconectado</string>
+    <string name="bt_invalid_characteristic">Característica no válida</string>
+    <string name="bt_advertiser_started">Anunciador iniciado</string>
+    <string name="bt_advertiser_failed">Anunciador falló al iniciar: %1$d</string>
+    <string name="bt_missing_scan_permission">Permiso BLUETOOTH_SCAN faltante</string>
+    <string name="bt_scanning">Buscando periféricos Bluetooth…</string>
+    <string name="bt_found_device">Dispositivo encontrado: %1$s</string>
+    <string name="bt_stopped_scanning">Escaneo detenido</string>
+    <string name="bt_wifi_read_retry">No se pudo leer la característica WiFi del par, reintentando…</string>
+    <string name="bt_wrote_os">Se escribió SO al par</string>
+    <string name="bt_wrote_ssid">Se escribió SSID al par</string>
+    <string name="bt_wrote_password">Se escribió contraseña al par</string>
+    <string name="bt_discovered_services">Servicios descubiertos</string>
+    <string name="bt_service_not_found">Servicio no encontrado</string>
+    <string name="bt_services_changed">Servicios cambiados</string>
+    <string name="bt_connected">Conectado</string>
+    <string name="bt_no_permission">Sin permiso</string>
+    <string name="bt_bad_characteristic">Característica incorrecta: %1$s</string>
+
+    <string name="macos_wifi_info">Inicie la transferencia en macOS e ingrese lo siguiente cuando se le solicite:\n\nSSID: %1$s\nContraseña: %2$s</string>
+    <string name="about_title">Acerca de Flying Carpet</string>
+    <string name="ok">Aceptar</string>
+
+    <string name="size_bytes">%1$.0f bytes</string>
+    <string name="size_kb">%1$.2fKB</string>
+    <string name="size_mb">%1$.2fMB</string>
+    <string name="size_gb">%1$.2fGB</string>
+    <string name="time_minutes_seconds">%1$d minutos %2$.2f segundos</string>
+    <string name="time_minute_seconds">%1$d minuto %2$.2f segundos</string>
+    <string name="time_seconds">%1$.2f segundos</string>
+
+    <string name="about_message">https://flyingcarpet.spiegl.dev\nVersión 9.0.8\ntheron@spiegl.dev\nCopyright 2025, Theron Spiegl, todos los derechos reservados.\n\nFlying Carpet transfiere archivos entre dos dispositivos Android, iOS, Linux, macOS y Windows a través de WiFi ad hoc. No se requiere punto de acceso ni red compartida, solo dos tarjetas WiFi a corta distancia. Las únicas combinaciones que no funcionan son entre dos dispositivos Apple (macOS o iOS), porque Apple ya no permite iniciar puntos de acceso programáticamente.\n\nINSTRUCCIONES\n\nActive o desactive Bluetooth en ambos dispositivos. Si un lado no puede inicializar Bluetooth o lo tiene desactivado, el otro lado debe desactivar el interruptor \"Usar Bluetooth\" en Flying Carpet.\n\nSeleccione Enviar en un dispositivo y Recibir en el otro. Si no usa Bluetooth, seleccione el sistema operativo del otro dispositivo. Haga clic en el botón \"Iniciar transferencia\" en cada dispositivo. En el dispositivo emisor, seleccione los archivos o carpeta a enviar. En el dispositivo receptor, seleccione la carpeta donde recibir los archivos. (Para enviar una carpeta, arrástrela a la ventana en lugar de hacer clic en \"Iniciar transferencia\".)\n\nSi usa Bluetooth, confirme el PIN de 6 dígitos en cada lado. La conexión WiFi se configurará automáticamente. Si no usa Bluetooth, deberá escanear un código QR o escribir una contraseña.\n\nCuando se le solicite unirse a una red WiFi o modificar la configuración WiFi, seleccione Permitir. En Windows puede que necesite otorgar permiso para agregar una regla de firewall. En macOS puede que necesite otorgar permisos de ubicación, que Apple requiere para buscar redes WiFi. Flying Carpet no lee ni recopila su ubicación ni ningún otro dato.\n\nSOLUCIÓN DE PROBLEMAS\n\nSi el uso de Bluetooth falla, intente desvincular manualmente los dispositivos entre sí e iniciar una nueva transferencia.\n\nSi envía desde macOS a Linux, desactive Bluetooth en ambos lados.\n\nFlying Carpet puede hacer múltiples intentos para unirse al punto de acceso del otro dispositivo.\n\nLicenciado bajo GPL3: https://www.gnu.org/licenses/gpl-3.0.html#license-text</string>
+</resources>

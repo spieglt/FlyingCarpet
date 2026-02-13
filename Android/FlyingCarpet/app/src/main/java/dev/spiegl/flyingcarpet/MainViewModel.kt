@@ -110,7 +110,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     }
 
     suspend fun startTransfer() {
-        outputText("\nStarting Transfer")
+        outputText(application.getString(R.string.starting_transfer))
         startTCP()
         confirmVersion()
         confirmMode()
@@ -124,8 +124,8 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
             // send files
             for (i in 0 until fileStreams.size) {
-                outputText("=========================")
-                outputText("Sending file ${i + 1} of ${fileStreams.size}. Filename: ${files[i].name}.")
+                outputText(application.getString(R.string.separator))
+                outputText(application.getString(R.string.sending_file_of, i + 1, fileStreams.size, files[i].name))
                 val path = if (i < filePaths.size) { filePaths[i] } else { "" }
                 sendFile(files[i], fileStreams[i], path)
             }
@@ -137,13 +137,13 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
             // receive files
             for (i in 0 until numFiles) {
-                outputText("=========================")
-                outputText("Receiving file ${i + 1} of $numFiles")
+                outputText(application.getString(R.string.separator))
+                outputText(application.getString(R.string.receiving_file_of, (i + 1).toInt(), numFiles.toInt()))
                 receiveFile(i == numFiles - 1)
             }
         }
-        outputText("=========================")
-        outputText("Transfer complete\n")
+        outputText(application.getString(R.string.separator))
+        outputText(application.getString(R.string.transfer_complete))
     }
 
     fun cleanUpTransfer() {
@@ -200,7 +200,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 // scan qr code
                 val options = ScanOptions()
                 options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                options.setPrompt("Start transfer on the other device and scan the QR code displayed.")
+                options.setPrompt(application.getString(R.string.scan_qr_prompt))
                 options.setOrientationLocked(false)
                 barcodeLauncher.launch(options)
             }
@@ -211,7 +211,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     private val localOnlyHotspotCallback = object : WifiManager.LocalOnlyHotspotCallback() {
         override fun onFailed(reason: Int) {
             super.onFailed(reason)
-            outputText("Hotspot failed: $reason")
+            outputText(application.getString(R.string.hotspot_failed, reason))
             hotspotRunning = false
         }
 
@@ -230,7 +230,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             if (res != null) {
                 reservation = res
             } else {
-                outputText("Failed to get hotspot reservation")
+                outputText(application.getString(R.string.failed_hotspot_reservation))
                 cleanUpTransfer()
                 return
             }
@@ -273,14 +273,14 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 displayQrCode(ssid, password)
             }
 
-            outputText("SSID: $ssid")
-            outputText("Password: $password")
+            outputText(application.getString(R.string.ssid_label, ssid))
+            outputText(application.getString(R.string.password_label, password))
 
             transferCoroutine = GlobalScope.launch {
                 try {
                     startTransfer()
                 } catch (e: Exception) {
-                    outputText("Transfer error: ${e.message}\n")
+                    outputText(application.getString(R.string.transfer_error, e.message ?: ""))
                 }
                 finishTransfer()
             }
@@ -289,7 +289,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
         override fun onStopped() {
             super.onStopped()
-            outputText("Hotspot stopped")
+            outputText(application.getString(R.string.hotspot_stopped))
             hotspotRunning = false
         }
     }
@@ -309,7 +309,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             try {
                 if (!hotspotRunning) {
                     wifiManager.startLocalOnlyHotspot(localOnlyHotspotCallback, handler)
-                    outputText("Started hotspot.")
+                    outputText(application.getString(R.string.started_hotspot))
                 } else {
                     Log.e("Flying Carpet", "startHotspot() called when hotspot already running")
                 }
@@ -322,7 +322,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
     fun joinHotspot() {
         val callback = NetworkCallback()
-        outputText("Joining $ssid")
+        outputText(application.getString(R.string.joining_ssid, ssid))
         val specifier = WifiNetworkSpecifier.Builder()
             .setSsid(ssid)
             .setWpa2Passphrase(password)
@@ -347,7 +347,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             "mac" -> Peer.macOS
             "windows" -> Peer.Windows
             else -> {
-                outputText("Error: peer sent an unsupported OS.")
+                outputText(application.getString(R.string.unsupported_peer_os))
                 return
             }
         }
@@ -416,13 +416,13 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 // peer makes decision
                 val isCompatibleBytes = readNBytes(8, inputStream)
                 if (ByteBuffer.wrap(isCompatibleBytes).long != 1L) {
-                    throw Exception("Peer's version of Flying Carpet is not compatible. Please find links to download the newest version at https://flyingcarpet.spiegl.dev.")
+                    throw Exception(application.getString(R.string.version_not_compatible))
                 }
             } else {
                 // we make decision
                 // compatible with version 8. if transferring with higher version, that version will decide compatibility.
                 if (peerVersion < 8) {
-                    throw Exception("Peer's version of Flying Carpet is not compatible. Please find links to download the newest version at https://flyingcarpet.spiegl.dev.")
+                    throw Exception(application.getString(R.string.version_not_compatible))
                 }
             }
         }
@@ -441,7 +441,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 val peerMode = ByteBuffer.wrap(peerModeBytes).long
                 if (ourMode == peerMode) {
                     outputStream.write(zero)
-                    throw Exception("Both ends of the transfer selected $mode")
+                    throw Exception(application.getString(R.string.both_selected_mode, mode.toString()))
                 } else {
                     // write success to guest
                     outputStream.write(one)
@@ -459,7 +459,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 val confirmationBytes = readNBytes(8, inputStream)
                 val confirmation = ByteBuffer.wrap(confirmationBytes).long
                 if (confirmation == 0L) {
-                    throw Exception("Both ends of the transfer selected $mode")
+                    throw Exception(application.getString(R.string.both_selected_mode, mode.toString()))
                 }
             }
         }
@@ -473,7 +473,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 val br = inputStream.read(b, bytesRead, n - bytesRead)
                 bytesRead += br
             } catch (e: SocketException) {
-                throw Exception("Peer connection closed")
+                throw Exception(application.getString(R.string.peer_connection_closed))
             }
         }
         return b
@@ -509,14 +509,14 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         override fun onLost(network: Network) {
             super.onLost(network)
             connectivityManager.bindProcessToNetwork(null)
-            outputText("Disconnected from hotspot")
+            outputText(application.getString(R.string.disconnected_from_hotspot))
             _transferFinished.postValue(true)
         }
 
         override fun onUnavailable() {
             super.onUnavailable()
             connectivityManager.bindProcessToNetwork(null)
-            outputText("Failed to connect to hotspot")
+            outputText(application.getString(R.string.failed_connect_hotspot))
             _transferFinished.postValue(true)
         }
 
@@ -543,7 +543,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                     try {
                         startTransfer()
                     } catch (e: Exception) {
-                        outputText("Transfer error: ${e.message}\n")
+                        outputText(application.getString(R.string.transfer_error, e.message ?: ""))
                     }
                     _transferFinished.postValue(true)
                 }

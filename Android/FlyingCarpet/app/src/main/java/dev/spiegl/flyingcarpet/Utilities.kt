@@ -1,6 +1,7 @@
 package dev.spiegl.flyingcarpet
 
 import android.app.Application
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.documentfile.provider.DocumentFile
@@ -32,27 +33,27 @@ fun longToBigEndianBytes(n: Long): ByteArray {
     return byteArray
 }
 
-fun makeSizeReadable(size: Long): String {
+fun makeSizeReadable(context: Context, size: Long): String {
     val n = size.toDouble()
     return when {
-        n < 1_000 -> "$n bytes"
-        n < 1_000_000 -> "%.2fKB".format(n / 1_000)
-        n < 1_000_000_000 -> "%.2fMB".format(n / 1_000_000)
-        else -> "%.2fGB".format(n / 1_000_000_000)
+        n < 1_000 -> context.getString(R.string.size_bytes, n)
+        n < 1_000_000 -> context.getString(R.string.size_kb, n / 1_000)
+        n < 1_000_000_000 -> context.getString(R.string.size_mb, n / 1_000_000)
+        else -> context.getString(R.string.size_gb, n / 1_000_000_000)
     }
 }
 
-fun formatTime(seconds: Double): String {
+fun formatTime(context: Context, seconds: Double): String {
     return if (seconds > 60) {
         val minutes = seconds.toInt() / 60
         val remainder = seconds % 60
         if (minutes > 1) {
-            "%d minutes %.2f seconds".format(minutes, remainder)
+            context.getString(R.string.time_minutes_seconds, minutes, remainder)
         } else {
-            "%d minute %.2f seconds".format(minutes, remainder)
+            context.getString(R.string.time_minute_seconds, minutes, remainder)
         }
     } else {
-        "%.2f seconds".format(seconds)
+        context.getString(R.string.time_seconds, seconds)
     }
 }
 

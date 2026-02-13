@@ -1,5 +1,6 @@
 package dev.spiegl.flyingcarpet
 
+import android.app.Application
 import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,13 +11,14 @@ import javax.crypto.spec.SecretKeySpec
 
 suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
     val start = System.currentTimeMillis()
+    val app = getApplication<Application>()
 
     // receive file details
     val (filename, fileSize) = receiveFileDetails()
-    outputText("Filename: $filename.  Size: ${makeSizeReadable(fileSize)}")
+    outputText(app.getString(R.string.filename_and_size, filename, makeSizeReadable(app, fileSize)))
     val needTransfer = checkForFileReceiving(filename, fileSize)
     if (!needTransfer) {
-        outputText("The same file already exists at this location, skipping.")
+        outputText(app.getString(R.string.file_already_exists))
         return
     }
     var bytesRead: Long = 0
@@ -57,10 +59,10 @@ suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
     // outputText("Received $newFilename.")
     val end = System.currentTimeMillis()
     val seconds = (end - start) / 1000.0
-    outputText("Receiving took ${formatTime(seconds)}")
+    outputText(app.getString(R.string.receiving_took, formatTime(app, seconds)))
     val megabits = 8 * (fileSize / 1_000_000.0)
     val mbps = megabits / seconds
-    outputText("Speed: %.2fmbps".format(mbps))
+    outputText(app.getString(R.string.speed_mbps, mbps))
 
     // wait for double confirmation
     // catch won't run in most cases because if peer closes hotspot, onLost in
@@ -75,7 +77,7 @@ suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
         } catch (e: Exception) {
             // swallowing this error because we don't want this to throw
             // if sending end tears stuff down and times out on last file
-            outputText("Didn't receive confirmation from peer")
+            outputText(app.getString(R.string.didnt_receive_confirmation))
         }
     } else {
         // if not last file, we want to throw error if we can't read the confirmation
