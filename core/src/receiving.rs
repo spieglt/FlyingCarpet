@@ -1,4 +1,4 @@
-use crate::{utils, FCError, UI};
+use crate::{i18n::t, utils, FCError, UI};
 use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit};
 use core::time;
 use std::{
@@ -29,11 +29,8 @@ pub async fn receive_file<T: UI>(
 
     // receive file details
     let (filename, file_size) = receive_file_details(stream).await?;
-    ui.output(&format!("Filename: {}", filename));
-    ui.output(&format!(
-        "File size: {}",
-        utils::make_size_readable(file_size)
-    ));
+    ui.output(&t("filename_label", &[("filename", &filename)]));
+    ui.output(&t("file_size", &[("size", &utils::make_size_readable(file_size))]));
     let mut bytes_left = file_size;
 
     // see if we already have the file being sent
@@ -41,7 +38,7 @@ pub async fn receive_file<T: UI>(
     full_path.push(&filename);
     let need_transfer = check_for_file(&full_path, file_size, stream).await?;
     if !need_transfer {
-        ui.output("Recipient already has this file, skipping.");
+        ui.output(&t("recipient_already_has_file", &[]));
         return Ok(());
     }
 
@@ -94,18 +91,17 @@ pub async fn receive_file<T: UI>(
         .file_name()
         .expect("output file didn't have a name")
         .to_string_lossy();
-    ui.output(&format!(
-        "Received file {}. Size: {}.",
-        dest_filename,
-        utils::make_size_readable(output_size)
-    ));
+    ui.output(&t("received_file", &[
+        ("filename", &dest_filename),
+        ("size", &utils::make_size_readable(output_size)),
+    ]));
     let finish = Instant::now();
     let elapsed = (finish - start).as_secs_f64();
-    ui.output(&format!("Receiving took {}", utils::format_time(elapsed)));
+    ui.output(&t("receiving_took", &[("time", &utils::format_time(elapsed))]));
 
     let megabits = 8.0 * (file_size as f64 / 1_000_000.0);
     let mbps = megabits / elapsed;
-    ui.output(&format!("Speed: {:.2}mbps", mbps));
+    ui.output(&t("speed_mbps", &[("speed", &format!("{:.2}", mbps))]));
 
     // wait for double confirmation
     if last_file {
@@ -114,7 +110,7 @@ pub async fn receive_file<T: UI>(
                 res?;
             }
             Err(_e) => {
-                ui.output("Didn't receive confirmation");
+                ui.output(&t("didnt_receive_confirmation", &[]));
             }
         };
     } else {

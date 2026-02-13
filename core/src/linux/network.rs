@@ -1,4 +1,5 @@
 use crate::error::{fc_error, FCError};
+use crate::i18n::t;
 use crate::utils::run_command;
 use crate::{Mode, Peer, PeerResource, WiFiInterface, UI};
 use tokio::task;
@@ -29,12 +30,12 @@ pub async fn connect_to_peer<T: UI>(
 ) -> Result<PeerResource, FCError> {
     if is_hosting(&peer, &mode) {
         // start hotspot
-        ui.output(&format!("Starting hotspot {}", ssid));
+        ui.output(&t("starting_hotspot", &[("ssid", &ssid)]));
         start_hotspot(&ssid, &password, &interface.0)?;
         Ok(PeerResource::LinuxHotspot)
     } else {
         // join hotspot and find gateway
-        ui.output(&format!("Joining hotspot {}", ssid));
+        ui.output(&t("joining_hotspot", &[("ssid", &ssid)]));
         join_hotspot(&ssid, &password, &interface.0, ui).await?;
         loop {
             // println!("looking for gateway");
@@ -165,7 +166,7 @@ async fn join_hotspot<T: UI>(ssid: &str, password: &str, interface: &str, ui: &T
         if !res.status.success() {
             let stderr = String::from_utf8_lossy(&res.stderr);
             // Err(format!("Error joining hotspot: {}", stderr))?;
-            let err_msg = format!("Error joining hotspot: {}. Retrying.", stderr);
+            let err_msg = t("error_joining_hotspot_retry", &[("error", &stderr.to_string())]);
             ui.output(&err_msg);
             println!("{}", err_msg);
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;

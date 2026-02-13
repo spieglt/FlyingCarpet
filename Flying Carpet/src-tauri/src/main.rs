@@ -4,7 +4,7 @@
 )]
 
 use flying_carpet_core::{
-    bluetooth, clean_up_transfer, network, start_transfer, utils, Transfer, WiFiInterface, UI,
+    bluetooth, clean_up_transfer, i18n, network, start_transfer, utils, Transfer, WiFiInterface, UI,
 };
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -78,6 +78,11 @@ impl UI for GUI {
 }
 
 #[tauri::command]
+fn set_locale(locale: String) {
+    i18n::set_locale(&locale);
+}
+
+#[tauri::command]
 fn cancel_transfer(window: Window, state: State<Transfer>) -> String {
     let mut message = String::new();
 
@@ -90,9 +95,9 @@ fn cancel_transfer(window: Window, state: State<Transfer>) -> String {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
         **cancel_handle = None;
-        message += "Transfer cancelled"
+        message += &i18n::t("transfer_cancelled", &[])
     } else {
-        message += "No transfer to cancel"
+        message += &i18n::t("no_transfer_to_cancel", &[])
     }
 
     // shut down hotspot
@@ -171,6 +176,7 @@ async fn main() {
         .invoke_handler(tauri::generate_handler![
             start_async,
             cancel_transfer,
+            set_locale,
             is_dir,
             expand_files,
             generate_password,

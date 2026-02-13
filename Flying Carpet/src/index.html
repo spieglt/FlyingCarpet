@@ -16,66 +16,72 @@
       <!-- top bar -->
       <div class="horizontalContainer" style="flex-grow: 0; margin: 10px;">
         <div>
-          <h1 style="font-size: 40px; margin-bottom: 0px; padding-bottom: 0px;"><b>Flying Carpet</b></h1>
-          <small style="margin-top: 0px; padding-top: 0px;">Version 9</small>
-          <small style="margin-top: 0px; padding-top: 0px; color: blue; float: right; cursor: pointer;" id="aboutButton">
+          <h1 style="font-size: 40px; margin-bottom: 0px; padding-bottom: 0px;"><b data-i18n="app_title">Flying Carpet</b></h1>
+          <small style="margin-top: 0px; padding-top: 0px;" data-i18n="version_label">Version 9</small>
+          <small style="margin-top: 0px; padding-top: 0px; color: blue; float: right; cursor: pointer;" id="aboutButton" data-i18n="about">
             About
           </small>
         </div>
-        <div id="qrcode" style="width: 150px; height: 150px;">
-          <img src="assets/icon1024.png" style="width: 150px; height: 150px;">
+        <div style="display: flex; flex-direction: column; align-items: center;">
+          <div id="qrcode" style="width: 150px; height: 150px;">
+            <img src="assets/icon1024.png" style="width: 150px; height: 150px;">
+          </div>
+          <select id="languageSelector" style="margin-top: 5px; font-size: 12px; padding: 2px;">
+            <option value="en">English</option>
+            <option value="zh">中文</option>
+            <option value="es">Español</option>
+          </select>
         </div>
       </div>
       <div class="horizontalContainer" style="flex-grow: 0; margin: 10px;">
         <div class="form-check form-switch" style="margin: 10px;">
           <input class="form-check-input"  style="width: 40px; height: 20px; margin-right: 5px;" type="checkbox" role="switch" id="bluetoothSwitch" onchange="bluetoothChange()">
-          <label class="form-check-label" for="bluetoothSwitch">Use Bluetooth</label>
+          <label class="form-check-label" for="bluetoothSwitch" data-i18n="use_bluetooth">Use Bluetooth</label>
         </div>
         <div class="form-check" style="margin: 10px; float: right; display: none" id="sendFolderDiv">
           <input class="form-check-input" type="checkbox" value="" id="sendFolderCheckbox">
-          <label class="form-check-label" for="sendFolderCheckbox">Send Folder</label>
+          <label class="form-check-label" for="sendFolderCheckbox" data-i18n="send_folder">Send Folder</label>
         </div>
       </div>
 
       <!-- mode box -->
-      <label style="margin-left: 10px">Select Mode</label>
+      <label style="margin-left: 10px" data-i18n="select_mode">Select Mode</label>
       <div class="btn-group" role="group" aria-label="Mode selector" id="modeBox" style="margin: 10px; margin-top: 0px;">
         <input type="radio" class="btn-check" name="moderadio" id="sendButton" autocomplete="off" onchange="modeChange('send')">
-        <label class="btn btn-outline-primary" for="sendButton">Send</label>
+        <label class="btn btn-outline-primary" for="sendButton" data-i18n="send">Send</label>
 
         <input type="radio" class="btn-check" name="moderadio" id="receiveButton" autocomplete="off" onchange="modeChange('receive')">
-        <label class="btn btn-outline-primary" for="receiveButton">Receive</label>
+        <label class="btn btn-outline-primary" for="receiveButton" data-i18n="receive">Receive</label>
       </div>
 
       <!-- peer box -->
-      <label id="peerLabel" style="margin-left: 10px">Select Peer OS</label>
+      <label id="peerLabel" style="margin-left: 10px" data-i18n="select_peer_os">Select Peer OS</label>
       <div class="btn-group" role="group" aria-label="Peer selector" id="peerBox" style="margin: 10px; margin-top: 0px;">
         <input type="radio" class="btn-check" name="peerradio" id="androidButton" autocomplete="off" onchange="peerChange('android')">
-        <label class="btn btn-outline-primary" for="androidButton">Android</label>
+        <label class="btn btn-outline-primary" for="androidButton" data-i18n="android">Android</label>
 
         <input type="radio" class="btn-check" name="peerradio" id="iosButton" autocomplete="off" onchange="peerChange('ios')">
-        <label class="btn btn-outline-primary" for="iosButton">iOS</label>
+        <label class="btn btn-outline-primary" for="iosButton" data-i18n="ios">iOS</label>
 
         <input type="radio" class="btn-check" name="peerradio" id="linuxButton" autocomplete="off" onchange="peerChange('linux')">
-        <label class="btn btn-outline-primary" for="linuxButton">Linux</label>
+        <label class="btn btn-outline-primary" for="linuxButton" data-i18n="linux">Linux</label>
 
         <input type="radio" class="btn-check" name="peerradio" id="macButton" autocomplete="off" onchange="peerChange('mac')">
-        <label class="btn btn-outline-primary" for="macButton">macOS</label>
+        <label class="btn btn-outline-primary" for="macButton" data-i18n="macos">macOS</label>
 
         <input type="radio" class="btn-check" name="peerradio" id="windowsButton" autocomplete="off" onchange="peerChange('windows')">
-        <label class="btn btn-outline-primary" for="windowsButton">Windows</label>
+        <label class="btn btn-outline-primary" for="windowsButton" data-i18n="windows">Windows</label>
       </div>
 
       <!-- password box -->
-      <input type="password" placeholder="Password (start transfer on other end):" id="passwordBox" style="display: none; padding: 5px; margin: 10px;" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <input type="password" data-i18n="password_placeholder" placeholder="Password (start transfer on other end):" id="passwordBox" style="display: none; padding: 5px; margin: 10px;" autocapitalize="off" autocorrect="off" spellcheck="false">
 
       <!-- start/cancel buttons -->
-      <button type="button" id="startButton" class="btn btn-success" onclick="startTransfer(false)" style="margin: 10px; min-height: 25px;" disabled>Select Files</button>
-      <button type="button" id="cancelButton" class="btn btn-danger" onclick="cancelTransfer()" style="display: none; margin: 10px; min-height: 25px;">Cancel Transfer</button>
+      <button type="button" id="startButton" class="btn btn-success" onclick="startTransfer(false)" style="margin: 10px; min-height: 25px;" disabled data-i18n="select_files">Select Files</button>
+      <button type="button" id="cancelButton" class="btn btn-danger" onclick="cancelTransfer()" style="display: none; margin: 10px; min-height: 25px;" data-i18n="cancel_transfer">Cancel Transfer</button>
 
       <!-- output box -->
       <div id="outputBox" class="horizontalContainer" style="flex-grow: 9; flex-shrink: 9; overflow-y: auto; padding: 5px; margin-top: 5px;">
-        Welcome to Flying Carpet!<br>Once other options are selected, drag and drop can be used to start a transfer.
       </div>
 
       <!-- progress bar -->

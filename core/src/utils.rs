@@ -7,7 +7,7 @@ use std::{
     process,
 };
 
-use crate::FCError;
+use crate::{i18n::t, FCError};
 
 #[derive(Debug, PartialEq)]
 pub enum BluetoothMessage {
@@ -99,23 +99,26 @@ pub fn make_size_readable(size: u64) -> String {
     const MB: f64 = KB * 1000.0;
     const GB: f64 = MB * 1000.0;
     if size < KB {
-        format!("{} bytes", size)
+        t("size_bytes", &[("value", &format!("{}", size))])
     } else if size < MB {
-        format!("{:.2}KB", size / KB)
+        t("size_kb", &[("value", &format!("{:.2}", size / KB))])
     } else if size < GB {
-        format!("{:.2}MB", size / MB)
+        t("size_mb", &[("value", &format!("{:.2}", size / MB))])
     } else {
-        format!("{:.2}GB", size / GB)
+        t("size_gb", &[("value", &format!("{:.2}", size / GB))])
     }
 }
 
 pub fn format_time(seconds: f64) -> String {
     if seconds > 60.0 {
         let minutes = seconds as u64 / 60;
-        let seconds = seconds % 60.0;
-        format!("{} minutes {:.2} seconds", minutes, seconds)
+        let secs = seconds % 60.0;
+        t("time_minutes_seconds", &[
+            ("minutes", &minutes.to_string()),
+            ("seconds", &format!("{:.2}", secs)),
+        ])
     } else {
-        format!("{:.2} seconds", seconds)
+        t("time_seconds", &[("seconds", &format!("{:.2}", seconds))])
     }
 }
 

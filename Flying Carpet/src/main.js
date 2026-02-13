@@ -1,5 +1,6 @@
 const { core, dialog, os } = window.__TAURI__;
 import { QRCode } from './deps/qrcode.js'
+import { initI18n, t, getLocale, setLocale, applyTranslations } from './i18n.js'
 
 let aboutButton;
 let canUseBluetooth = false;
@@ -13,6 +14,7 @@ let startButton;
 let cancelButton;
 let progressBar;
 let appWindow;
+let languageSelector;
 
 let selectedMode;
 let selectedPeer;
@@ -34,6 +36,7 @@ window.onunload = () => {
     passwordBoxValue: passwordBox.value,
     progressBarValue: progressBar.value,
     progressBarVisible: progressBar.style.display !== 'none',
+    locale: getLocale(),
   };
   let uiJSON = JSON.stringify(uiState);
   sessionStorage.setItem('pageState', uiJSON);
@@ -49,19 +52,35 @@ window.addEventListener('DOMContentLoaded', async () => {
   progressBar = document.getElementById('progressBar');
   bluetoothSwitch = document.getElementById('bluetoothSwitch');
   sendFolderCheckbox = document.getElementById('sendFolderCheckbox');
+  languageSelector = document.getElementById('languageSelector');
 
   appWindow = window.__TAURI__.window.getCurrentWindow();
+
+  // initialize i18n
+  await initI18n();
+  languageSelector.value = getLocale();
+  applyTranslations();
+  output(t('welcome_message'));
+
+  // language selector
+  languageSelector.onchange = async () => {
+    await setLocale(languageSelector.value);
+    // update dynamic text
+    if (selectedMode) {
+      modeChange(selectedMode);
+    }
+  };
 
   // check for bluetooth support
   let error = await core.invoke('check_support');
   if (error != null) {
-    output(`Bluetooth initialization failed: ${error}. Disable the Bluetooth switch in Flying Carpet on the other device to run a transfer.`);
+    output(t('bluetooth_init_failed', { error }));
     bluetoothSwitch.disabled = true;
     bluetoothSwitch.checked = false;
     usingBluetooth = false;
     canUseBluetooth = false;
   } else {
-    output('Bluetooth is supported.');
+    output(t('bluetooth_supported'));
     bluetoothSwitch.disabled = false;
     bluetoothSwitch.checked = true;
     usingBluetooth = true;
@@ -70,7 +89,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // about button
   aboutButton.onclick = () => {
-    alert(aboutMessage);
+    alert(t('about_message'));
   }
 
   // output handler
@@ -94,7 +113,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // show bluetooth PIN and allow user to choose whether to pair on windows
   await appWindow.listen('showPin', async (event) => {
     console.log(event);
-    let choice = await dialog.ask(`Is this code displayed on the other device?\n\n${event.payload.message}`, { title: 'Confirm Bluetooth PIN', type: 'info' });
+    let choice = await dialog.ask(t('confirm_bluetooth_pin', { pin: event.payload.message }), { title: t('confirm_bluetooth_title'), type: 'info' });
     console.log('choice:', choice);
     await core.invoke('user_bluetooth_pair', {
       choice: choice,
@@ -126,18 +145,18 @@ window.addEventListener('DOMContentLoaded', async () => {
       startTransfer(true);
     } else if (selectedMode === 'receive') {
       if (event.payload.length !== 1) {
-        output('Error: if receiving, must drop only one destination folder.');
+        output(t('error_receiving_drop_one_folder'));
         return;
       }
       let is_dir = await core.invoke('is_dir', { path: event.payload[0] });
       if (is_dir) {
         selectedFolder = event.payload[0];
       } else {
-        output('Error: if receiving, must select folder as destination.');
+        output(t('error_receiving_must_select_folder'));
       }
       startTransfer(true);
     } else {
-      output('Error: must select whether sending or receiving before dropping files or folder.');
+      output(t('error_must_select_mode_before_drop'));
     }
     checkStatus();
   });
@@ -169,6 +188,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     outputBox.innerText = uiState.output;
     progressBar.style.display = uiState.progressBarVisible ? '' : 'none';
     progressBar.value = uiState.progressBarValue;
+    if (uiState.locale) {
+      await setLocale(uiState.locale);
+      languageSelector.value = uiState.locale;
+    }
     modeChange(selectedMode);
     if (uiState.transferRunning) {
       disableUi();
@@ -199,7 +222,7 @@ async function startTransfer(filesSelected) {
   if (await needPassword()) {
     password = document.getElementById('passwordBox').value;
     if (password.length < 8) {
-      output('Must enter password from the other device.');
+      output(t('must_enter_password'));
       return;
     }
   }
@@ -210,26 +233,26 @@ async function startTransfer(filesSelected) {
   // console.log('interfaces:', interfaces);
   switch (interfaces.length) {
     case 0:
-      output('No WiFi interfaces found. Flying Carpet only works over WiFi.');
+      output(t('no_wifi_interfaces'));
       return;
     case 1:
       wifiInterface = interfaces[0];
       break;
     default:
-      let alertString = 'Enter the number for which WiFi interface to use (e.g. "1" or "2"):\n'
+      let alertString = t('choose_interface_prompt');
       for (let i = 0; i < interfaces.length; i++) {
         alertString += `${i+1}: ${interfaces[i][0]}\n`
       }
       let choice = parseInt(prompt(alertString));
       if (choice && choice > 0 && choice <= interfaces.length) {
         wifiInterface = interfaces[choice - 1];
-        output(`Using interface: ${wifiInterface[0]}`);
+        output(t('using_interface', { interface: wifiInterface[0] }));
       } else {
-        output('Invalid interface selected. Please enter just the number of the WiFi interface you would like to use, e.g. "1" or "3".');
+        output(t('invalid_interface'));
         return;
       }
   }
-  
+
   // get files or folder
   if (!filesSelected) {
     if (selectedMode == 'send') {
@@ -239,39 +262,39 @@ async function startTransfer(filesSelected) {
           directory: true,
         });
         if (!folder) {
-          output('User cancelled.');
+          output(t('user_cancelled'));
           return;
         }
         selectedFiles = await core.invoke('expand_files', { paths: [folder] });
       } else {
         await selectFiles();
         if (!selectedFiles) {
-          output('User cancelled.');
+          output(t('user_cancelled'));
           return;
         }
       }
     } else if (selectedMode == 'receive') {
       await selectFolder();
       if (!selectedFolder) {
-        output('User cancelled.');
+        output(t('user_cancelled'));
         return;
       }
     } else {
-      output('Must select whether this device is sending or receiving.');
+      output(t('must_select_mode'));
       return;
     }
   }
-  
+
   // if we're hosting, generate and display the password
   if (!await needPassword()) {
     if (!usingBluetooth) {
       password = await core.invoke('generate_password');
       if (selectedPeer === 'ios' || selectedPeer === 'android') {
-        output('\nStart the transfer on the other device and scan the QR code when prompted.');
+        output(t('start_transfer_scan_qr'));
         makeQRCode(password);
       } else {
-        output(`Password: ${password}`);
-        alert(`\nStart the transfer on the other device and enter this password when prompted:\n${password}`);
+        output(t('password_display', { password }));
+        alert(t('start_transfer_enter_password', { password }));
       }
     }
   }
@@ -318,7 +341,7 @@ let bluetoothChange = () => {
 }
 
 let modeChange = async (button) => {
-  startButton.innerText = button === 'receive' ? 'Select Folder' : 'Select Files';
+  startButton.innerText = button === 'receive' ? t('select_folder') : t('select_files');
   document.getElementById('sendFolderDiv').style.display = button === 'send' ? '' : 'none';
   selectedMode = button;
   checkStatus();
@@ -358,7 +381,7 @@ let needPassword = async () => {
       showPassword = selectedPeer === 'windows' && selectedMode === 'send';
       break;
     default:
-      alert('Error in needPassword()');
+      alert(t('error_in_needPassword'));
   }
   return showPassword;
 }
@@ -419,31 +442,3 @@ window.selectFolder = selectFolder;
 window.bluetoothChange = bluetoothChange;
 window.modeChange = modeChange;
 window.peerChange = peerChange;
-
-const aboutMessage = `https://flyingcarpet.spiegl.dev
-Version: 9.0.10
-theron@spiegl.dev
-Copyright (c) 2025, Theron Spiegl
-All rights reserved.
-
-Flying Carpet transfers files between two Android, iOS, Linux, macOS, and Windows devices over ad hoc WiFi. No access point or shared network is required, just two WiFi cards in close range. The only non-working pairings are from one Apple device (macOS or iOS) to another, because Apple no longer allows hotspots to be started programmatically.
-
-INSTRUCTIONS
-
-Turn Bluetooth on or off on both devices. If one side fails to initialize Bluetooth or has it turned off, the other side must disable the "Use Bluetooth" switch in Flying Carpet.
-
-Select Sending on one device and Receiving on the other. If not using Bluetooth, select the operating system of the other device. Click the "Start Transfer" button on each device. On the sending device, select the files or folder to send. On the receiving device, select the folder in which to receive files. (To send a folder, drag it onto the window instead of clicking "Start Transfer".)
-
-If using Bluetooth, confirm the 6-digit PIN on each side. The WiFi connection will be configured automatically. If not using Bluetooth, you will need to scan a QR code or type in a password.
-
-If prompted to join a WiFi network or modify WiFi settings, say Allow. On Windows you may have to grant permission to add a firewall rule. On macOS you may have to grant location permissions, which Apple requires to scan for WiFi networks. Flying Carpet does not read or collect your location, nor any other data.
-
-TROUBLESHOOTING
-
-If using Bluetooth fails, try manually unpairing the devices from one another and starting a new transfer.
-
-If sending from macOS to Linux, you must first initiate pairing from the macOS System Settings > Bluetooth menu. Otherwise, disable Bluetooth on both sides and enter the password manually when prompted.
-
-Flying Carpet may make multiple attempts to join the other device's hotspot.
-
-Licensed under the GPL3: https://www.gnu.org/licenses/gpl-3.0.html#license-text`

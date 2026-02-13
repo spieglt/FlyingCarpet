@@ -7,12 +7,14 @@ pub mod network;
 pub mod bluetooth;
 
 pub mod error;
+pub mod i18n;
 mod receiving;
 mod sending;
 pub mod utils;
 
 use bluetooth::negotiate_bluetooth;
 use error::{fc_error, FCError};
+use i18n::t;
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
@@ -134,7 +136,7 @@ pub async fn start_transfer<T: UI>(
                 }
             }
             Err(e) => {
-                ui.output(&format!("Could not establish Bluetooth connection: {}", e));
+                ui.output(&t("bluetooth_connection_error", &[("error", &e.to_string())]));
                 println!("Could not establish Bluetooth connection: {}", e);
                 return None;
             }
@@ -159,7 +161,7 @@ pub async fn start_transfer<T: UI>(
         match network::connect_to_peer(peer, mode.clone(), ssid, password, interface, ui).await {
             Ok(p) => p,
             Err(e) => {
-                ui.output(&format!("Error connecting to peer: {}", e));
+                ui.output(&t("error_connecting_to_peer", &[("error", &e.to_string())]));
                 return None;
             }
         };
@@ -170,7 +172,7 @@ pub async fn start_transfer<T: UI>(
     let mut stream = match start_tcp(&peer_resource, ui).await {
         Ok(s) => s,
         Err(e) => {
-            ui.output(&format!("Error starting TCP connection: {}", e));
+            ui.output(&t("error_starting_tcp", &[("error", &e.to_string())]));
             return None;
         }
     };
@@ -179,7 +181,7 @@ pub async fn start_transfer<T: UI>(
     match confirm_version(&peer_resource, &mut stream).await {
         Ok(()) => (),
         Err(e) => {
-            ui.output(&format!("Error confirming version: {}", e));
+            ui.output(&t("error_confirming_version", &[("error", &e.to_string())]));
             return Some(stream);
         }
     };
@@ -188,7 +190,7 @@ pub async fn start_transfer<T: UI>(
     match confirm_mode(mode.clone(), &peer_resource, &mut stream).await {
         Ok(()) => (),
         Err(e) => {
-            ui.output(&format!("Error confirming mode: {}", e));
+            ui.output(&t("error_confirming_mode", &[("error", &e.to_string())]));
             return Some(stream);
         }
     };
@@ -206,7 +208,7 @@ pub async fn start_transfer<T: UI>(
             match stream.write_u64(files.len() as u64).await {
                 Ok(()) => (),
                 Err(e) => {
-                    ui.output(&format!("Error writing number of files: {}", e));
+                    ui.output(&t("error_writing_num_files", &[("error", &e.to_string())]));
                     return Some(stream);
                 }
             }
@@ -232,17 +234,16 @@ pub async fn start_transfer<T: UI>(
                     .file_name()
                     .expect("could not get filename from PathBuf")
                     .to_string_lossy();
-                ui.output("=========================");
-                ui.output(&format!(
-                    "Sending file {} of {}. Filename: {}",
-                    i + 1,
-                    files.len(),
-                    file_name
-                ));
+                ui.output(&t("separator", &[]));
+                ui.output(&t("sending_file_of", &[
+                    ("current", &(i + 1).to_string()),
+                    ("total", &files.len().to_string()),
+                    ("filename", &file_name),
+                ]));
                 match sending::send_file(file, common_folder, &key, &mut stream, ui).await {
                     Ok(_) => (),
                     Err(e) => {
-                        ui.output(&format!("Error sending file: {}", e));
+                        ui.output(&t("error_sending_file", &[("error", &e.to_string())]));
                         return Some(stream);
                     }
                 };
@@ -253,19 +254,22 @@ pub async fn start_transfer<T: UI>(
             let num_files = match stream.read_u64().await {
                 Ok(num) => num,
                 Err(e) => {
-                    ui.output(&format!("Error reading number of files: {}", e));
+                    ui.output(&t("error_reading_num_files", &[("error", &e.to_string())]));
                     return Some(stream);
                 }
             };
             // receive files
             for i in 0..num_files {
-                ui.output("=========================");
-                ui.output(&format!("Receiving file {} of {}.", i + 1, num_files,));
+                ui.output(&t("separator", &[]));
+                ui.output(&t("receiving_file_of", &[
+                    ("current", &(i + 1).to_string()),
+                    ("total", &num_files.to_string()),
+                ]));
                 let last_file = i == num_files - 1;
                 match receiving::receive_file(&folder, &key, &mut stream, ui, last_file).await {
                     Ok(_) => (),
                     Err(e) => {
-                        ui.output(&format!("Error receiving file: {}", e));
+                        ui.output(&t("error_receiving_file", &[("error", &e.to_string())]));
                         return Some(stream);
                     }
                 }
@@ -273,8 +277,8 @@ pub async fn start_transfer<T: UI>(
         }
     }
 
-    ui.output("=========================");
-    ui.output("Transfer complete");
+    ui.output(&t("separator", &[]));
+    ui.output(&t("transfer_complete", &[]));
     Some(stream)
 }
 
@@ -288,7 +292,7 @@ pub async fn clean_up_transfer<T: UI>(
     match stream {
         Some(mut s) => {
             if s.shutdown().await.is_err() {
-                ui.output("Failed to shut down TCP stream.")
+                ui.output(&t("failed_shutdown_tcp", &[]))
             };
         }
         None => (),
@@ -327,9 +331,9 @@ async fn start_tcp<T: UI>(peer_resource: &PeerResource, ui: &T) -> Result<TcpStr
             // linux or windows hotspot
             let addr = "0.0.0.0:3290".parse::<SocketAddr>()?;
             let listener = TcpListener::bind(&addr).await?;
-            ui.output("Waiting for connection...");
+            ui.output(&t("waiting_for_connection", &[]));
             let (_stream, _socket_addr) = listener.accept().await?;
-            ui.output("Connection accepted");
+            ui.output(&t("connection_accepted", &[]));
             stream = _stream;
         }
     }
@@ -355,24 +359,18 @@ async fn confirm_mode(
             };
             // wait to ensure host responds that mode selection was correct
             if stream.read_u64().await? != 1 {
-                let message = format!(
-                    "Both ends of the transfer selected {}",
-                    if our_mode == 0 { "receive" } else { "send" }
-                );
-                fc_error(&message)?
+                let mode_str = if our_mode == 0 { "receive" } else { "send" };
+                fc_error(&t("both_selected_mode", &[("mode", mode_str)]))?
             }
         }
         PeerResource::WindowsHotspot(_) | PeerResource::LinuxHotspot => {
             // wait for guest to say what mode they selected, compare to our own, and report back
             let peer_mode = stream.read_u64().await?;
             if peer_mode == our_mode {
-                let msg = format!(
-                    "Both ends of the transfer selected {}",
-                    if our_mode == 0 { "receive" } else { "send" }
-                );
+                let mode_str = if our_mode == 0 { "receive" } else { "send" };
                 // write failure to guest
                 stream.write_u64(0).await?;
-                fc_error(&msg)?
+                fc_error(&t("both_selected_mode", &[("mode", mode_str)]))?
             } else {
                 // write success to guest
                 stream.write_u64(1).await?;
@@ -409,12 +407,12 @@ async fn confirm_version(
             stream.write_u64(1).await?; // report that versions are compatible
         } else {
             stream.write_u64(0).await?;
-            fc_error(&format!("Peer's version {} not compatible, please update Flying Carpet to the latest version on both devices.", peer_version))?;
+            fc_error(&t("version_not_compatible", &[("version", &peer_version.to_string())]))?;
         }
     } else if peer_version > MAJOR_VERSION {
         // peer makes decision
         if stream.read_u64().await? == 0 {
-            fc_error(&format!("Peer's version {} not compatible, please update Flying Carpet to the latest version on both devices.", peer_version))?;
+            fc_error(&t("version_not_compatible", &[("version", &peer_version.to_string())]))?;
         }
     } // otherwise, versions match, implicitly compatible
     Ok(())

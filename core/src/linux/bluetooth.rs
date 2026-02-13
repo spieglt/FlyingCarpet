@@ -8,6 +8,7 @@ use tokio::{spawn, sync::mpsc, time::sleep};
 
 use crate::{
     error::{fc_error, FCError},
+    i18n::t,
     network::is_hosting,
     utils::{generate_password, get_key_and_ssid, BluetoothMessage},
     Mode, Peer, UI,
@@ -88,7 +89,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         let mut password = generate_password();
         let (_, mut ssid) = get_key_and_ssid(&password);
         let (app_handle, adv_handle) = peripheral::advertise(tx, &ssid, &password).await?;
-        ui.output("Started Bluetooth advertisement, waiting for receiving device...");
+        ui.output(&t("started_bt_advertisement", &[]));
         let peer_os =
             match process_bluetooth_message(BluetoothMessage::PeerOS("".to_string()), &mut rx, ui)
                 .await?
@@ -154,9 +155,9 @@ pub async fn negotiate_bluetooth<T: UI>(
         Ok((peer_os, ssid, password))
     } else {
         // acting as central
-        ui.output("Started Bluetooth scan, waiting for sending device...");
+        ui.output(&t("started_bt_scan", &[]));
         let device = central::scan(&adapter).await?;
-        ui.output("Found device");
+        ui.output(&t("found_device", &[]));
 
         let mut connected_peripheral = ConnectedPeripheral{adapter, address: device.address(), is_macos: false};
 
@@ -192,30 +193,30 @@ pub async fn process_bluetooth_message<T: UI>(
             .expect("Bluetooth message channel unexpectedly closed.");
         println!("received {:?}", msg);
         match &msg {
-            BluetoothMessage::PairApproved => ui.output("Pairing approved."),
+            BluetoothMessage::PairApproved => ui.output(&t("pairing_approved", &[])),
             BluetoothMessage::PairSuccess => {
                 // can use this to represent AlreadyPaired on windows? don't need to emit pin, just need to proceed.
                 // and nothing will be blocked in central because the pairing_handler won't be called.
-                ui.output("Successfully paired");
+                ui.output(&t("successfully_paired", &[]));
             }
-            BluetoothMessage::PairFailure => fc_error("Pairing failed.")?,
+            BluetoothMessage::PairFailure => fc_error(&t("pairing_failed", &[]))?,
             BluetoothMessage::AlreadyPaired => {
-                ui.output("Already BLE paired with Bluetooth device");
+                ui.output(&t("already_paired", &[]));
                 if looking_for == BluetoothMessage::PairSuccess {
                     return Ok(msg);
                 }
             }
-            BluetoothMessage::UserCanceled => fc_error("User canceled.")?,
+            BluetoothMessage::UserCanceled => fc_error(&t("user_canceled", &[]))?,
             BluetoothMessage::StartedAdvertising => {
-                ui.output("Started advertising Bluetooth service")
+                ui.output(&t("started_advertising_service", &[]))
             }
-            BluetoothMessage::PeerOS(os) => ui.output(&format!("Peer's OS is {}", os)),
-            BluetoothMessage::SSID(ssid) => ui.output(&format!("Peer's SSID is {}", ssid)),
+            BluetoothMessage::PeerOS(os) => ui.output(&t("peer_os_is", &[("os", os.as_str())])),
+            BluetoothMessage::SSID(ssid) => ui.output(&t("peer_ssid_is", &[("ssid", ssid.as_str())])),
             BluetoothMessage::Password(password) => {
-                ui.output(&format!("Peer's password is {}", password))
+                ui.output(&t("peer_password_is", &[("password", password.as_str())]))
             }
-            BluetoothMessage::PeerReadSsid => ui.output("Peer read our SSID"),
-            BluetoothMessage::PeerReadPassword => ui.output("Peer read our password"),
+            BluetoothMessage::PeerReadSsid => ui.output(&t("peer_read_ssid", &[])),
+            BluetoothMessage::PeerReadPassword => ui.output(&t("peer_read_password", &[])),
             BluetoothMessage::OtherError(s) => fc_error(s.as_str())?, // ui.output(&format!("Bluetooth peering result: {}", s)),
             other_message => println!(
                 "Other Bluetooth message not used on Linux: {:?}",

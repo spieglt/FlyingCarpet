@@ -1,4 +1,4 @@
-use crate::{utils, FCError, CHUNKSIZE, UI};
+use crate::{i18n::t, utils, FCError, CHUNKSIZE, UI};
 use aes_gcm::{aead::Aead, AeadCore, Aes256Gcm, KeyInit};
 use std::{
     fs::{metadata, File},
@@ -24,7 +24,7 @@ pub async fn send_file<T: UI>(
     let metadata = metadata(file)?;
     let size = metadata.len();
     let mut bytes_left = size;
-    ui.output(&format!("File size: {}", utils::make_size_readable(size)));
+    ui.output(&t("file_size", &[("size", &utils::make_size_readable(size))]));
 
     // send file details
     let mut filename = file.strip_prefix(prefix)?.to_string_lossy().to_string();
@@ -36,7 +36,7 @@ pub async fn send_file<T: UI>(
     // check to see if receiving end already has the file
     let need_transfer = check_for_file(&file, stream).await?;
     if !need_transfer {
-        ui.output("Recipient already has this file, skipping.");
+        ui.output(&t("recipient_already_has_file", &[]));
         return Ok(());
     }
 
@@ -50,7 +50,7 @@ pub async fn send_file<T: UI>(
         match handle.read(&mut buffer) {
             Ok(bytes_read) if bytes_read == 0 => {
                 // EOF, shouldn't hit this due to while loop condition
-                ui.output("Hit EOF");
+                ui.output(&t("hit_eof", &[]));
                 break;
             }
             Ok(bytes_read) => {
@@ -70,11 +70,11 @@ pub async fn send_file<T: UI>(
     ui.update_progress_bar(100);
     let finish = Instant::now();
     let elapsed = (finish - start).as_secs_f64();
-    ui.output(&format!("Sending took {}", utils::format_time(elapsed)));
+    ui.output(&t("sending_took", &[("time", &utils::format_time(elapsed))]));
 
     let megabits = 8.0 * (size as f64 / 1_000_000.0);
     let mbps = megabits / elapsed;
-    ui.output(&format!("Speed: {:.2}mbps", mbps));
+    ui.output(&t("speed_mbps", &[("speed", &format!("{:.2}", mbps))]));
 
     // listen for receiving end to tell us they have everything
     stream.read_u64().await?;
