@@ -20,7 +20,6 @@ use tokio::sync::mpsc;
 fn get_os_characteristic(tx: mpsc::Sender<BluetoothMessage>) -> Characteristic {
     // when the OS characteristic is read, return the constant
     // when it's written to, return that to calling thread, so we need tx
-    let read_tx = tx.clone();
     let write_tx = tx.clone();
     Characteristic {
         uuid: Uuid::parse_str(OS_CHARACTERISTIC_UUID).unwrap(),
@@ -30,17 +29,9 @@ fn get_os_characteristic(tx: mpsc::Sender<BluetoothMessage>) -> Characteristic {
             // so this is a pub type CharacteristicReadFun = Box<dyn Fn(CharacteristicReadRequest) -> Pin<Box<dyn Future<Output = ReqResult<Vec<u8>>> + Send>> + Send + Sync>;
             // a box containing function, that takes a characteristicreadrequest, and returns a pin box containing an async future, that returns a byte vec
             fun: Box::new(move |req| {
-                let thread_tx = read_tx.clone();
                 async move {
                     let value = OS.as_bytes().to_vec();
                     println!("Read request {:?} with value {:x?}", &req, &value);
-                    if thread_tx
-                        .send(BluetoothMessage::PeerReadSsid)
-                        .await
-                        .is_err()
-                    {
-                        return Err(ReqError::Failed);
-                    }
                     Ok(value)
                 }
                 .boxed()

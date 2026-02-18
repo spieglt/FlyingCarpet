@@ -471,6 +471,9 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         while (bytesRead < n) {
             try {
                 val br = inputStream.read(b, bytesRead, n - bytesRead)
+                if (br == -1) {
+                    throw Exception("Peer connection closed")
+                }
                 bytesRead += br
             } catch (e: SocketException) {
                 throw Exception("Peer connection closed")
@@ -573,4 +576,3 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         cleanUpTransfer()
     }
 }
-

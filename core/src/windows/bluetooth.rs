@@ -96,7 +96,8 @@ pub async fn negotiate_bluetooth<T: UI>(
             ))?;
         }
 
-        if is_hosting(&Peer::from(peer_os.as_str()), mode) {
+        let peer = Peer::try_from(peer_os.as_str())?;
+        if is_hosting(&peer, mode) {
             let password = generate_password();
             let (_, ssid) = get_key_and_ssid(&password);
             {
@@ -192,7 +193,8 @@ pub async fn negotiate_bluetooth<T: UI>(
         println!("wrote OS");
 
         // read or write ssid and password
-        let (ssid, password) = if network::is_hosting(&Peer::from(peer.as_str()), mode) {
+        let peer_os = Peer::try_from(peer.as_str())?;
+        let (ssid, password) = if network::is_hosting(&peer_os, mode) {
             println!("hosting, writing wifi info to peer");
             let password = generate_password();
             let (_, ssid) = get_key_and_ssid(&password);
