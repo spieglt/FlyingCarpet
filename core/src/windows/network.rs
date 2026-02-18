@@ -59,9 +59,7 @@ pub async fn connect_to_peer<T: UI>(
         let hosted_network = start_wifi_direct(&ssid, &password, ui)?;
         Ok(PeerResource::WindowsHotspot(hosted_network))
     } else {
-        let guid =
-            u128::from_str_radix(&interface.1, 10).expect("couldn't get u128 guid from string");
-        let guid = GUID::from_u128(guid);
+        let guid = parse_interface_guid(&interface)?;
         loop {
             tokio::task::yield_now().await;
             ui.output("Trying to join hotspot...");
@@ -86,6 +84,13 @@ pub async fn connect_to_peer<T: UI>(
             gateway.expect("Gateway == None when it shouldn't"),
         ))
     }
+}
+
+fn parse_interface_guid(interface: &WiFiInterface) -> Result<GUID, FCError> {
+    let guid_u128 = u128::from_str_radix(&interface.1, 10).map_err(|e| FCError {
+        message: format!("Invalid interface GUID '{}': {}", interface.1, e),
+    })?;
+    Ok(GUID::from_u128(guid_u128))
 }
 
 fn start_wifi_direct<T: UI>(ssid: &str, password: &str, ui: &T) -> Result<WindowsHotspot, FCError> {
@@ -175,10 +180,7 @@ fn run_shell_execute(
 
 /// Get local IPv4 address on the specified interface (works for WiFi or wired)
 pub fn get_local_ip(interface: &WiFiInterface) -> Result<std::net::Ipv4Addr, FCError> {
-    let guid = u128::from_str_radix(&interface.1, 10).map_err(|e| FCError {
-        message: format!("Invalid interface GUID: {}", e),
-    })?;
-    let target_guid = GUID::from_u128(guid);
+    let target_guid = parse_interface_guid(interface)?;
 
     let working_buffer_size = 15_000;
     let family = 2; // IPv4
@@ -204,24 +206,18 @@ pub fn get_local_ip(interface: &WiFiInterface) -> Result<std::net::Ipv4Addr, FCE
         }
 
         while !pip_ip_adapter_addresses_lh.is_null() {
-            let adapter_name = (*pip_ip_adapter_addresses_lh).AdapterName;
-            let adapter_guid_str = adapter_name.to_string().unwrap_or_default();
+            if (*pip_ip_adapter_addresses_lh).NetworkGuid == target_guid {
+                let unicast = (*pip_ip_adapter_addresses_lh).FirstUnicastAddress;
+                if !unicast.is_null() {
+                    let address = (*unicast).Address;
+                    let sa_data = (*address.lpSockaddr).sa_data;
 
-            // Check if this adapter matches our target interface by comparing GUIDs
-            if let Ok(adapter_guid) = GUID::try_from(adapter_guid_str.as_str()) {
-                if adapter_guid == target_guid {
-                    let unicast = (*pip_ip_adapter_addresses_lh).FirstUnicastAddress;
-                    if !unicast.is_null() {
-                        let address = (*unicast).Address;
-                        let sa_data = (*address.lpSockaddr).sa_data;
-
-                        let mut octets = [0u8; 4];
-                        for i in 2..=5 {
-                            octets[i - 2] = sa_data[i] as u8;
-                        }
-
-                        return Ok(std::net::Ipv4Addr::from(octets));
+                    let mut octets = [0u8; 4];
+                    for i in 2..=5 {
+                        octets[i - 2] = sa_data[i] as u8;
                     }
+
+                    return Ok(std::net::Ipv4Addr::from(octets));
                 }
             }
 
@@ -334,14 +330,8 @@ pub fn get_connected_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
                 .trim_matches(char::from(0))
                 .to_string();
 
-                let adapter_name = (*pip_ip_adapter_addresses_lh).AdapterName;
-                let guid_str = adapter_name.to_string().unwrap_or_default();
-
-                // Parse GUID and convert to u128 string
-                if let Ok(guid) = GUID::try_from(guid_str.as_str()) {
-                    let guid_u128 = format!("{}", guid.to_u128());
-                    interfaces.push(WiFiInterface(name, guid_u128));
-                }
+                let guid_u128 = format!("{}", (*pip_ip_adapter_addresses_lh).NetworkGuid.to_u128());
+                interfaces.push(WiFiInterface(name, guid_u128));
             }
             pip_ip_adapter_addresses_lh = (*pip_ip_adapter_addresses_lh).Next;
         }
