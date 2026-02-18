@@ -106,3 +106,14 @@ fun getSsidAndKey(password: String): Pair<String, ByteArray> {
     val ssid = "flyingCarpet_%02x%02x".format(key[0], key[1])
     return Pair(ssid, key)
 }
+
+fun computeHmac(key: ByteArray, data: ByteArray): ByteArray {
+    val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+    mac.init(javax.crypto.spec.SecretKeySpec(key, "HmacSHA256"))
+    return mac.doFinal(data)
+}
+
+fun verifyHmac(key: ByteArray, data: ByteArray, expected: ByteArray): Boolean {
+    val computed = computeHmac(key, data)
+    return MessageDigest.isEqual(computed, expected)
+}

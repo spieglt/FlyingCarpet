@@ -223,8 +223,6 @@ pub async fn exchange_info(
         let password = generate_password();
         let (_, ssid) = get_key_and_ssid(&password);
         ssid_char.write_ext(ssid.as_bytes(), &write_req).await?;
-        // let CharacteristicWriteRequest
-        // ssid_char.write_ext(value, req);
         println!("Wrote SSID to peer");
         sleep(Duration::from_secs(1)).await;
         password_char

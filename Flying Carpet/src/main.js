@@ -13,11 +13,14 @@ let startButton;
 let cancelButton;
 let progressBar;
 let appWindow;
+let connectionModeLabel;
+let connectionModeBox;
 
 let selectedMode;
 let selectedPeer;
 let selectedFiles;
 let selectedFolder;
+let connectionMode = 'hotspot';
 
 // save UI if user refreshes
 window.onunload = () => {
@@ -34,6 +37,7 @@ window.onunload = () => {
     passwordBoxValue: passwordBox.value,
     progressBarValue: progressBar.value,
     progressBarVisible: progressBar.style.display !== 'none',
+    connectionMode: connectionMode,
   };
   let uiJSON = JSON.stringify(uiState);
   sessionStorage.setItem('pageState', uiJSON);
@@ -49,6 +53,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   progressBar = document.getElementById('progressBar');
   bluetoothSwitch = document.getElementById('bluetoothSwitch');
   sendFolderCheckbox = document.getElementById('sendFolderCheckbox');
+  connectionModeLabel = document.getElementById('connectionModeLabel');
+  connectionModeBox = document.getElementById('connectionModeBox');
 
   appWindow = window.__TAURI__.window.getCurrentWindow();
 
@@ -163,6 +169,13 @@ window.addEventListener('DOMContentLoaded', async () => {
         document.getElementById(button).checked = true;
       }
     });
+    // restore connection mode
+    connectionMode = uiState.connectionMode || 'hotspot';
+    if (connectionMode === 'shared_network') {
+      document.getElementById('sharedNetworkButton').checked = true;
+    } else {
+      document.getElementById('hotspotButton').checked = true;
+    }
     passwordBox.value = uiState.passwordBoxValue;
     selectedFiles = uiState.selectedFiles;
     selectedFolder = uiState.selectedFolder;
@@ -229,7 +242,17 @@ async function startTransfer(filesSelected) {
         return;
       }
   }
-  
+
+  // if using shared network mode, check that we have a network connection
+  if (connectionMode === 'shared_network') {
+    let hasNetwork = await core.invoke('has_network_connection', { interface: wifiInterface });
+    if (!hasNetwork) {
+      output('No active network connection found. Shared Network mode requires both devices to be on the same local network. Please connect to a network or use Hotspot mode.');
+      return;
+    }
+    output('Network connection detected. Using Shared Network mode.');
+  }
+
   // get files or folder
   if (!filesSelected) {
     if (selectedMode == 'send') {
@@ -288,6 +311,7 @@ async function startTransfer(filesSelected) {
     fileList: selectedFiles,
     receiveDir: selectedFolder,
     usingBluetooth: usingBluetooth,
+    connectionMode: connectionMode,
     window: appWindow,
   });
 }
@@ -326,6 +350,11 @@ let modeChange = async (button) => {
 
 let peerChange = (button) => {
   selectedPeer = button;
+  checkStatus();
+}
+
+let connectionModeChange = (mode) => {
+  connectionMode = mode;
   checkStatus();
 }
 
@@ -384,7 +413,7 @@ let enableUi = async () => {
   // enable send folder box
   document.getElementById('sendFolderCheckbox').disabled = false;
   // enable radio buttons, file/folder selection buttons
-  let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton'];
+  let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton', 'hotspotButton', 'sharedNetworkButton'];
   for (let i in radioButtons) {
     document.getElementById(radioButtons[i]).disabled = false;
   }
@@ -404,7 +433,7 @@ let disableUi = async () => {
   // disable send folder box
   document.getElementById('sendFolderCheckbox').disabled = true;
   // disable radio buttons, file/folder selection buttons
-  let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton'];
+  let radioButtons = ['sendButton', 'receiveButton', 'androidButton', 'iosButton', 'linuxButton', 'macButton', 'windowsButton', 'hotspotButton', 'sharedNetworkButton'];
   for (let i in radioButtons) {
     document.getElementById(radioButtons[i]).disabled = true;
   }
@@ -419,6 +448,7 @@ window.selectFolder = selectFolder;
 window.bluetoothChange = bluetoothChange;
 window.modeChange = modeChange;
 window.peerChange = peerChange;
+window.connectionModeChange = connectionModeChange;
 
 const aboutMessage = `https://flyingcarpet.spiegl.dev
 Version: 9.0.10

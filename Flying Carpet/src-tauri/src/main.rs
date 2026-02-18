@@ -4,7 +4,7 @@
 )]
 
 use flying_carpet_core::{
-    bluetooth, clean_up_transfer, network, start_transfer, utils, Transfer, WiFiInterface, UI,
+    bluetooth, clean_up_transfer, network, start_transfer, utils, ConnectionMode, Transfer, WiFiInterface, UI,
 };
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -124,6 +124,7 @@ fn start_async(
     file_list: Option<Vec<String>>,
     receive_dir: Option<String>,
     using_bluetooth: bool,
+    connection_mode: Option<String>,
     window: Window,
 ) {
     let thread_window = window.clone();
@@ -138,6 +139,12 @@ fn start_async(
     // sends the user's choice of whether the bluetooth PINs match to know whether to pair.
     let (ble_ui_tx, ble_ui_rx) = mpsc::channel(1);
 
+    // Parse connection mode
+    let conn_mode = match connection_mode.as_deref() {
+        Some("shared_network") => ConnectionMode::SharedNetwork,
+        _ => ConnectionMode::Hotspot,
+    };
+
     let cancel_handle = tokio::spawn(async move {
         let stream: std::option::Option<tokio::net::TcpStream> = start_transfer(
             mode,
@@ -151,6 +158,7 @@ fn start_async(
             transfer_hotspot.clone(),
             transfer_ssid.clone(),
             ble_ui_rx,
+            conn_mode,
         )
         .await;
         clean_up_transfer(stream, transfer_hotspot, transfer_ssid, &gui).await;
@@ -177,6 +185,7 @@ async fn main() {
             get_wifi_interfaces,
             check_support,
             user_bluetooth_pair,
+            has_network_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -240,6 +249,11 @@ fn get_wifi_interfaces() -> Vec<WiFiInterface> {
         Ok(interfaces) => interfaces,
         Err(_e) => vec![], // if there was an error, just return empty list of interfaces and let javascript detect "no wifi card found"
     }
+}
+
+#[tauri::command]
+fn has_network_connection(interface: WiFiInterface) -> bool {
+    network::has_network_connection(&interface).unwrap_or(false)
 }
 
 #[tauri::command]

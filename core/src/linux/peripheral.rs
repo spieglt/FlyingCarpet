@@ -211,15 +211,18 @@ pub(crate) async fn advertise(
         "Serving GATT service on Bluetooth adapter {}",
         adapter.name()
     );
+
+    let characteristics = vec![
+        get_os_characteristic(tx.clone()),
+        get_ssid_characteristic(tx.clone(), ssid.to_string()),
+        get_password_characteristic(tx, password.to_string()),
+    ];
+
     let app = Application {
         services: vec![Service {
             uuid: service_uuid,
             primary: true,
-            characteristics: vec![
-                get_os_characteristic(tx.clone()),
-                get_ssid_characteristic(tx.clone(), ssid.to_string()),
-                get_password_characteristic(tx, password.to_string()),
-            ],
+            characteristics,
             ..Default::default()
         }],
         ..Default::default()

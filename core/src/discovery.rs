@@ -1,0 +1,531 @@
+use crate::error::{DiscoveryError, FCError};
+use crate::utils::{compute_hmac, verify_hmac};
+use crate::{Mode, UI};
+use socket2::{Domain, Protocol, Socket, Type};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::net::UdpSocket;
+use tokio::sync::mpsc;
+use tokio::time::{interval, timeout};
+
+pub const MULTICAST_ADDR: &str = "239.255.73.67";
+pub const DISCOVERY_PORT: u16 = 3290;
+pub const DISCOVERY_MAGIC: [u8; 4] = *b"FCAP";
+pub const ANNOUNCEMENT_SIZE: usize = 93; // No session_id field - matches Apple implementation
+const TIMESTAMP_WINDOW_SECS: u64 = 60;
+const DISCOVERY_INTERVAL_MS: u64 = 500;
+const DISCOVERY_TIMEOUT_SECS: u64 = 120;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DiscoveryRole {
+    Sender = 0,
+    Receiver = 1,
+}
+
+impl From<&Mode> for DiscoveryRole {
+    fn from(mode: &Mode) -> Self {
+        match mode {
+            Mode::Send(_) => DiscoveryRole::Sender,
+            Mode::Receive(_) => DiscoveryRole::Receiver,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct DiscoveryAnnouncement {
+    pub magic: [u8; 4],         // "FCAP"
+    pub version: u16,           // 1
+    pub role: DiscoveryRole,    // 0=Sender, 1=Receiver
+    pub capabilities: u32,      // Reserved for future use
+    pub ip_address: [u8; 4],    // IPv4 address of sender
+    pub port: u16,              // TCP port (3290)
+    pub timestamp: u64,         // Unix timestamp
+    pub sequence: u32,          // Sequence number
+    pub nonce: [u8; 32],        // Random nonce
+    pub hmac: [u8; 32],         // HMAC-SHA256
+    // Note: No session_id - matches Apple implementation. Peer matching done via password HMAC + role.
+}
+
+impl DiscoveryAnnouncement {
+    pub fn new(
+        role: DiscoveryRole,
+        ip_address: Ipv4Addr,
+        sequence: u32,
+    ) -> Self {
+        let mut nonce = [0u8; 32];
+        rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce);
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        DiscoveryAnnouncement {
+            magic: DISCOVERY_MAGIC,
+            version: 1,
+            role,
+            capabilities: 0,
+            ip_address: ip_address.octets(),
+            port: DISCOVERY_PORT,
+            timestamp,
+            sequence,
+            nonce,
+            hmac: [0u8; 32],
+        }
+    }
+
+    pub fn serialize(&self) -> [u8; ANNOUNCEMENT_SIZE] {
+        let mut buf = [0u8; ANNOUNCEMENT_SIZE];
+        let mut offset = 0;
+
+        // magic (4 bytes)
+        buf[offset..offset + 4].copy_from_slice(&self.magic);
+        offset += 4;
+
+        // version (2 bytes, big-endian)
+        buf[offset..offset + 2].copy_from_slice(&self.version.to_be_bytes());
+        offset += 2;
+
+        // role (1 byte)
+        buf[offset] = self.role as u8;
+        offset += 1;
+
+        // capabilities (4 bytes, big-endian)
+        buf[offset..offset + 4].copy_from_slice(&self.capabilities.to_be_bytes());
+        offset += 4;
+
+        // ip_address (4 bytes)
+        buf[offset..offset + 4].copy_from_slice(&self.ip_address);
+        offset += 4;
+
+        // port (2 bytes, big-endian)
+        buf[offset..offset + 2].copy_from_slice(&self.port.to_be_bytes());
+        offset += 2;
+
+        // timestamp (8 bytes, big-endian)
+        buf[offset..offset + 8].copy_from_slice(&self.timestamp.to_be_bytes());
+        offset += 8;
+
+        // sequence (4 bytes, big-endian)
+        buf[offset..offset + 4].copy_from_slice(&self.sequence.to_be_bytes());
+        offset += 4;
+
+        // nonce (32 bytes)
+        buf[offset..offset + 32].copy_from_slice(&self.nonce);
+        offset += 32;
+
+        // hmac (32 bytes)
+        buf[offset..offset + 32].copy_from_slice(&self.hmac);
+
+        buf
+    }
+
+    pub fn deserialize(buf: &[u8]) -> Result<Self, DiscoveryError> {
+        if buf.len() < ANNOUNCEMENT_SIZE {
+            return Err(DiscoveryError::HmacVerificationFailed);
+        }
+
+        let mut offset = 0;
+
+        // magic (4 bytes)
+        let mut magic = [0u8; 4];
+        magic.copy_from_slice(&buf[offset..offset + 4]);
+        if magic != DISCOVERY_MAGIC {
+            return Err(DiscoveryError::HmacVerificationFailed);
+        }
+        offset += 4;
+
+        // version (2 bytes)
+        let version = u16::from_be_bytes([buf[offset], buf[offset + 1]]);
+        offset += 2;
+
+        // role (1 byte)
+        let role = match buf[offset] {
+            0 => DiscoveryRole::Sender,
+            1 => DiscoveryRole::Receiver,
+            _ => return Err(DiscoveryError::HmacVerificationFailed),
+        };
+        offset += 1;
+
+        // capabilities (4 bytes)
+        let capabilities = u32::from_be_bytes([
+            buf[offset],
+            buf[offset + 1],
+            buf[offset + 2],
+            buf[offset + 3],
+        ]);
+        offset += 4;
+
+        // ip_address (4 bytes)
+        let mut ip_address = [0u8; 4];
+        ip_address.copy_from_slice(&buf[offset..offset + 4]);
+        offset += 4;
+
+        // port (2 bytes)
+        let port = u16::from_be_bytes([buf[offset], buf[offset + 1]]);
+        offset += 2;
+
+        // timestamp (8 bytes)
+        let timestamp = u64::from_be_bytes([
+            buf[offset],
+            buf[offset + 1],
+            buf[offset + 2],
+            buf[offset + 3],
+            buf[offset + 4],
+            buf[offset + 5],
+            buf[offset + 6],
+            buf[offset + 7],
+        ]);
+        offset += 8;
+
+        // sequence (4 bytes)
+        let sequence = u32::from_be_bytes([
+            buf[offset],
+            buf[offset + 1],
+            buf[offset + 2],
+            buf[offset + 3],
+        ]);
+        offset += 4;
+
+        // nonce (32 bytes)
+        let mut nonce = [0u8; 32];
+        nonce.copy_from_slice(&buf[offset..offset + 32]);
+        offset += 32;
+
+        // hmac (32 bytes)
+        let mut hmac = [0u8; 32];
+        hmac.copy_from_slice(&buf[offset..offset + 32]);
+
+        Ok(DiscoveryAnnouncement {
+            magic,
+            version,
+            role,
+            capabilities,
+            ip_address,
+            port,
+            timestamp,
+            sequence,
+            nonce,
+            hmac,
+        })
+    }
+
+    pub fn sign(&mut self, key: &[u8; 32]) {
+        // Compute HMAC over all fields except the HMAC itself
+        let data = self.serialize();
+        let data_without_hmac = &data[..ANNOUNCEMENT_SIZE - 32];
+        self.hmac = compute_hmac(key, data_without_hmac);
+    }
+
+    pub fn verify(&self, key: &[u8; 32]) -> bool {
+        let data = self.serialize();
+        let data_without_hmac = &data[..ANNOUNCEMENT_SIZE - 32];
+        verify_hmac(key, data_without_hmac, &self.hmac)
+    }
+
+    pub fn is_timestamp_valid(&self) -> bool {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Allow timestamps within TIMESTAMP_WINDOW_SECS in either direction
+        if self.timestamp > now {
+            self.timestamp - now <= TIMESTAMP_WINDOW_SECS
+        } else {
+            now - self.timestamp <= TIMESTAMP_WINDOW_SECS
+        }
+    }
+
+    pub fn get_ip_address(&self) -> Ipv4Addr {
+        Ipv4Addr::from(self.ip_address)
+    }
+}
+
+pub struct DiscoveryService {
+    key: [u8; 32],
+    role: DiscoveryRole,
+    local_ip: Ipv4Addr,
+    cancel: Arc<AtomicBool>,
+}
+
+impl DiscoveryService {
+    pub fn new(
+        key: [u8; 32],
+        mode: &Mode,
+        local_ip: Ipv4Addr,
+    ) -> Self {
+        DiscoveryService {
+            key,
+            role: DiscoveryRole::from(mode),
+            local_ip,
+            cancel: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn cancel(&self) {
+        self.cancel.store(true, Ordering::SeqCst);
+    }
+
+    pub async fn discover_peer<T: UI>(&self, ui: &T) -> Result<Ipv4Addr, FCError> {
+        ui.output("Starting peer discovery...");
+
+        let multicast_addr: Ipv4Addr = MULTICAST_ADDR.parse().unwrap();
+        let bind_addr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, DISCOVERY_PORT);
+
+        // Create multicast socket on DISCOVERY_PORT.
+        // This socket receives both multicast and unicast announcements from the peer.
+        let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
+            .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?;
+
+        socket
+            .set_reuse_address(true)
+            .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?;
+
+        socket
+            .bind(&bind_addr.into())
+            .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?;
+
+        socket
+            .join_multicast_v4(&multicast_addr, &self.local_ip)
+            .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?;
+
+        socket
+            .set_multicast_loop_v4(false)
+            .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?;
+
+        socket
+            .set_nonblocking(true)
+            .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?;
+
+        let recv_socket = Arc::new(
+            UdpSocket::from_std(socket.into())
+                .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?,
+        );
+
+        // Create unicast socket on ephemeral port for subnet scanning
+        let unicast_socket = Arc::new(
+            UdpSocket::bind("0.0.0.0:0")
+                .await
+                .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?,
+        );
+
+        let multicast_dest = SocketAddrV4::new(multicast_addr, DISCOVERY_PORT);
+
+        ui.output(&format!(
+            "Searching for peer via multicast ({}) and unicast subnet scan...",
+            MULTICAST_ADDR
+        ));
+
+        let (tx, mut rx) = mpsc::channel::<Ipv4Addr>(1);
+        let cancel = self.cancel.clone();
+        let key = self.key;
+        let our_role = self.role;
+        let local_ip = self.local_ip;
+
+        // Spawn receiver task on the multicast socket.
+        // Receives both multicast and direct unicast announcements on DISCOVERY_PORT.
+        {
+            let recv_socket = recv_socket.clone();
+            let cancel = cancel.clone();
+            let tx = tx.clone();
+
+            tokio::spawn(async move {
+                let mut buf = [0u8; 1024];
+                loop {
+                    if cancel.load(Ordering::SeqCst) {
+                        break;
+                    }
+
+                    match tokio::time::timeout(
+                        Duration::from_millis(100),
+                        recv_socket.recv_from(&mut buf),
+                    )
+                    .await
+                    {
+                        Ok(Ok((len, _src_addr))) => {
+                            if len < ANNOUNCEMENT_SIZE {
+                                continue;
+                            }
+
+                            if let Ok(announcement) =
+                                DiscoveryAnnouncement::deserialize(&buf[..len])
+                            {
+                                if announcement.get_ip_address() == local_ip {
+                                    continue;
+                                }
+                                if !announcement.verify(&key) {
+                                    continue;
+                                }
+                                if !announcement.is_timestamp_valid() {
+                                    continue;
+                                }
+                                if announcement.role == our_role {
+                                    continue;
+                                }
+
+                                let _ = tx.send(announcement.get_ip_address()).await;
+                                break;
+                            }
+                        }
+                        Ok(Err(_)) | Err(_) => {}
+                    }
+                }
+            });
+        }
+
+        // Spawn multicast sender task
+        {
+            let socket = recv_socket.clone();
+            let cancel = cancel.clone();
+
+            tokio::spawn(async move {
+                let mut sequence = 0u32;
+                let mut send_interval = interval(Duration::from_millis(DISCOVERY_INTERVAL_MS));
+                loop {
+                    send_interval.tick().await;
+                    if cancel.load(Ordering::SeqCst) {
+                        break;
+                    }
+
+                    let mut announcement =
+                        DiscoveryAnnouncement::new(our_role, local_ip, sequence);
+                    announcement.sign(&key);
+                    let data = announcement.serialize();
+
+                    let _ = socket
+                        .send_to(&data, SocketAddr::V4(multicast_dest))
+                        .await;
+                    sequence = sequence.wrapping_add(1);
+                }
+            });
+        }
+
+        // Spawn unicast sender task (subnet scan)
+        {
+            let cancel = cancel.clone();
+            let octets = local_ip.octets();
+            let base_ip = Ipv4Addr::new(octets[0], octets[1], octets[2], 0);
+
+            tokio::spawn(async move {
+                let mut sequence = 0u32;
+                loop {
+                    if cancel.load(Ordering::SeqCst) {
+                        break;
+                    }
+
+                    for i in 1..=254u8 {
+                        if cancel.load(Ordering::SeqCst) {
+                            return;
+                        }
+
+                        let target_ip = Ipv4Addr::new(
+                            base_ip.octets()[0],
+                            base_ip.octets()[1],
+                            base_ip.octets()[2],
+                            i,
+                        );
+                        if target_ip == local_ip {
+                            continue;
+                        }
+
+                        let mut announcement =
+                            DiscoveryAnnouncement::new(our_role, local_ip, sequence);
+                        announcement.sign(&key);
+                        let data = announcement.serialize();
+
+                        let dest = SocketAddrV4::new(target_ip, DISCOVERY_PORT);
+                        let _ = unicast_socket
+                            .send_to(&data, SocketAddr::V4(dest))
+                            .await;
+                    }
+
+                    sequence = sequence.wrapping_add(1);
+                    tokio::time::sleep(Duration::from_millis(DISCOVERY_INTERVAL_MS)).await;
+                }
+            });
+        }
+
+        // Wait for peer discovery with timeout
+        let result = timeout(Duration::from_secs(DISCOVERY_TIMEOUT_SECS), async {
+            loop {
+                tokio::select! {
+                    Some(peer_ip) = rx.recv() => {
+                        return Ok(peer_ip);
+                    }
+                    _ = tokio::time::sleep(Duration::from_millis(100)) => {
+                        if cancel.load(Ordering::SeqCst) {
+                            return Err(FCError {
+                                message: "Discovery cancelled".to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+        })
+        .await;
+
+        // Stop all background tasks
+        self.cancel.store(true, Ordering::SeqCst);
+
+        match result {
+            Ok(Ok(peer_ip)) => {
+                ui.output(&format!("Discovered peer at {}", peer_ip));
+                Ok(peer_ip)
+            }
+            Ok(Err(e)) => Err(e),
+            Err(_) => Err(DiscoveryError::TimeoutWaitingForPeer.into()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_announcement_serialize_deserialize() {
+        let ip = Ipv4Addr::new(192, 168, 1, 100);
+        let mut announcement = DiscoveryAnnouncement::new(DiscoveryRole::Sender, ip, 42);
+
+        let key = [0xABu8; 32];
+        announcement.sign(&key);
+
+        let serialized = announcement.serialize();
+        assert_eq!(serialized.len(), ANNOUNCEMENT_SIZE);
+
+        let deserialized = DiscoveryAnnouncement::deserialize(&serialized).unwrap();
+        assert_eq!(deserialized.magic, DISCOVERY_MAGIC);
+        assert_eq!(deserialized.version, 1);
+        assert_eq!(deserialized.role, DiscoveryRole::Sender);
+        assert_eq!(deserialized.ip_address, ip.octets());
+        assert_eq!(deserialized.port, DISCOVERY_PORT);
+        assert_eq!(deserialized.sequence, 42);
+        assert!(deserialized.verify(&key));
+    }
+
+    #[test]
+    fn test_hmac_verification() {
+        let ip = Ipv4Addr::new(10, 0, 0, 5);
+        let mut announcement = DiscoveryAnnouncement::new(DiscoveryRole::Receiver, ip, 1);
+
+        let key = [0xCDu8; 32];
+        announcement.sign(&key);
+
+        assert!(announcement.verify(&key));
+
+        // Wrong key should fail
+        let wrong_key = [0xEFu8; 32];
+        assert!(!announcement.verify(&wrong_key));
+    }
+
+    #[test]
+    fn test_timestamp_validation() {
+        let ip = Ipv4Addr::new(172, 16, 0, 1);
+        let announcement = DiscoveryAnnouncement::new(DiscoveryRole::Sender, ip, 0);
+
+        assert!(announcement.is_timestamp_valid());
+    }
+}

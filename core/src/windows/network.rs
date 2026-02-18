@@ -173,6 +173,183 @@ fn run_shell_execute(
     Ok(())
 }
 
+/// Get local IPv4 address on the specified interface (works for WiFi or wired)
+pub fn get_local_ip(interface: &WiFiInterface) -> Result<std::net::Ipv4Addr, FCError> {
+    let guid = u128::from_str_radix(&interface.1, 10).map_err(|e| FCError {
+        message: format!("Invalid interface GUID: {}", e),
+    })?;
+    let target_guid = GUID::from_u128(guid);
+
+    let working_buffer_size = 15_000;
+    let family = 2; // IPv4
+    let flags = IpHelper::GAA_FLAG_INCLUDE_PREFIX;
+    let mut ip_adapter_addresses_lh = vec![0u8; working_buffer_size];
+    let mut pip_ip_adapter_addresses_lh =
+        (ip_adapter_addresses_lh.as_mut_ptr()) as *mut IpHelper::IP_ADAPTER_ADDRESSES_LH;
+    let mut size = working_buffer_size as u32;
+
+    unsafe {
+        let res = IpHelper::GetAdaptersAddresses(
+            family,
+            flags,
+            None,
+            Some(pip_ip_adapter_addresses_lh),
+            &mut size,
+        );
+        if WIN32_ERROR(res) != ERROR_SUCCESS {
+            fc_error(&format!(
+                "Could not get adapter addresses: {}",
+                get_windows_error(res)?
+            ))?;
+        }
+
+        while !pip_ip_adapter_addresses_lh.is_null() {
+            let adapter_name = (*pip_ip_adapter_addresses_lh).AdapterName;
+            let adapter_guid_str = adapter_name.to_string().unwrap_or_default();
+
+            // Check if this adapter matches our target interface by comparing GUIDs
+            if let Ok(adapter_guid) = GUID::try_from(adapter_guid_str.as_str()) {
+                if adapter_guid == target_guid {
+                    let unicast = (*pip_ip_adapter_addresses_lh).FirstUnicastAddress;
+                    if !unicast.is_null() {
+                        let address = (*unicast).Address;
+                        let sa_data = (*address.lpSockaddr).sa_data;
+
+                        let mut octets = [0u8; 4];
+                        for i in 2..=5 {
+                            octets[i - 2] = sa_data[i] as u8;
+                        }
+
+                        return Ok(std::net::Ipv4Addr::from(octets));
+                    }
+                }
+            }
+
+            pip_ip_adapter_addresses_lh = (*pip_ip_adapter_addresses_lh).Next;
+        }
+    }
+
+    // Fallback: try to get any WiFi interface IP
+    get_any_wifi_ip()
+}
+
+fn get_any_wifi_ip() -> Result<std::net::Ipv4Addr, FCError> {
+    let working_buffer_size = 15_000;
+    let family = 2; // IPv4
+    let flags = IpHelper::GAA_FLAG_INCLUDE_PREFIX;
+    let mut ip_adapter_addresses_lh = vec![0u8; working_buffer_size];
+    let mut pip_ip_adapter_addresses_lh =
+        (ip_adapter_addresses_lh.as_mut_ptr()) as *mut IpHelper::IP_ADAPTER_ADDRESSES_LH;
+    let mut size = working_buffer_size as u32;
+
+    unsafe {
+        let res = IpHelper::GetAdaptersAddresses(
+            family,
+            flags,
+            None,
+            Some(pip_ip_adapter_addresses_lh),
+            &mut size,
+        );
+        if WIN32_ERROR(res) != ERROR_SUCCESS {
+            fc_error(&format!(
+                "Could not get adapter addresses: {}",
+                get_windows_error(res)?
+            ))?;
+        }
+
+        while !pip_ip_adapter_addresses_lh.is_null() {
+            if (*pip_ip_adapter_addresses_lh).IfType == IpHelper::IF_TYPE_IEEE80211
+                || (*pip_ip_adapter_addresses_lh).IfType == IpHelper::IF_TYPE_ETHERNET_CSMACD
+            {
+                let unicast = (*pip_ip_adapter_addresses_lh).FirstUnicastAddress;
+                if !unicast.is_null() {
+                    let address = (*unicast).Address;
+                    let sa_data = (*address.lpSockaddr).sa_data;
+
+                    let mut octets = [0u8; 4];
+                    for i in 2..=5 {
+                        octets[i - 2] = sa_data[i] as u8;
+                    }
+
+                    let ip = std::net::Ipv4Addr::from(octets);
+                    // Skip loopback and link-local addresses
+                    if !ip.is_loopback() && !ip.is_link_local() {
+                        return Ok(ip);
+                    }
+                }
+            }
+            pip_ip_adapter_addresses_lh = (*pip_ip_adapter_addresses_lh).Next;
+        }
+    }
+
+    fc_error("No network interface with IPv4 address found")?;
+    unreachable!()
+}
+
+/// Check if interface has an active network connection
+pub fn has_network_connection(interface: &WiFiInterface) -> Result<bool, FCError> {
+    // Try to get an IP address for the interface - if we can, it's connected
+    match get_local_ip(interface) {
+        Ok(_) => Ok(true),
+        Err(_) => Ok(false),
+    }
+}
+
+/// Get all network interfaces that have an active IPv4 connection
+pub fn get_connected_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
+    let working_buffer_size = 15_000;
+    let family = 2; // IPv4
+    let flags = IpHelper::GAA_FLAG_INCLUDE_PREFIX;
+    let mut ip_adapter_addresses_lh = vec![0u8; working_buffer_size];
+    let mut pip_ip_adapter_addresses_lh =
+        (ip_adapter_addresses_lh.as_mut_ptr()) as *mut IpHelper::IP_ADAPTER_ADDRESSES_LH;
+    let mut size = working_buffer_size as u32;
+
+    let mut interfaces = Vec::new();
+
+    unsafe {
+        let res = IpHelper::GetAdaptersAddresses(
+            family,
+            flags,
+            None,
+            Some(pip_ip_adapter_addresses_lh),
+            &mut size,
+        );
+        if WIN32_ERROR(res) != ERROR_SUCCESS {
+            fc_error(&format!(
+                "Could not get adapter addresses: {}",
+                get_windows_error(res)?
+            ))?;
+        }
+
+        while !pip_ip_adapter_addresses_lh.is_null() {
+            // Only include WiFi and Ethernet interfaces with IP addresses
+            if ((*pip_ip_adapter_addresses_lh).IfType == IpHelper::IF_TYPE_IEEE80211
+                || (*pip_ip_adapter_addresses_lh).IfType == IpHelper::IF_TYPE_ETHERNET_CSMACD)
+                && !(*pip_ip_adapter_addresses_lh).FirstUnicastAddress.is_null()
+            {
+                let name = String::from_utf16_lossy(
+                    &(*pip_ip_adapter_addresses_lh).FriendlyName.as_wide(),
+                )
+                .trim_matches(char::from(0))
+                .to_string();
+
+                let adapter_name = (*pip_ip_adapter_addresses_lh).AdapterName;
+                let guid_str = adapter_name.to_string().unwrap_or_default();
+
+                // Parse GUID and convert to u128 string
+                if let Ok(guid) = GUID::try_from(guid_str.as_str()) {
+                    let guid_u128 = format!("{}", guid.to_u128());
+                    interfaces.push(WiFiInterface(name, guid_u128));
+                }
+            }
+            pip_ip_adapter_addresses_lh = (*pip_ip_adapter_addresses_lh).Next;
+        }
+    }
+
+    Ok(interfaces)
+}
+
 // returns Ok(Some(gateway)) if gateway found, Ok(None) if no gateway found but no error, and Err otherwise.
 fn find_gateway() -> Result<Option<String>, FCError> {
     let working_buffer_size = 15_000;

@@ -6,12 +6,14 @@ pub mod network;
 #[cfg_attr(target_os = "windows", path = "windows/bluetooth.rs")]
 pub mod bluetooth;
 
+pub mod discovery;
 pub mod error;
 mod receiving;
 mod sending;
 pub mod utils;
 
 use bluetooth::negotiate_bluetooth;
+use discovery::{DiscoveryRole, DiscoveryService};
 use error::{fc_error, FCError};
 use std::{
     net::SocketAddr,
@@ -28,6 +30,12 @@ use utils::get_key_and_ssid;
 
 const CHUNKSIZE: usize = 1_000_000; // 1 MB
 const MAJOR_VERSION: u64 = 9;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ConnectionMode {
+    Hotspot,
+    SharedNetwork,
+}
 
 pub trait UI: Clone + Send + 'static {
     fn output(&self, msg: &str);
@@ -105,6 +113,7 @@ pub async fn start_transfer<T: UI>(
     hotspot: Arc<Mutex<Option<PeerResource>>>,
     state_ssid: Arc<Mutex<Option<String>>>,
     ble_ui_rx: mpsc::Receiver<bool>,
+    connection_mode: ConnectionMode,
 ) -> Option<TcpStream> {
     // get files or receive directory
     let mode = if mode == "send" {
@@ -141,12 +150,7 @@ pub async fn start_transfer<T: UI>(
         }
     }
 
-    let peer = Peer::from(
-        peer.expect("Neither UI nor Bluetooth peer present.")
-            .as_str(),
-    );
     let password = password.expect("Missing password in start_transfer().");
-
     let (key, ssid) = get_key_and_ssid(&password);
 
     {
@@ -154,24 +158,49 @@ pub async fn start_transfer<T: UI>(
         *_state_ssid = Some(ssid.clone());
     }
 
-    // start hotspot or connect to peer's
-    let peer_resource =
-        match network::connect_to_peer(peer, mode.clone(), ssid, password, interface, ui).await {
-            Ok(p) => p,
-            Err(e) => {
-                ui.output(&format!("Error connecting to peer: {}", e));
-                return None;
+    // Handle connection based on mode
+    let (peer_resource, mut stream) = match connection_mode {
+        ConnectionMode::SharedNetwork => {
+            // Shared Network Mode: Use discovery to find peer on existing network
+            match start_shared_network_transfer(&mode, &key, &interface, ui).await {
+                Ok((resource, stream)) => (resource, stream),
+                Err(e) => {
+                    ui.output(&format!("Error in shared network mode: {}", e));
+                    return None;
+                }
             }
-        };
+        }
+        ConnectionMode::Hotspot => {
+            // Original Hotspot Mode
+            let peer = Peer::from(
+                peer.expect("Neither UI nor Bluetooth peer present.")
+                    .as_str(),
+            );
 
-    tokio::task::yield_now().await;
+            // start hotspot or connect to peer's
+            let peer_resource =
+                match network::connect_to_peer(peer, mode.clone(), ssid, password, interface, ui)
+                    .await
+                {
+                    Ok(p) => p,
+                    Err(e) => {
+                        ui.output(&format!("Error connecting to peer: {}", e));
+                        return None;
+                    }
+                };
 
-    // start tcp connection
-    let mut stream = match start_tcp(&peer_resource, ui).await {
-        Ok(s) => s,
-        Err(e) => {
-            ui.output(&format!("Error starting TCP connection: {}", e));
-            return None;
+            tokio::task::yield_now().await;
+
+            // start tcp connection
+            let stream = match start_tcp(&peer_resource, ui).await {
+                Ok(s) => s,
+                Err(e) => {
+                    ui.output(&format!("Error starting TCP connection: {}", e));
+                    return None;
+                }
+            };
+
+            (peer_resource, stream)
         }
     };
 
@@ -185,7 +214,7 @@ pub async fn start_transfer<T: UI>(
     };
 
     // confirm that one end is sending and the other is receiving
-    match confirm_mode(mode.clone(), &peer_resource, &mut stream).await {
+    match confirm_mode(mode.clone(), &peer_resource, &mut stream, connection_mode).await {
         Ok(()) => (),
         Err(e) => {
             ui.output(&format!("Error confirming mode: {}", e));
@@ -336,46 +365,150 @@ async fn start_tcp<T: UI>(peer_resource: &PeerResource, ui: &T) -> Result<TcpStr
     Ok(stream)
 }
 
+async fn start_shared_network_transfer<T: UI>(
+    mode: &Mode,
+    key: &[u8; 32],
+    interface: &WiFiInterface,
+    ui: &T,
+) -> Result<(PeerResource, TcpStream), FCError> {
+    // Check for network connection
+    if !network::has_network_connection(interface)? {
+        fc_error("No network connection on selected interface")?;
+    }
+
+    // Get local IP
+    let local_ip = network::get_local_ip(interface)?;
+    ui.output(&format!("Local IP: {}", local_ip));
+
+    // Create discovery service (no session_id - peer matching done via password HMAC + role)
+    let discovery = DiscoveryService::new(*key, mode, local_ip);
+
+    // Determine role for TCP connection
+    let role = DiscoveryRole::from(mode);
+
+    // Start discovery and TCP connection in parallel
+    // Senders listen for TCP, Receivers connect
+    let peer_ip = discovery.discover_peer(ui).await?;
+
+    let stream = match role {
+        DiscoveryRole::Sender => {
+            // Sender listens for incoming TCP connection
+            let addr = "0.0.0.0:3290".parse::<SocketAddr>()?;
+            let listener = TcpListener::bind(&addr).await?;
+            ui.output("Waiting for TCP connection from peer...");
+
+            // Wait for connection with timeout
+            let accept_result = tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                listener.accept(),
+            )
+            .await;
+
+            match accept_result {
+                Ok(Ok((stream, addr))) => {
+                    ui.output(&format!("TCP connection accepted from {}", addr));
+                    stream
+                }
+                Ok(Err(e)) => {
+                    fc_error(&format!("Error accepting TCP connection: {}", e))?;
+                    unreachable!()
+                }
+                Err(_) => {
+                    fc_error("Timeout waiting for TCP connection")?;
+                    unreachable!()
+                }
+            }
+        }
+        DiscoveryRole::Receiver => {
+            // Receiver connects to sender
+            ui.output(&format!("Connecting to peer at {}:3290", peer_ip));
+
+            // Retry connection a few times
+            let mut stream = None;
+            for attempt in 1..=5 {
+                match TcpStream::connect(format!("{}:3290", peer_ip)).await {
+                    Ok(s) => {
+                        stream = Some(s);
+                        break;
+                    }
+                    Err(e) => {
+                        if attempt < 5 {
+                            ui.output(&format!(
+                                "Connection attempt {} failed, retrying...",
+                                attempt
+                            ));
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        } else {
+                            fc_error(&format!("Failed to connect to peer: {}", e))?;
+                        }
+                    }
+                }
+            }
+
+            stream.unwrap()
+        }
+    };
+
+    ui.output("TCP connection established");
+    Ok((PeerResource::WifiClient(peer_ip.to_string()), stream))
+}
+
 async fn confirm_mode(
     mode: Mode,
     peer_resource: &PeerResource,
     stream: &mut TcpStream,
+    connection_mode: ConnectionMode,
 ) -> Result<(), FCError> {
-    let our_mode = match mode {
+    let our_mode: u64 = match mode {
         Mode::Send(..) => 1,
         Mode::Receive(..) => 0,
     };
 
-    match peer_resource {
-        PeerResource::WifiClient(..) => {
-            // tell host what mode we selected and wait for confirmation that they don't match
-            match mode {
-                Mode::Send(_) => stream.write_u64(1).await?,
-                Mode::Receive(_) => stream.write_u64(0).await?,
-            };
-            // wait to ensure host responds that mode selection was correct
-            if stream.read_u64().await? != 1 {
-                let message = format!(
-                    "Both ends of the transfer selected {}",
-                    if our_mode == 0 { "receive" } else { "send" }
-                );
-                fc_error(&message)?
-            }
-        }
-        PeerResource::WindowsHotspot(_) | PeerResource::LinuxHotspot => {
-            // wait for guest to say what mode they selected, compare to our own, and report back
+    match connection_mode {
+        ConnectionMode::SharedNetwork => {
+            // Symmetric approach (matches Apple implementation):
+            // Both sides send their mode, both sides read peer's mode, both verify opposite
+            stream.write_u64(our_mode).await?;
             let peer_mode = stream.read_u64().await?;
             if peer_mode == our_mode {
                 let msg = format!(
                     "Both ends of the transfer selected {}",
                     if our_mode == 0 { "receive" } else { "send" }
                 );
-                // write failure to guest
-                stream.write_u64(0).await?;
                 fc_error(&msg)?
-            } else {
-                // write success to guest
-                stream.write_u64(1).await?;
+            }
+        }
+        ConnectionMode::Hotspot => {
+            // Asymmetric approach for backward compatibility with hotspot mode
+            match peer_resource {
+                PeerResource::WifiClient(..) => {
+                    // tell host what mode we selected and wait for confirmation that they don't match
+                    stream.write_u64(our_mode).await?;
+                    // wait to ensure host responds that mode selection was correct
+                    if stream.read_u64().await? != 1 {
+                        let message = format!(
+                            "Both ends of the transfer selected {}",
+                            if our_mode == 0 { "receive" } else { "send" }
+                        );
+                        fc_error(&message)?
+                    }
+                }
+                PeerResource::WindowsHotspot(_) | PeerResource::LinuxHotspot => {
+                    // wait for guest to say what mode they selected, compare to our own, and report back
+                    let peer_mode = stream.read_u64().await?;
+                    if peer_mode == our_mode {
+                        let msg = format!(
+                            "Both ends of the transfer selected {}",
+                            if our_mode == 0 { "receive" } else { "send" }
+                        );
+                        // write failure to guest
+                        stream.write_u64(0).await?;
+                        fc_error(&msg)?
+                    } else {
+                        // write success to guest
+                        stream.write_u64(1).await?;
+                    }
+                }
             }
         }
     }

@@ -7,6 +7,39 @@ pub struct FCError {
     pub message: String,
 }
 
+#[derive(Debug)]
+pub enum DiscoveryError {
+    NoNetworkInterface,
+    MulticastBindFailed(String),
+    HmacVerificationFailed,
+    SessionIdMismatch,
+    TimestampExpired,
+    TimeoutWaitingForPeer,
+}
+
+impl std::fmt::Display for DiscoveryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DiscoveryError::NoNetworkInterface => write!(f, "No usable network interface found"),
+            DiscoveryError::MulticastBindFailed(msg) => {
+                write!(f, "Failed to bind multicast socket: {}", msg)
+            }
+            DiscoveryError::HmacVerificationFailed => write!(f, "HMAC verification failed"),
+            DiscoveryError::SessionIdMismatch => write!(f, "Session ID mismatch"),
+            DiscoveryError::TimestampExpired => write!(f, "Timestamp expired"),
+            DiscoveryError::TimeoutWaitingForPeer => write!(f, "Timeout waiting for peer"),
+        }
+    }
+}
+
+impl From<DiscoveryError> for FCError {
+    fn from(value: DiscoveryError) -> Self {
+        FCError {
+            message: format!("Discovery error: {}", value),
+        }
+    }
+}
+
 impl std::fmt::Display for FCError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.message)

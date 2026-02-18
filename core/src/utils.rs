@@ -72,6 +72,22 @@ pub fn get_key_and_ssid(password: &str) -> ([u8; 32], String) {
     (key.into(), ssid)
 }
 
+pub fn compute_hmac(key: &[u8; 32], data: &[u8]) -> [u8; 32] {
+    use hmac::{Hmac, Mac};
+    type HmacSha256 = Hmac<sha2::Sha256>;
+    let mut mac = HmacSha256::new_from_slice(key).unwrap();
+    mac.update(data);
+    mac.finalize().into_bytes().into()
+}
+
+pub fn verify_hmac(key: &[u8; 32], data: &[u8], expected: &[u8; 32]) -> bool {
+    use hmac::{Hmac, Mac};
+    type HmacSha256 = Hmac<sha2::Sha256>;
+    let mut mac = HmacSha256::new_from_slice(key).unwrap();
+    mac.update(data);
+    mac.verify_slice(expected).is_ok()
+}
+
 pub fn hash_file(filename: &Path) -> Result<Vec<u8>, FCError> {
     let mut file = fs::File::open(filename)?;
     let mut hasher = Sha256::new();

@@ -47,6 +47,16 @@
         <label class="btn btn-outline-primary" for="receiveButton">Receive</label>
       </div>
 
+      <!-- connection mode box -->
+      <label id="connectionModeLabel" style="margin-left: 10px">Connection Mode</label>
+      <div class="btn-group" role="group" aria-label="Connection mode selector" id="connectionModeBox" style="margin: 10px; margin-top: 0px;">
+        <input type="radio" class="btn-check" name="connectionradio" id="hotspotButton" autocomplete="off" onchange="connectionModeChange('hotspot')" checked>
+        <label class="btn btn-outline-primary" for="hotspotButton">Hotspot</label>
+
+        <input type="radio" class="btn-check" name="connectionradio" id="sharedNetworkButton" autocomplete="off" onchange="connectionModeChange('shared_network')">
+        <label class="btn btn-outline-primary" for="sharedNetworkButton">Shared Network</label>
+      </div>
+
       <!-- peer box -->
       <label id="peerLabel" style="margin-left: 10px">Select Peer OS</label>
       <div class="btn-group" role="group" aria-label="Peer selector" id="peerBox" style="margin: 10px; margin-top: 0px;">

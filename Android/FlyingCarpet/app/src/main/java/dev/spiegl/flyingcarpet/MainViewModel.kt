@@ -44,6 +44,11 @@ enum class Peer {
     Windows,
 }
 
+enum class ConnectionMode {
+    Hotspot,
+    SharedNetwork,
+}
+
 const val MAJOR_VERSION: Long = 9
 val zero = ByteArray(8) // meant to represent a 64-bit unsigned 0
 val one = byteArrayOf(0, 0, 0, 0, 0, 0, 0, 1) // meant to represent a 64-bit unsigned 1
@@ -58,6 +63,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     var ssid: String = ""
     var password: String = ""
     lateinit var key: ByteArray
+    var connectionMode: ConnectionMode = ConnectionMode.Hotspot
     var files: MutableList<DocumentFile> = mutableListOf()
     var fileStreams: MutableList<InputStream> = mutableListOf()
     var filePaths: MutableList<String> = mutableListOf() // paths relative to root directory peer is sending to

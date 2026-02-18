@@ -203,6 +203,62 @@ fn find_gateway(interface: &str) -> Result<String, FCError> {
     Ok(stdout.trim().to_string())
 }
 
+/// Get local IPv4 address on the specified interface (works for WiFi or wired)
+pub fn get_local_ip(interface: &WiFiInterface) -> Result<std::net::Ipv4Addr, FCError> {
+    let ip_command = format!(
+        "ip -4 addr show {} | grep inet | awk '{{print $2}}' | cut -d/ -f1",
+        interface.0
+    );
+    let output = run_command("sh", Some(vec!["-c", &ip_command]))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let ip_str = stdout.trim();
+
+    if ip_str.is_empty() {
+        fc_error(&format!("No IPv4 address found on interface {}", interface.0))?;
+    }
+
+    ip_str
+        .parse()
+        .map_err(|e| FCError {
+            message: format!("Failed to parse IP address '{}': {}", ip_str, e),
+        })
+}
+
+/// Check if interface has an active network connection
+pub fn has_network_connection(interface: &WiFiInterface) -> Result<bool, FCError> {
+    // Check if interface has an IP address assigned
+    let ip_command = format!(
+        "ip -4 addr show {} | grep inet",
+        interface.0
+    );
+    let output = run_command("sh", Some(vec!["-c", &ip_command]))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    Ok(!stdout.trim().is_empty())
+}
+
+/// Get all network interfaces that have an active IPv4 connection
+pub fn get_connected_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
+    // Get all interfaces with IPv4 addresses
+    let output = run_command("ip", Some(vec!["-4", "-o", "addr", "show"]))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    let mut interfaces = Vec::new();
+    for line in stdout.lines() {
+        // Format: "2: eth0    inet 192.168.1.100/24 brd 192.168.1.255 scope global eth0"
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 2 {
+            let iface_name = parts[1].trim_end_matches(':');
+            // Skip loopback
+            if iface_name != "lo" {
+                interfaces.push(WiFiInterface(iface_name.to_string(), String::new()));
+            }
+        }
+    }
+
+    Ok(interfaces)
+}
+
 fn get_username() -> String {
     std::env::var("USER")
         .or_else(|_| std::env::var("USERNAME"))
