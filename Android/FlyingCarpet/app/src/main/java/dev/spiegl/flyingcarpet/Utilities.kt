@@ -91,10 +91,13 @@ fun MainViewModel.hashFile(file: DocumentFile): ByteArray {
         ?: throw Exception("Could not open file to hash")
     val buffer = ByteArray(1_000_000)
     val hasher = MessageDigest.getInstance("SHA-256")
-    do {
+    while (true) {
         val bytesRead = stream.read(buffer)
-        hasher.update(buffer.sliceArray(IntRange(0, bytesRead - 1)))
-    } while (bytesRead != -1)
+        if (bytesRead == -1) {
+            break
+        }
+        hasher.update(buffer, 0, bytesRead)
+    }
     stream.close()
     return hasher.digest()
 }

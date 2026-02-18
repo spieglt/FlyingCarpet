@@ -3,8 +3,7 @@ use bluer::{
         remote::{Characteristic, CharacteristicWriteRequest},
         WriteOp,
     },
-    Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, ErrorKind, Result,
-    Uuid,
+    Adapter, AdapterEvent, Device, DiscoveryFilter, DiscoveryTransport, ErrorKind, Result, Uuid,
 };
 use futures::{pin_mut, StreamExt};
 use std::{
@@ -218,7 +217,11 @@ pub async fn exchange_info(
 
     let ssid_char = &characteristics[SSID_CHARACTERISTIC_UUID];
     let password_char = &characteristics[PASSWORD_CHARACTERISTIC_UUID];
-    if is_hosting(&Peer::from(peer_os.as_str()), mode) {
+    let peer = Peer::try_from(peer_os.as_str()).map_err(|e| bluer::Error {
+        kind: ErrorKind::ServicesUnresolved,
+        message: e.to_string(),
+    })?;
+    if is_hosting(&peer, mode) {
         // write ssid and password
         let password = generate_password();
         let (_, ssid) = get_key_and_ssid(&password);

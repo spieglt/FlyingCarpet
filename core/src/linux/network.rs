@@ -126,7 +126,12 @@ pub fn stop_hotspot(
     }
 }
 
-async fn join_hotspot<T: UI>(ssid: &str, password: &str, interface: &str, ui: &T) -> Result<(), FCError> {
+async fn join_hotspot<T: UI>(
+    ssid: &str,
+    password: &str,
+    interface: &str,
+    ui: &T,
+) -> Result<(), FCError> {
     let nmcli = "nmcli";
     let user_str = &format!("user:{}", get_username());
     let commands = vec![
@@ -284,7 +289,6 @@ mod test {
 
     #[test]
     fn join_hotspot() {
-
         #[derive(Clone)]
         struct TestUI {}
         impl UI for TestUI {
@@ -302,7 +306,9 @@ mod test {
         let interface = interface.to_string();
         let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
         tokio::spawn(async move {
-            crate::network::join_hotspot(ssid, password, &interface, &TestUI{}).await.unwrap();
+            crate::network::join_hotspot(ssid, password, &interface, &TestUI {})
+                .await
+                .unwrap();
             std::thread::sleep(std::time::Duration::from_secs(20));
             crate::network::stop_hotspot(Some(&pr), Some(ssid)).unwrap();
             tx.send(()).await.unwrap();

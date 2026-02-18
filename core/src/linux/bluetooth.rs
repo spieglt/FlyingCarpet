@@ -105,7 +105,8 @@ pub async fn negotiate_bluetooth<T: UI>(
         println!("Removing advertisement");
         drop(adv_handle);
 
-        if is_hosting(&Peer::from(peer_os.as_str()), mode) {
+        let peer = Peer::try_from(peer_os.as_str())?;
+        if is_hosting(&peer, mode) {
             // wait for peer to read our ssid and password
             process_bluetooth_message(BluetoothMessage::PeerReadSsid, &mut rx, ui).await?;
             println!("Peer read SSID");
@@ -158,7 +159,11 @@ pub async fn negotiate_bluetooth<T: UI>(
         let device = central::scan(&adapter).await?;
         ui.output("Found device");
 
-        let mut connected_peripheral = ConnectedPeripheral{adapter, address: device.address(), is_macos: false};
+        let mut connected_peripheral = ConnectedPeripheral {
+            adapter,
+            address: device.address(),
+            is_macos: false,
+        };
 
         let characteristics = match find_characteristics(&device).await {
             Ok(c) => c,
@@ -169,9 +174,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         };
         let info = match exchange_info(characteristics, mode).await {
             Ok(i) => i,
-            Err(e) => {
-                Err(e)?
-            }
+            Err(e) => Err(e)?,
         };
         connected_peripheral.is_macos = info.0 == "mac".to_string();
         Ok(info)

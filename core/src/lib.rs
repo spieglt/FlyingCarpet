@@ -60,15 +60,19 @@ pub enum Peer {
     Windows,
 }
 
-impl From<&str> for Peer {
-    fn from(peer: &str) -> Self {
+impl TryFrom<&str> for Peer {
+    type Error = FCError;
+
+    fn try_from(peer: &str) -> Result<Self, Self::Error> {
         match peer {
-            "android" => Peer::Android,
-            "ios" => Peer::IOS,
-            "linux" => Peer::Linux,
-            "mac" => Peer::MacOS,
-            "windows" => Peer::Windows,
-            other => panic!("Bad peer: {}", other),
+            "android" => Ok(Peer::Android),
+            "ios" => Ok(Peer::IOS),
+            "linux" => Ok(Peer::Linux),
+            "mac" => Ok(Peer::MacOS),
+            "windows" => Ok(Peer::Windows),
+            other => Err(FCError {
+                message: format!("Bad peer: {}", other),
+            }),
         }
     }
 }
@@ -172,10 +176,16 @@ pub async fn start_transfer<T: UI>(
         }
         ConnectionMode::Hotspot => {
             // Original Hotspot Mode
-            let peer = Peer::from(
+            let peer = match Peer::try_from(
                 peer.expect("Neither UI nor Bluetooth peer present.")
                     .as_str(),
-            );
+            ) {
+                Ok(p) => p,
+                Err(e) => {
+                    ui.output(&format!("Error parsing peer: {}", e));
+                    return None;
+                }
+            };
 
             // start hotspot or connect to peer's
             let peer_resource =

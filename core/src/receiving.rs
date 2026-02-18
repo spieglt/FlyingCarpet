@@ -4,7 +4,7 @@ use core::time;
 use std::{
     fs,
     io::Write,
-    path::Path,
+    path::{Component, Path, PathBuf},
     time::{Duration, Instant},
 };
 use tokio::{
@@ -37,8 +37,9 @@ pub async fn receive_file<T: UI>(
     let mut bytes_left = file_size;
 
     // see if we already have the file being sent
+    let relative_path = sanitize_relative_filename(&filename)?;
     let mut full_path = folder.clone();
-    full_path.push(&filename);
+    full_path.push(&relative_path);
     let need_transfer = check_for_file(&full_path, file_size, stream).await?;
     if !need_transfer {
         ui.output("Recipient already has this file, skipping.");
@@ -145,13 +146,30 @@ async fn receive_and_decrypt_chunk(
     }
 }
 
-async fn receive_file_details(stream: &mut TcpStream) -> std::io::Result<(String, u64)> {
+fn sanitize_relative_filename(filename: &str) -> Result<PathBuf, FCError> {
+    let mut sanitized = PathBuf::new();
+    for component in Path::new(filename).components() {
+        match component {
+            Component::Normal(part) => sanitized.push(part),
+            Component::CurDir => (),
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                fc_error(&format!("Received invalid filename path: {}", filename))?
+            }
+        }
+    }
+    if sanitized.as_os_str().is_empty() {
+        fc_error("Received empty filename")?;
+    }
+    Ok(sanitized)
+}
+
+async fn receive_file_details(stream: &mut TcpStream) -> Result<(String, u64), FCError> {
     // receive size of filename
     let filename_size = stream.read_u64().await? as usize;
     // receive filename
     let mut filename_bytes = vec![0; filename_size];
     stream.read_exact(&mut filename_bytes).await?;
-    let filename = String::from_utf8_lossy(&filename_bytes).to_string();
+    let filename = String::from_utf8(filename_bytes)?;
     // receive file size
     let file_size = stream.read_u64().await?;
     Ok((filename, file_size))
