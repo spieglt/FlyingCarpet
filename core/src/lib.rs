@@ -394,9 +394,10 @@ async fn start_shared_network_transfer<T: UI>(
     // Determine role for TCP connection
     let role = DiscoveryRole::from(mode);
 
-    // Sender: bind TCP listener *before* discovery so it's ready when the
-    // receiver connects immediately after discovering us.
-    let listener = if role == DiscoveryRole::Sender {
+    // Receiver is TCP server (consistent with hotspot same-platform convention
+    // where the receiver hosts). Bind listener *before* discovery so it's ready
+    // when the sender connects immediately after discovering us.
+    let listener = if role == DiscoveryRole::Receiver {
         let addr = "0.0.0.0:3290".parse::<SocketAddr>()?;
         let listener = TcpListener::bind(&addr).await?;
         ui.output("TCP listener ready on port 3290.");
@@ -410,7 +411,7 @@ async fn start_shared_network_transfer<T: UI>(
     let peer_ip = discovery.discover_peer(ui).await?;
 
     let stream = match role {
-        DiscoveryRole::Sender => {
+        DiscoveryRole::Receiver => {
             let listener = listener.unwrap();
             ui.output("Waiting for TCP connection from peer...");
 
@@ -436,8 +437,8 @@ async fn start_shared_network_transfer<T: UI>(
                 }
             }
         }
-        DiscoveryRole::Receiver => {
-            // Receiver connects to sender
+        DiscoveryRole::Sender => {
+            // Sender connects to receiver
             ui.output(&format!("Connecting to peer at {}:3290", peer_ip));
 
             // Retry connection a few times

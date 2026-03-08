@@ -140,6 +140,8 @@ The desktop app's `needPassword()` function:
 
 **Key pattern: Hotspot Host = TCP Server = Password Generator.** BLE Peripheral = Sender, BLE Central = Receiver. These two groupings are independent.
 
+In shared network mode, there is no hotspot host. The **Receiver** takes over as TCP Server and Password Generator — consistent with the same-platform hotspot convention. See the Shared Network Mode section below.
+
 ---
 
 ## Shared Network Mode
@@ -157,15 +159,17 @@ Both devices simultaneously:
 
 | Transfer Direction | TCP Role |
 |-------------------|----------|
-| **Sender** | **Server** — binds TCP listener on port 3290 *before* discovery starts |
-| **Receiver** | **Client** — connects to sender's IP after discovery completes |
+| **Receiver** | **Server** — binds TCP listener on port 3290 *before* discovery starts |
+| **Sender** | **Client** — connects to receiver's IP after discovery completes |
 
-This differs from hotspot mode where TCP role follows hosting. Here it follows transfer direction.
+This is consistent with same-platform hotspot mode, where the receiver always hosts and is the TCP server.
 
 ### Password in Shared Network Mode (without Bluetooth)
 
-- **Sender** generates the password and displays it
-- **Receiver** enters the password manually
+- **Receiver** generates the password and displays it
+- **Sender** enters the password manually
+
+Consistent with hotspot mode: the receiver is always the "anchor" role (host in hotspot, server + password generator in shared network).
 
 The password derives both the HMAC key for discovery authentication and the AES key for file encryption.
 

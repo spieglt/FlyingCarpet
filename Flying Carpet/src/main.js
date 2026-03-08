@@ -376,9 +376,9 @@ let needPassword = async () => {
   if (usingBluetooth) {
     return false;
   }
-  // Shared network: sender generates password, receiver enters it
+  // Shared network: receiver generates password, sender enters it (consistent with hotspot same-platform convention)
   if (connectionMode === 'shared_network') {
-    return selectedMode === 'receive';
+    return selectedMode === 'send';
   }
   // if linux, joining windows, hosting mac/ios/android or linux if receiving.
   // if windows, always hosting unless windows and sending.
