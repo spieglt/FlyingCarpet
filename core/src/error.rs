@@ -12,7 +12,6 @@ pub enum DiscoveryError {
     NoNetworkInterface,
     MulticastBindFailed(String),
     HmacVerificationFailed,
-    SessionIdMismatch,
     TimestampExpired,
     TimeoutWaitingForPeer,
 }
@@ -25,7 +24,6 @@ impl std::fmt::Display for DiscoveryError {
                 write!(f, "Failed to bind multicast socket: {}", msg)
             }
             DiscoveryError::HmacVerificationFailed => write!(f, "HMAC verification failed"),
-            DiscoveryError::SessionIdMismatch => write!(f, "Session ID mismatch"),
             DiscoveryError::TimestampExpired => write!(f, "Timestamp expired"),
             DiscoveryError::TimeoutWaitingForPeer => write!(f, "Timeout waiting for peer"),
         }

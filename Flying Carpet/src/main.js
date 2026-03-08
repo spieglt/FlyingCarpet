@@ -285,17 +285,16 @@ async function startTransfer(filesSelected) {
     }
   }
   
-  // if we're hosting, generate and display the password
-  if (!await needPassword()) {
-    if (!usingBluetooth) {
-      password = await core.invoke('generate_password');
-      if (selectedPeer === 'ios' || selectedPeer === 'android') {
-        output('\nStart the transfer on the other device and scan the QR code when prompted.');
-        makeQRCode(password);
-      } else {
-        output(`Password: ${password}`);
-        alert(`\nStart the transfer on the other device and enter this password when prompted:\n${password}`);
-      }
+  // if we're generating the password (hosting in hotspot mode, or sending in shared network mode),
+  // and not using bluetooth (which exchanges the password automatically), generate and display it.
+  if (!await needPassword() && !usingBluetooth) {
+    password = await core.invoke('generate_password');
+    if (selectedPeer === 'ios' || selectedPeer === 'android') {
+      output('\nStart the transfer on the other device and scan the QR code when prompted.');
+      makeQRCode(password);
+    } else {
+      output(`Password: ${password}`);
+      alert(`\nStart the transfer on the other device and enter this password when prompted:\n${password}`);
     }
   }
 
@@ -360,7 +359,9 @@ let connectionModeChange = (mode) => {
 
 let checkStatus = () => {
   showPassword();
-  if (usingBluetooth) {
+  if (connectionMode === 'shared_network' || usingBluetooth) {
+    // Shared network: peer OS not needed (discovery handles it)
+    // Bluetooth: peer OS not needed (exchanged over BLE)
     peerLabel.style.display = 'none';
     peerBox.style.display = 'none';
     startButton.disabled = !selectedMode;
@@ -374,6 +375,10 @@ let checkStatus = () => {
 let needPassword = async () => {
   if (usingBluetooth) {
     return false;
+  }
+  // Shared network: sender generates password, receiver enters it
+  if (connectionMode === 'shared_network') {
+    return selectedMode === 'receive';
   }
   // if linux, joining windows, hosting mac/ios/android or linux if receiving.
   // if windows, always hosting unless windows and sending.

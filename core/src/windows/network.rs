@@ -229,6 +229,48 @@ pub fn get_local_ip(interface: &WiFiInterface) -> Result<std::net::Ipv4Addr, FCE
     get_any_wifi_ip()
 }
 
+/// Get the subnet prefix length (e.g. 24 for /24) on the specified interface
+pub fn get_prefix_length(interface: &WiFiInterface) -> Result<u8, FCError> {
+    let target_guid = parse_interface_guid(interface)?;
+
+    let working_buffer_size = 15_000;
+    let family = 2; // IPv4
+    let flags = IpHelper::GAA_FLAG_INCLUDE_PREFIX;
+    let mut ip_adapter_addresses_lh = vec![0u8; working_buffer_size];
+    let mut pip_ip_adapter_addresses_lh =
+        (ip_adapter_addresses_lh.as_mut_ptr()) as *mut IpHelper::IP_ADAPTER_ADDRESSES_LH;
+    let mut size = working_buffer_size as u32;
+
+    unsafe {
+        let res = IpHelper::GetAdaptersAddresses(
+            family,
+            flags,
+            None,
+            Some(pip_ip_adapter_addresses_lh),
+            &mut size,
+        );
+        if WIN32_ERROR(res) != ERROR_SUCCESS {
+            fc_error(&format!(
+                "Could not get adapter addresses: {}",
+                get_windows_error(res)?
+            ))?;
+        }
+
+        while !pip_ip_adapter_addresses_lh.is_null() {
+            if (*pip_ip_adapter_addresses_lh).NetworkGuid == target_guid {
+                let unicast = (*pip_ip_adapter_addresses_lh).FirstUnicastAddress;
+                if !unicast.is_null() {
+                    return Ok((*unicast).OnLinkPrefixLength);
+                }
+            }
+            pip_ip_adapter_addresses_lh = (*pip_ip_adapter_addresses_lh).Next;
+        }
+    }
+
+    // Default to /24 if we can't determine
+    Ok(24)
+}
+
 fn get_any_wifi_ip() -> Result<std::net::Ipv4Addr, FCError> {
     let working_buffer_size = 15_000;
     let family = 2; // IPv4
@@ -639,15 +681,28 @@ fn add_firewall_rule() -> Option<String> {
         .to_string_lossy();
 
     let program = "netsh";
-    let parameters = "advfirewall firewall add rule name=\"".to_string()
+
+    // TCP rule for file transfer
+    let tcp_parameters = "advfirewall firewall add rule name=\"".to_string()
         + &file_name
         + "\" dir=in action=allow program=\""
         + &path.to_string_lossy()
         + "\" enable=yes profile=any localport=3290 protocol=tcp";
-    match run_shell_execute(program, Some(&parameters), true) {
-        Ok(_) => None,
-        Err(e) => Some(e.to_string()),
+    if let Err(e) = run_shell_execute(program, Some(&tcp_parameters), true) {
+        return Some(e.to_string());
     }
+
+    // UDP rule for discovery (multicast + unicast)
+    let udp_parameters = "advfirewall firewall add rule name=\"".to_string()
+        + &file_name
+        + " UDP\" dir=in action=allow program=\""
+        + &path.to_string_lossy()
+        + "\" enable=yes profile=any localport=3290 protocol=udp";
+    if let Err(e) = run_shell_execute(program, Some(&udp_parameters), true) {
+        return Some(e.to_string());
+    }
+
+    None
 }
 
 unsafe fn get_windows_error(err: u32) -> Result<String, FCError> {

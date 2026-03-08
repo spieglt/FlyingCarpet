@@ -386,25 +386,32 @@ async fn start_shared_network_transfer<T: UI>(
         fc_error("No network connection on selected interface")?;
     }
 
-    // Get local IP
+    // Get local IP and prefix length
     let local_ip = network::get_local_ip(interface)?;
-    ui.output(&format!("Local IP: {}", local_ip));
-
-    // Create discovery service (no session_id - peer matching done via password HMAC + role)
-    let discovery = DiscoveryService::new(*key, mode, local_ip);
+    let prefix_len = network::get_prefix_length(interface)?;
+    ui.output(&format!("Local IP: {}/{}", local_ip, prefix_len));
 
     // Determine role for TCP connection
     let role = DiscoveryRole::from(mode);
 
-    // Start discovery and TCP connection in parallel
-    // Senders listen for TCP, Receivers connect
+    // Sender: bind TCP listener *before* discovery so it's ready when the
+    // receiver connects immediately after discovering us.
+    let listener = if role == DiscoveryRole::Sender {
+        let addr = "0.0.0.0:3290".parse::<SocketAddr>()?;
+        let listener = TcpListener::bind(&addr).await?;
+        ui.output("TCP listener ready on port 3290.");
+        Some(listener)
+    } else {
+        None
+    };
+
+    // Create discovery service and find peer
+    let discovery = DiscoveryService::new(*key, mode, local_ip, prefix_len);
     let peer_ip = discovery.discover_peer(ui).await?;
 
     let stream = match role {
         DiscoveryRole::Sender => {
-            // Sender listens for incoming TCP connection
-            let addr = "0.0.0.0:3290".parse::<SocketAddr>()?;
-            let listener = TcpListener::bind(&addr).await?;
+            let listener = listener.unwrap();
             ui.output("Waiting for TCP connection from peer...");
 
             // Wait for connection with timeout

@@ -13,10 +13,17 @@ use tokio::time::{interval, timeout};
 pub const MULTICAST_ADDR: &str = "239.255.73.67";
 pub const DISCOVERY_PORT: u16 = 3290;
 pub const DISCOVERY_MAGIC: [u8; 4] = *b"FCAP";
-pub const ANNOUNCEMENT_SIZE: usize = 93; // No session_id field - matches Apple implementation
+pub const ANNOUNCEMENT_SIZE: usize = 93;
 const TIMESTAMP_WINDOW_SECS: u64 = 60;
 const DISCOVERY_INTERVAL_MS: u64 = 500;
 const DISCOVERY_TIMEOUT_SECS: u64 = 120;
+const MAX_UNICAST_SCAN_HOSTS: u32 = 1024;
+
+// Compile-time check that ANNOUNCEMENT_SIZE matches the sum of all field sizes.
+const _: () = assert!(
+    4 + 2 + 1 + 4 + 4 + 2 + 8 + 4 + 32 + 32 == ANNOUNCEMENT_SIZE,
+    "ANNOUNCEMENT_SIZE does not match sum of field sizes"
+);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DiscoveryRole {
@@ -45,7 +52,6 @@ pub struct DiscoveryAnnouncement {
     pub sequence: u32,          // Sequence number
     pub nonce: [u8; 32],        // Random nonce
     pub hmac: [u8; 32],         // HMAC-SHA256
-    // Note: No session_id - matches Apple implementation. Peer matching done via password HMAC + role.
 }
 
 impl DiscoveryAnnouncement {
@@ -244,10 +250,36 @@ impl DiscoveryAnnouncement {
     }
 }
 
+/// Returns an iterator of host addresses in the subnet, excluding `local_ip`.
+/// Returns None if the subnet is too large (> MAX_UNICAST_SCAN_HOSTS) or too small.
+fn unicast_scan_targets(local_ip: Ipv4Addr, prefix_len: u8) -> Option<Vec<Ipv4Addr>> {
+    if prefix_len > 30 || prefix_len == 0 {
+        return None;
+    }
+
+    let ip_u32 = u32::from(local_ip);
+    let mask = !0u32 << (32 - prefix_len);
+    let network = ip_u32 & mask;
+    let broadcast = network | !mask;
+    let num_hosts = broadcast - network - 1;
+
+    if num_hosts > MAX_UNICAST_SCAN_HOSTS {
+        return None;
+    }
+
+    let hosts: Vec<Ipv4Addr> = ((network + 1)..broadcast)
+        .filter(|&addr| addr != ip_u32)
+        .map(Ipv4Addr::from)
+        .collect();
+
+    Some(hosts)
+}
+
 pub struct DiscoveryService {
     key: [u8; 32],
     role: DiscoveryRole,
     local_ip: Ipv4Addr,
+    prefix_len: u8,
     cancel: Arc<AtomicBool>,
 }
 
@@ -256,11 +288,13 @@ impl DiscoveryService {
         key: [u8; 32],
         mode: &Mode,
         local_ip: Ipv4Addr,
+        prefix_len: u8,
     ) -> Self {
         DiscoveryService {
             key,
             role: DiscoveryRole::from(mode),
             local_ip,
+            prefix_len,
             cancel: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -305,7 +339,9 @@ impl DiscoveryService {
                 .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?,
         );
 
-        // Create unicast socket on ephemeral port for subnet scanning
+        // Unicast socket on an ephemeral port, used only for *sending* subnet-scan
+        // packets. Responses from peers arrive on the shared recv_socket (port 3290)
+        // because peers reply to the discovery port, not our ephemeral source port.
         let unicast_socket = Arc::new(
             UdpSocket::bind("0.0.0.0:0")
                 .await
@@ -403,11 +439,9 @@ impl DiscoveryService {
             });
         }
 
-        // Spawn unicast sender task (subnet scan)
-        {
+        // Spawn unicast sender task (subnet scan) if subnet is small enough
+        if let Some(targets) = unicast_scan_targets(self.local_ip, self.prefix_len) {
             let cancel = cancel.clone();
-            let octets = local_ip.octets();
-            let base_ip = Ipv4Addr::new(octets[0], octets[1], octets[2], 0);
 
             tokio::spawn(async move {
                 let mut sequence = 0u32;
@@ -416,19 +450,9 @@ impl DiscoveryService {
                         break;
                     }
 
-                    for i in 1..=254u8 {
+                    for &target_ip in &targets {
                         if cancel.load(Ordering::SeqCst) {
                             return;
-                        }
-
-                        let target_ip = Ipv4Addr::new(
-                            base_ip.octets()[0],
-                            base_ip.octets()[1],
-                            base_ip.octets()[2],
-                            i,
-                        );
-                        if target_ip == local_ip {
-                            continue;
                         }
 
                         let mut announcement =
@@ -446,6 +470,8 @@ impl DiscoveryService {
                     tokio::time::sleep(Duration::from_millis(DISCOVERY_INTERVAL_MS)).await;
                 }
             });
+        } else {
+            ui.output("Subnet too large for unicast scan, relying on multicast only.");
         }
 
         // Wait for peer discovery with timeout
@@ -527,5 +553,31 @@ mod tests {
         let announcement = DiscoveryAnnouncement::new(DiscoveryRole::Sender, ip, 0);
 
         assert!(announcement.is_timestamp_valid());
+    }
+
+    #[test]
+    fn test_unicast_scan_targets_24() {
+        let ip = Ipv4Addr::new(192, 168, 1, 100);
+        let targets = unicast_scan_targets(ip, 24).unwrap();
+        assert_eq!(targets.len(), 253); // 254 hosts minus our own
+        assert!(!targets.contains(&ip));
+        assert!(targets.contains(&Ipv4Addr::new(192, 168, 1, 1)));
+        assert!(targets.contains(&Ipv4Addr::new(192, 168, 1, 254)));
+        assert!(!targets.contains(&Ipv4Addr::new(192, 168, 1, 0)));   // network
+        assert!(!targets.contains(&Ipv4Addr::new(192, 168, 1, 255))); // broadcast
+    }
+
+    #[test]
+    fn test_unicast_scan_targets_too_large() {
+        let ip = Ipv4Addr::new(10, 0, 0, 1);
+        // /16 = 65534 hosts, way over MAX_UNICAST_SCAN_HOSTS
+        assert!(unicast_scan_targets(ip, 16).is_none());
+    }
+
+    #[test]
+    fn test_unicast_scan_targets_small() {
+        let ip = Ipv4Addr::new(10, 0, 0, 1);
+        let targets = unicast_scan_targets(ip, 30).unwrap();
+        assert_eq!(targets.len(), 1); // /30 = 2 hosts, minus ours = 1
     }
 }
