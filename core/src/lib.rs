@@ -416,11 +416,8 @@ async fn start_shared_network_transfer<T: UI>(
             ui.output("Waiting for TCP connection from peer...");
 
             // Wait for connection with timeout
-            let accept_result = tokio::time::timeout(
-                std::time::Duration::from_secs(30),
-                listener.accept(),
-            )
-            .await;
+            let accept_result =
+                tokio::time::timeout(std::time::Duration::from_secs(30), listener.accept()).await;
 
             match accept_result {
                 Ok(Ok((stream, addr))) => {

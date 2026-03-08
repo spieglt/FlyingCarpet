@@ -4,7 +4,8 @@
 )]
 
 use flying_carpet_core::{
-    bluetooth, clean_up_transfer, network, start_transfer, utils, ConnectionMode, Transfer, WiFiInterface, UI,
+    bluetooth, clean_up_transfer, network, start_transfer, utils, ConnectionMode, Transfer,
+    WiFiInterface, UI,
 };
 use std::path::PathBuf;
 use std::str::FromStr;

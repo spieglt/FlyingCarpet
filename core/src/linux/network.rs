@@ -212,22 +212,18 @@ fn find_gateway(interface: &str) -> Result<String, FCError> {
 pub fn get_local_ip(interface: &WiFiInterface) -> Result<std::net::Ipv4Addr, FCError> {
     let cidr = get_ip_cidr(interface)?;
     let ip_str = cidr.split('/').next().unwrap_or("");
-    ip_str
-        .parse()
-        .map_err(|e| FCError {
-            message: format!("Failed to parse IP address '{}': {}", ip_str, e),
-        })
+    ip_str.parse().map_err(|e| FCError {
+        message: format!("Failed to parse IP address '{}': {}", ip_str, e),
+    })
 }
 
 /// Get the subnet prefix length (e.g. 24 for /24) on the specified interface
 pub fn get_prefix_length(interface: &WiFiInterface) -> Result<u8, FCError> {
     let cidr = get_ip_cidr(interface)?;
     let prefix_str = cidr.split('/').nth(1).unwrap_or("24");
-    prefix_str
-        .parse()
-        .map_err(|e| FCError {
-            message: format!("Failed to parse prefix length '{}': {}", prefix_str, e),
-        })
+    prefix_str.parse().map_err(|e| FCError {
+        message: format!("Failed to parse prefix length '{}': {}", prefix_str, e),
+    })
 }
 
 /// Returns the CIDR notation (e.g. "192.168.1.100/24") for the interface
@@ -241,7 +237,10 @@ fn get_ip_cidr(interface: &WiFiInterface) -> Result<String, FCError> {
     let cidr = stdout.trim();
 
     if cidr.is_empty() {
-        fc_error(&format!("No IPv4 address found on interface {}", interface.0))?;
+        fc_error(&format!(
+            "No IPv4 address found on interface {}",
+            interface.0
+        ))?;
     }
 
     Ok(cidr.to_string())
@@ -250,10 +249,7 @@ fn get_ip_cidr(interface: &WiFiInterface) -> Result<String, FCError> {
 /// Check if interface has an active network connection
 pub fn has_network_connection(interface: &WiFiInterface) -> Result<bool, FCError> {
     // Check if interface has an IP address assigned
-    let ip_command = format!(
-        "ip -4 addr show {} | grep inet",
-        interface.0
-    );
+    let ip_command = format!("ip -4 addr show {} | grep inet", interface.0);
     let output = run_command("sh", Some(vec!["-c", &ip_command]))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
 

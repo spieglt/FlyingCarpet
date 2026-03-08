@@ -42,24 +42,20 @@ impl From<&Mode> for DiscoveryRole {
 
 #[derive(Clone, Debug)]
 pub struct DiscoveryAnnouncement {
-    pub magic: [u8; 4],         // "FCAP"
-    pub version: u16,           // 1
-    pub role: DiscoveryRole,    // 0=Sender, 1=Receiver
-    pub capabilities: u32,      // Reserved for future use
-    pub ip_address: [u8; 4],    // IPv4 address of sender
-    pub port: u16,              // TCP port (3290)
-    pub timestamp: u64,         // Unix timestamp
-    pub sequence: u32,          // Sequence number
-    pub nonce: [u8; 32],        // Random nonce
-    pub hmac: [u8; 32],         // HMAC-SHA256
+    pub magic: [u8; 4],      // "FCAP"
+    pub version: u16,        // 1
+    pub role: DiscoveryRole, // 0=Sender, 1=Receiver
+    pub capabilities: u32,   // Reserved for future use
+    pub ip_address: [u8; 4], // IPv4 address of sender
+    pub port: u16,           // TCP port (3290)
+    pub timestamp: u64,      // Unix timestamp
+    pub sequence: u32,       // Sequence number
+    pub nonce: [u8; 32],     // Random nonce
+    pub hmac: [u8; 32],      // HMAC-SHA256
 }
 
 impl DiscoveryAnnouncement {
-    pub fn new(
-        role: DiscoveryRole,
-        ip_address: Ipv4Addr,
-        sequence: u32,
-    ) -> Self {
+    pub fn new(role: DiscoveryRole, ip_address: Ipv4Addr, sequence: u32) -> Self {
         let mut nonce = [0u8; 32];
         rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce);
 
@@ -284,12 +280,7 @@ pub struct DiscoveryService {
 }
 
 impl DiscoveryService {
-    pub fn new(
-        key: [u8; 32],
-        mode: &Mode,
-        local_ip: Ipv4Addr,
-        prefix_len: u8,
-    ) -> Self {
+    pub fn new(key: [u8; 32], mode: &Mode, local_ip: Ipv4Addr, prefix_len: u8) -> Self {
         DiscoveryService {
             key,
             role: DiscoveryRole::from(mode),
@@ -426,14 +417,11 @@ impl DiscoveryService {
                         break;
                     }
 
-                    let mut announcement =
-                        DiscoveryAnnouncement::new(our_role, local_ip, sequence);
+                    let mut announcement = DiscoveryAnnouncement::new(our_role, local_ip, sequence);
                     announcement.sign(&key);
                     let data = announcement.serialize();
 
-                    let _ = socket
-                        .send_to(&data, SocketAddr::V4(multicast_dest))
-                        .await;
+                    let _ = socket.send_to(&data, SocketAddr::V4(multicast_dest)).await;
                     sequence = sequence.wrapping_add(1);
                 }
             });
@@ -461,9 +449,7 @@ impl DiscoveryService {
                         let data = announcement.serialize();
 
                         let dest = SocketAddrV4::new(target_ip, DISCOVERY_PORT);
-                        let _ = unicast_socket
-                            .send_to(&data, SocketAddr::V4(dest))
-                            .await;
+                        let _ = unicast_socket.send_to(&data, SocketAddr::V4(dest)).await;
                     }
 
                     sequence = sequence.wrapping_add(1);
@@ -563,7 +549,7 @@ mod tests {
         assert!(!targets.contains(&ip));
         assert!(targets.contains(&Ipv4Addr::new(192, 168, 1, 1)));
         assert!(targets.contains(&Ipv4Addr::new(192, 168, 1, 254)));
-        assert!(!targets.contains(&Ipv4Addr::new(192, 168, 1, 0)));   // network
+        assert!(!targets.contains(&Ipv4Addr::new(192, 168, 1, 0))); // network
         assert!(!targets.contains(&Ipv4Addr::new(192, 168, 1, 255))); // broadcast
     }
 
