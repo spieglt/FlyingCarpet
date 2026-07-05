@@ -138,6 +138,10 @@ pub async fn start_transfer<T: UI>(
     // for windows and linux, the central/client api can read and write synchronously, and we always know the ssid before starting hotspot, so we can just do that here before connecting to peer?
     // for servers/peripherals, does it matter? callbacks in both cases?
 
+    // Bluetooth is hotspot-only: in shared network mode the password is exchanged manually
+    // (receiver displays it, sender types it) and discovery finds the peer over IP.
+    let using_bluetooth = using_bluetooth && connection_mode == ConnectionMode::Hotspot;
+
     if using_bluetooth {
         match negotiate_bluetooth(&mode, ble_ui_rx, ui).await {
             Ok((p, _ssid, pw)) => {
@@ -154,7 +158,13 @@ pub async fn start_transfer<T: UI>(
         }
     }
 
-    let password = password.expect("Missing password in start_transfer().");
+    let password = match password {
+        Some(p) => p,
+        None => {
+            ui.output("Error: no password provided for transfer.");
+            return None;
+        }
+    };
     let (key, ssid) = get_key_and_ssid(&password);
 
     {
@@ -386,6 +396,10 @@ async fn start_shared_network_transfer<T: UI>(
         fc_error("No network connection on selected interface")?;
     }
 
+    // Both roles need inbound traffic on port 3290: UDP for discovery announcements,
+    // and TCP for the receiver's listener. No-op on Linux.
+    network::ensure_firewall_rules(ui).await?;
+
     // Get local IP and prefix length
     let local_ip = network::get_local_ip(interface)?;
     let prefix_len = network::get_prefix_length(interface)?;
@@ -438,21 +452,23 @@ async fn start_shared_network_transfer<T: UI>(
             // Sender connects to receiver
             ui.output(&format!("Connecting to peer at {}:3290", peer_ip));
 
-            // Retry connection a few times
+            // Retry for up to 30 seconds (matches the Apple implementation): the
+            // receiver may still be finishing discovery when we start connecting.
+            const CONNECT_ATTEMPTS: u32 = 15;
             let mut stream = None;
-            for attempt in 1..=5 {
+            for attempt in 1..=CONNECT_ATTEMPTS {
                 match TcpStream::connect(format!("{}:3290", peer_ip)).await {
                     Ok(s) => {
                         stream = Some(s);
                         break;
                     }
                     Err(e) => {
-                        if attempt < 5 {
+                        if attempt < CONNECT_ATTEMPTS {
                             ui.output(&format!(
                                 "Connection attempt {} failed, retrying...",
                                 attempt
                             ));
-                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                         } else {
                             fc_error(&format!("Failed to connect to peer: {}", e))?;
                         }

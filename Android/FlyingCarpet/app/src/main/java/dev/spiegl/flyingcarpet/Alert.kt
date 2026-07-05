@@ -5,12 +5,12 @@ import android.app.Dialog
 import android.os.Bundle
 import androidx.fragment.app.DialogFragment
 
-class Alert(private val ssid: String, private val password: String) : DialogFragment() {
+class Alert(private val message: String) : DialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         return activity?.let {
             val builder = AlertDialog.Builder(it)
 //            builder.setTitle("Enter on Peer")
-                .setMessage("Start the transfer on macOS and enter these when prompted:\n\nSSID: $ssid\nPassword: $password")
+                .setMessage(message)
                 .setPositiveButton("OK") { _, _ ->
                     // nothing to do here
                 }
@@ -37,10 +37,12 @@ const val AboutMessage = """
     theron@spiegl.dev
     Copyright 2025, Theron Spiegl, all rights reserved.
 
-    Flying Carpet transfers files between two Android, iOS, Linux, macOS, and Windows devices over ad hoc WiFi. No access point or shared network is required, just two WiFi cards in close range. The only pairings that don't work are from one Apple device (macOS or iOS) to another, because Apple no longer allows hotspots to be started programmatically.
-    
+    Flying Carpet transfers files between two Android, iOS, Linux, macOS, and Windows devices over ad hoc WiFi. In Hotspot mode, no access point or shared network is required, just two WiFi cards in close range. Hotspot mode does not work from one Apple device (macOS or iOS) to another, because Apple no longer allows hotspots to be started programmatically: use Shared Network mode for those transfers.
+
+    In Shared Network mode, both devices must be connected to the same network. No hotspot is created: the devices find each other on the network automatically. Bluetooth is not used in this mode. The receiving device generates and displays a password, which must be entered or scanned on the sending device.
+
     INSTRUCTIONS
-    
+
     Turn Bluetooth on or off on both devices. If one side fails to initialize Bluetooth or has it turned off, the other side must disable the "Use Bluetooth" switch in Flying Carpet.
     
     Select Sending on one device and Receiving on the other. If not using Bluetooth, select the operating system of the other device. Click the "Start Transfer" button on each device. On the sending device, select the files or folder to send. On the receiving device, select the folder in which to receive files. (To send a folder, drag it onto the window instead of clicking "Start Transfer".)

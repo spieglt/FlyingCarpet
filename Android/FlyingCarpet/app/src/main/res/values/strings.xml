@@ -8,6 +8,13 @@
     <string name="mac">macOS</string>
     <string name="windows">Windows</string>
     <string name="step1">Select mode for this device</string>
+    <string name="hotspot">Hotspot</string>
+    <string name="sharedNetwork">Shared Network</string>
+    <string name="connectionInstruction">Select connection type</string>
+    <string name="passwordPrompt">Enter the password displayed on the receiving device</string>
+    <string name="scanQrCode">Scan QR Code</string>
+    <string name="ok">OK</string>
+    <string name="cancelSmall">Cancel</string>
     <string name="welcome">Welcome to Flying Carpet!</string>
     <string name="selectFiles">Select Files</string>
     <string name="cancel">Cancel Transfer</string>

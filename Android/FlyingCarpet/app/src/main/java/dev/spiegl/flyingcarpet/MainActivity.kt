@@ -9,12 +9,15 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.net.wifi.WifiManager
+import android.app.AlertDialog
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -43,8 +46,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var folderPicker: ActivityResultLauncher<Uri?>
     private lateinit var peerGroup: MaterialButtonToggleGroup
     private lateinit var peerInstruction: TextView
+    private lateinit var connectionGroup: MaterialButtonToggleGroup
     private lateinit var bluetoothSwitch: SwitchCompat
     private lateinit var bluetoothIcon: ImageView
+    private var bluetoothAvailable = false
 
     private fun getFilePicker(): ActivityResultLauncher<Array<String>> {
         return registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -76,7 +81,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             // if using bluetooth, start the process of exchanging OS and wifi information
-            if (viewModel.bluetooth.active) {
+            if (viewModel.usingBluetooth()) {
                 if (viewModel.bluetooth.bluetoothGattServer.getService(SERVICE_UUID) == null) {
                     viewModel.bluetooth.bluetoothGattServer.addService(viewModel.bluetooth.service)
                 }
@@ -124,7 +129,7 @@ class MainActivity : AppCompatActivity() {
                     viewModel.receiveDir = it
                 }
                 // if using bluetooth, start the process of exchanging OS and wifi information
-                if (viewModel.bluetooth.active) {
+                if (viewModel.usingBluetooth()) {
                     if (viewModel.mode == Mode.Sending) {
                         viewModel.bluetooth.advertise()
                     } else if (viewModel.mode == Mode.Receiving) {
@@ -170,6 +175,12 @@ class MainActivity : AppCompatActivity() {
             if (result.contents == null) {
                 viewModel.outputText("Scan cancelled, exiting transfer.")
                 viewModel.cleanUpTransfer()
+            } else if (viewModel.connectionMode == ConnectionMode.SharedNetwork) {
+                // shared network QR codes contain just the password, but accept
+                // "ssid;password" too in case the receiver is in hotspot mode
+                val parts = result.contents.split(';')
+                val password = if (parts.count() > 1) parts[1] else parts[0]
+                viewModel.gotSharedNetworkPassword(password)
             } else {
                 val ssidAndPassword = result.contents.split(';')
                 if (ssidAndPassword.count() > 1) {
@@ -207,9 +218,12 @@ class MainActivity : AppCompatActivity() {
         viewModel.displayQrCode = ::displayQrCode
         viewModel.cleanUpUi = ::cleanUpUi
         viewModel.enableBluetoothUi = ::enableBluetoothUi
+        viewModel.promptForPassword = ::promptForPassword
+        viewModel.displaySharedNetworkPassword = ::displaySharedNetworkPassword
 
         peerGroup = findViewById(id.peerGroup)
         peerInstruction = findViewById(id.peerInstruction)
+        connectionGroup = findViewById(id.connectionGroup)
         outputBox = findViewById(id.outputBox)
         viewModel.output.observe(this) { msg ->
             outputBox.append(msg + '\n')
@@ -228,6 +242,27 @@ class MainActivity : AppCompatActivity() {
 
         // set up bluetooth
         bluetoothOnCreate()
+
+        // connection mode (hotspot vs. shared network). registered after bluetoothOnCreate()
+        // so applyConnectionModeUi() gets the last word on peer group visibility.
+        connectionGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            viewModel.connectionMode = if (checkedId == id.sharedNetworkButton) {
+                ConnectionMode.SharedNetwork
+            } else {
+                ConnectionMode.Hotspot
+            }
+            applyConnectionModeUi()
+        }
+        // the view model survives rotation, so restore its connection mode into the UI
+        connectionGroup.check(
+            if (viewModel.connectionMode == ConnectionMode.SharedNetwork) {
+                id.sharedNetworkButton
+            } else {
+                id.hotspotButton
+            }
+        )
+        applyConnectionModeUi()
 
         // start button
         val startButton = findViewById<Button>(id.startButton)
@@ -259,9 +294,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // get peer
+            // get peer. not needed in shared network mode (discovery finds the peer)
+            // or when using bluetooth (peer OS is exchanged over BLE)
             val selectedPeer = peerGroup.checkedButtonId
-            if (!viewModel.bluetooth.active) {
+            if (viewModel.connectionMode == ConnectionMode.Hotspot && !viewModel.bluetooth.active) {
                 this.viewModel.peer = when (selectedPeer) {
                     id.androidButton -> Peer.Android
                     id.iosButton -> Peer.iOS
@@ -325,6 +361,68 @@ class MainActivity : AppCompatActivity() {
 
     }
 
+    private fun applyConnectionModeUi() {
+        if (viewModel.connectionMode == ConnectionMode.SharedNetwork) {
+            // peer OS is found via discovery and bluetooth isn't used in shared network mode
+            peerGroup.isVisible = false
+            peerInstruction.isVisible = false
+            bluetoothSwitch.isEnabled = false
+            bluetoothIcon.isVisible = false
+        } else {
+            bluetoothSwitch.isEnabled = bluetoothAvailable
+            bluetoothIcon.isVisible = bluetoothSwitch.isChecked
+            peerGroup.isVisible = !viewModel.bluetooth.active
+            peerInstruction.isVisible = !viewModel.bluetooth.active
+        }
+    }
+
+    // shared network mode, sending: ask for the password displayed on the receiving device
+    private fun promptForPassword() {
+        val input = EditText(this)
+        input.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        AlertDialog.Builder(this)
+            .setTitle("Password")
+            .setMessage(getString(R.string.passwordPrompt))
+            .setView(input)
+            .setPositiveButton(getString(R.string.ok)) { _, _ ->
+                val entered = input.text.toString().trim()
+                if (entered.length < 8) {
+                    viewModel.outputText("Password must be at least 8 characters. Please start the transfer again.")
+                    viewModel.cleanUpTransfer()
+                } else {
+                    viewModel.gotSharedNetworkPassword(entered)
+                }
+            }
+            .setNegativeButton(getString(R.string.cancelSmall)) { _, _ ->
+                viewModel.outputText("Transfer cancelled.")
+                viewModel.cleanUpTransfer()
+            }
+            .setNeutralButton(getString(R.string.scanQrCode)) { _, _ ->
+                val options = ScanOptions()
+                options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                options.setPrompt("Scan the QR code displayed on the receiving device.")
+                options.setOrientationLocked(false)
+                viewModel.barcodeLauncher.launch(options)
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    // shared network mode, receiving: show the generated password as a QR code so Android
+    // senders can scan it, plus a modal making clear it must be entered on the sending device.
+    // (it's also printed to the output box for peers that type it in.)
+    private fun displaySharedNetworkPassword(password: String) {
+        runOnUiThread {
+            val qrCode = findViewById<ImageView>(id.qrCodeView)
+            viewModel.qrBitmap = getQrCodeBitmapFromContent(password)
+            qrCode.setImageBitmap(viewModel.qrBitmap)
+            qrCode.bringToFront()
+            val alertFragment =
+                Alert("Start the transfer on the sending device and enter this password when prompted, or scan the QR code:\n\nPassword: $password")
+            alertFragment.show(supportFragmentManager, "alert")
+        }
+    }
+
     private fun cleanUpUi() {
         // toggle UI and replace icon
         runOnUiThread {
@@ -344,7 +442,8 @@ class MainActivity : AppCompatActivity() {
             qrCode.setImageBitmap(viewModel.qrBitmap)
             qrCode.bringToFront()
         } else { // peer is macOS, because if windows or linux we wouldn't be hosting
-            val alertFragment = Alert(ssid, password)
+            val alertFragment =
+                Alert("Start the transfer on macOS and enter these when prompted:\n\nSSID: $ssid\nPassword: $password")
             alertFragment.show(supportFragmentManager, "alert")
         }
     }
@@ -352,6 +451,8 @@ class MainActivity : AppCompatActivity() {
     private fun toggleUI(enabled: Boolean) {
         findViewById<Button>(id.sendButton).isEnabled = enabled
         findViewById<Button>(id.receiveButton).isEnabled = enabled
+        findViewById<Button>(id.hotspotButton).isEnabled = enabled
+        findViewById<Button>(id.sharedNetworkButton).isEnabled = enabled
         findViewById<Button>(id.androidButton).isEnabled = enabled
         findViewById<Button>(id.iosButton).isEnabled = enabled
         findViewById<Button>(id.linuxButton).isEnabled = enabled
@@ -363,7 +464,8 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(id.cancelButton).isInvisible = enabled
 
         findViewById<TextView>(id.aboutButton).isClickable = enabled
-        findViewById<SwitchCompat>(id.bluetoothSwitch).isEnabled = enabled
+        findViewById<SwitchCompat>(id.bluetoothSwitch).isEnabled =
+            enabled && bluetoothAvailable && viewModel.connectionMode == ConnectionMode.Hotspot
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -395,6 +497,7 @@ class MainActivity : AppCompatActivity() {
         outState.putInt("progress", progressBarValue)
         val bluetoothEnabled = findViewById<SwitchCompat>(id.bluetoothSwitch).isEnabled
         outState.putBoolean("bluetoothEnabled", bluetoothEnabled)
+        outState.putBoolean("sharedNetwork", viewModel.connectionMode == ConnectionMode.SharedNetwork)
     }
 
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
@@ -426,6 +529,15 @@ class MainActivity : AppCompatActivity() {
         findViewById<ProgressBar>(id.progressBar).progress = savedInstanceState.getInt("progress")
         val bluetoothEnabled = savedInstanceState.getBoolean("bluetoothEnabled")
         findViewById<SwitchCompat>(id.bluetoothSwitch).isEnabled = bluetoothEnabled
+        // restore connection mode last: checking the button fires the listener, which
+        // reapplies peer group visibility and the bluetooth switch state
+        connectionGroup.check(
+            if (savedInstanceState.getBoolean("sharedNetwork")) {
+                id.sharedNetworkButton
+            } else {
+                id.hotspotButton
+            }
+        )
     }
 
     // bluetooth
@@ -525,9 +637,12 @@ class MainActivity : AppCompatActivity() {
             Log.e("Bluetooth", "Could not initialize Bluetooth: $e")
         }
         viewModel.bluetooth.active = initialized
+        bluetoothAvailable = initialized
         bluetoothSwitch.isChecked = initialized
-        bluetoothSwitch.isEnabled = initialized
-        bluetoothIcon.isVisible = initialized
+        // the switch stays disabled in shared network mode even when bluetooth works
+        val hotspotMode = viewModel.connectionMode == ConnectionMode.Hotspot
+        bluetoothSwitch.isEnabled = initialized && hotspotMode
+        bluetoothIcon.isVisible = initialized && hotspotMode
         return initialized
     }
 

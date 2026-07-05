@@ -91,5 +91,19 @@
       <!-- progress bar -->
       <progress id="progressBar" value="0" max="100" style="display: none; appearance: none; width: 100%; margin-top: 5px; margin-bottom: 5px; padding-left: 5px; padding-right: 5px; height: 15px; min-height: 15px;"></progress>
     </div>
+
+    <!-- input dialog, used instead of window.prompt() because the webview's native prompt
+         shows its origin (e.g. "127.0.0.1:1430 says:") in the title bar.
+         kept outside mainContainer so its key events don't reach the Enter-to-start handler. -->
+    <div id="promptOverlay">
+      <div id="promptCard">
+        <div id="promptMessage" style="white-space: pre-wrap; margin-bottom: 10px;"></div>
+        <input type="text" id="promptInput" class="form-control" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-bottom: 15px;">
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+          <button type="button" id="promptCancel" class="btn btn-secondary">Cancel</button>
+          <button type="button" id="promptOk" class="btn btn-success">OK</button>
+        </div>
+      </div>
+    </div>
   </body>
 </html>

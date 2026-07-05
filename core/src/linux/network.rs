@@ -246,6 +246,11 @@ fn get_ip_cidr(interface: &WiFiInterface) -> Result<String, FCError> {
     Ok(cidr.to_string())
 }
 
+/// No-op on Linux: firewall rules are only managed on Windows.
+pub async fn ensure_firewall_rules<T: UI>(_ui: &T) -> Result<(), FCError> {
+    Ok(())
+}
+
 /// Check if interface has an active network connection
 pub fn has_network_connection(interface: &WiFiInterface) -> Result<bool, FCError> {
     // Check if interface has an IP address assigned

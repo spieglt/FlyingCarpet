@@ -11,8 +11,12 @@ import java.nio.ByteBuffer
 import java.security.MessageDigest
 
 fun getQrCodeBitmap(ssid: String, password: String): Bitmap {
+    return getQrCodeBitmapFromContent("$ssid;$password")
+}
+
+// shared network mode QR codes contain just the password, matching the desktop version
+fun getQrCodeBitmapFromContent(qrCodeContent: String): Bitmap {
     val size = 1024 // pixels
-    val qrCodeContent = "$ssid;$password"
     val bits = QRCodeWriter().encode(qrCodeContent, BarcodeFormat.QR_CODE, size, size)
     return Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565).also {
         for (x in 0 until size) {

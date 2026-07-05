@@ -23,11 +23,14 @@ import kotlinx.coroutines.*
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.Inet4Address
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
+import java.net.SocketTimeoutException
 import java.nio.ByteBuffer
 import java.security.MessageDigest
+import java.security.SecureRandom
 
 const val PORT = 3290
 
@@ -85,6 +88,10 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     lateinit var displayQrCode: (String, String) -> Unit
     lateinit var cleanUpUi: () -> Unit
     lateinit var enableBluetoothUi: (Boolean) -> Unit
+    lateinit var promptForPassword: () -> Unit // shared network mode: sender asks user for the receiver's password
+    lateinit var displaySharedNetworkPassword: (String) -> Unit // shared network mode: receiver shows generated password as QR code
+    var discoveryManager: DiscoveryManager? = null
+    private var boundToWifiNetwork = false
     private val handler = Handler(Looper.getMainLooper())
     private var _output = MutableLiveData<String>()
     val output: LiveData<String>
@@ -113,6 +120,12 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         return peer == Peer.iOS
                 || peer == Peer.macOS
                 || (peer == Peer.Android && mode == Mode.Receiving)
+    }
+
+    // Bluetooth is only used in hotspot mode: in shared network mode the password is
+    // exchanged manually (receiver displays it, sender enters or scans it).
+    fun usingBluetooth(): Boolean {
+        return bluetooth.active && connectionMode == ConnectionMode.Hotspot
     }
 
     suspend fun startTransfer() {
@@ -154,6 +167,16 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
     fun cleanUpTransfer() {
         transferIsRunning = false
+        // cancel shared network discovery if it's running
+        discoveryManager?.cancel()
+        discoveryManager = null
+        // unbind from the WiFi network if we bound to it for a shared network transfer
+        if (boundToWifiNetwork) {
+            val connectivityManager = application
+                .getSystemService(AppCompatActivity.CONNECTIVITY_SERVICE) as ConnectivityManager
+            connectivityManager.bindProcessToNetwork(null)
+            boundToWifiNetwork = false
+        }
         // cancel transfer
         if (transferCoroutine != null) {
             transferCoroutine!!.cancel()
@@ -187,6 +210,24 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     override fun connectToPeer() {
         ssid = ""
         password = ""
+        if (connectionMode == ConnectionMode.SharedNetwork) {
+            // no hotspot and no bluetooth: the receiver generates and displays a password,
+            // the sender enters or scans it, and discovery finds the peer on the network
+            // both devices are already connected to.
+            if (mode == Mode.Receiving) {
+                password = generatePassword()
+                val (_, key) = getSsidAndKey(password)
+                this.key = key
+                outputText("Password: $password")
+                outputText("Enter this password on the sending device, or scan the QR code with it.")
+                displaySharedNetworkPassword(password)
+                launchSharedNetworkTransfer()
+            } else {
+                // MainActivity shows a dialog and calls gotSharedNetworkPassword() with the result
+                promptForPassword()
+            }
+            return
+        }
         // if we're hosting, startHotspot() will write the wifi details over bluetooth or display the QR code
         // if we're joining and using bluetooth, we read peer's wifi characteristic here, then bluetoothReceiver's gattCallback's onCharacteristicRead will call gotSsid()
         // if we're joining and not using bluetooth, barcodeLauncher will call joinHotspot()
@@ -209,6 +250,108 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 options.setPrompt("Start transfer on the other device and scan the QR code displayed.")
                 options.setOrientationLocked(false)
                 barcodeLauncher.launch(options)
+            }
+        }
+    }
+
+    // shared network mode
+
+    // called with the password the user typed or scanned when sending in shared network mode
+    fun gotSharedNetworkPassword(entered: String) {
+        password = entered
+        val (_, key) = getSsidAndKey(entered)
+        this.key = key
+        launchSharedNetworkTransfer()
+    }
+
+    private fun launchSharedNetworkTransfer() {
+        transferCoroutine = GlobalScope.launch {
+            try {
+                findPeerOnSharedNetwork()
+                startTransfer()
+            } catch (e: Exception) {
+                outputText("Transfer error: ${e.message}\n")
+            }
+            finishTransfer()
+        }
+    }
+
+    private suspend fun findPeerOnSharedNetwork() {
+        val connectivityManager = application
+            .getSystemService(AppCompatActivity.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val (network, localIp) = getWifiNetworkAndIp(connectivityManager)
+            ?: throw Exception(
+                "No WiFi network connection. Shared Network mode requires both devices to be "
+                        + "connected to the same network. Connect to WiFi or use Hotspot mode."
+            )
+        // route our traffic over WiFi even if Android prefers another network, e.g. cellular
+        // because the WiFi network has no internet access
+        connectivityManager.bindProcessToNetwork(network)
+        boundToWifiNetwork = true
+        outputText("Local IP: ${localIp.hostAddress}")
+
+        // Receiver is TCP server (consistent with hotspot same-platform convention where the
+        // receiver hosts). Bind the listener *before* discovery so it's ready when the sender
+        // connects immediately after discovering us.
+        if (mode == Mode.Receiving) {
+            withContext(Dispatchers.IO) {
+                server = ServerSocket(PORT)
+                server.soTimeout = 30_000
+            }
+            outputText("TCP listener ready on port $PORT.")
+        }
+
+        val role = if (mode == Mode.Sending) DiscoveryRole.SENDER else DiscoveryRole.RECEIVER
+        val discovery = DiscoveryManager(getApplication(), key, role, localIp, ::outputText)
+        discoveryManager = discovery
+        // discoverPeer() searches until the peer is found or the transfer is cancelled
+        val peer = discovery.discoverPeer() ?: throw Exception("Discovery cancelled.")
+        discoveryManager = null
+        peerIP = peer
+    }
+
+    private fun getWifiNetworkAndIp(connectivityManager: ConnectivityManager): Pair<Network, Inet4Address>? {
+        @Suppress("DEPRECATION")
+        for (network in connectivityManager.allNetworks) {
+            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: continue
+            if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
+            val linkProperties = connectivityManager.getLinkProperties(network) ?: continue
+            for (linkAddress in linkProperties.linkAddresses) {
+                val address = linkAddress.address
+                if (address is Inet4Address && !address.isLoopbackAddress && !address.isLinkLocalAddress) {
+                    return Pair(network, address)
+                }
+            }
+        }
+        return null
+    }
+
+    // same charset as the desktop version's generate_password()
+    private fun generatePassword(): String {
+        val chars = "23456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
+        val random = SecureRandom()
+        return (1..8).map { chars[random.nextInt(chars.length)] }.joinToString("")
+    }
+
+    // Retries for up to 30 seconds (matches the desktop and Apple implementations): the
+    // receiver may still be finishing discovery when we start connecting.
+    private suspend fun connectToSharedNetworkPeer() {
+        outputText("Connecting to receiver at ${peerIP?.hostAddress}:$PORT...")
+        val deadline = System.currentTimeMillis() + 30_000
+        var attempt = 0
+        while (true) {
+            attempt++
+            try {
+                val socket = Socket()
+                socket.connect(InetSocketAddress(peerIP, PORT), 5000)
+                client = socket
+                return
+            } catch (e: Exception) {
+                if (System.currentTimeMillis() >= deadline) {
+                    throw Exception("Failed to connect to peer after $attempt attempts: ${e.message}")
+                }
+                outputText("Connection attempt $attempt failed, retrying...")
+                delay(2000)
             }
         }
     }
@@ -389,7 +532,22 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
     private suspend fun startTCP() {
         withContext(Dispatchers.IO) {
-            if (isHosting()) {
+            if (connectionMode == ConnectionMode.SharedNetwork) {
+                // receiver is TCP server, sender connects. the server socket was bound
+                // before discovery started, in findPeerOnSharedNetwork().
+                if (mode == Mode.Receiving) {
+                    outputText("Waiting for TCP connection from sender...")
+                    try {
+                        client = server.accept() // 30 second soTimeout set when the server was bound
+                    } catch (e: SocketTimeoutException) {
+                        throw Exception("Timed out waiting for TCP connection from sender.")
+                    }
+                    outputText("TCP connection accepted")
+                } else {
+                    connectToSharedNetworkPeer()
+                    outputText("TCP connection established")
+                }
+            } else if (isHosting()) {
                 server = ServerSocket(PORT)
                 client = server.accept()
             } else {
@@ -405,7 +563,12 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     private suspend fun confirmVersion() {
         withContext(Dispatchers.IO) {
             val peerVersion: Long
-            if (isHosting()) {
+            if (connectionMode == ConnectionMode.SharedNetwork) {
+                // symmetric: both sides send their version, then read the peer's.
+                // safe from deadlock because TCP buffers the 8-byte writes.
+                outputStream.write(longToBigEndianBytes(MAJOR_VERSION))
+                peerVersion = ByteBuffer.wrap(readNBytes(8, inputStream)).long
+            } else if (isHosting()) {
                 // wait for peer's version
                 val peerVersionBytes = readNBytes(8, inputStream)
                 peerVersion = ByteBuffer.wrap(peerVersionBytes).long
@@ -419,18 +582,21 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 peerVersion = ByteBuffer.wrap(peerVersionBytes).long
             }
             if (peerVersion < MAJOR_VERSION) {
-                // peer makes decision
+                // peer's version is lower, so we make the decision and report it to them.
+                // compatible with version 8. if transferring with higher version, that version will decide compatibility.
+                if (peerVersion >= 8) {
+                    outputStream.write(one)
+                } else {
+                    outputStream.write(zero)
+                    throw Exception("Peer's version of Flying Carpet is not compatible. Please find links to download the newest version at https://flyingcarpet.spiegl.dev.")
+                }
+            } else if (peerVersion > MAJOR_VERSION) {
+                // peer's version is higher, so they make the decision
                 val isCompatibleBytes = readNBytes(8, inputStream)
                 if (ByteBuffer.wrap(isCompatibleBytes).long != 1L) {
                     throw Exception("Peer's version of Flying Carpet is not compatible. Please find links to download the newest version at https://flyingcarpet.spiegl.dev.")
                 }
-            } else {
-                // we make decision
-                // compatible with version 8. if transferring with higher version, that version will decide compatibility.
-                if (peerVersion < 8) {
-                    throw Exception("Peer's version of Flying Carpet is not compatible. Please find links to download the newest version at https://flyingcarpet.spiegl.dev.")
-                }
-            }
+            } // otherwise versions match, implicitly compatible
         }
     }
 
@@ -441,7 +607,14 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             } else {
                 0L
             }
-            if (isHosting()) {
+            if (connectionMode == ConnectionMode.SharedNetwork) {
+                // symmetric: both sides send their mode, read the peer's, and verify they're opposite
+                outputStream.write(if (ourMode == 1L) one else zero)
+                val peerMode = ByteBuffer.wrap(readNBytes(8, inputStream)).long
+                if (peerMode == ourMode) {
+                    throw Exception("Both ends of the transfer selected $mode")
+                }
+            } else if (isHosting()) {
                 // we're hosting, so wait for guest to say what mode they selected, compare to our own, and report back
                 val peerModeBytes = readNBytes(8, inputStream)
                 val peerMode = ByteBuffer.wrap(peerModeBytes).long

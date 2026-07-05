@@ -76,7 +76,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // about button
   aboutButton.onclick = () => {
-    alert(aboutMessage);
+    dialog.message(aboutMessage, { title: 'About Flying Carpet' });
   }
 
   // output handler
@@ -176,6 +176,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     } else {
       document.getElementById('hotspotButton').checked = true;
     }
+    applyBluetoothAvailability();
     passwordBox.value = uiState.passwordBoxValue;
     selectedFiles = uiState.selectedFiles;
     selectedFolder = uiState.selectedFolder;
@@ -195,6 +196,38 @@ function output(msg) {
   outputBox.scrollTop = outputBox.scrollHeight;
 }
 
+// in-page replacement for window.prompt(), whose title shows the webview origin.
+// resolves to the entered string, or null if cancelled.
+let showPrompt = (message) => {
+  return new Promise((resolve) => {
+    let overlay = document.getElementById('promptOverlay');
+    let input = document.getElementById('promptInput');
+    let okButton = document.getElementById('promptOk');
+    let cancelButton = document.getElementById('promptCancel');
+    document.getElementById('promptMessage').innerText = message;
+    input.value = '';
+    let finish = (value) => {
+      overlay.style.display = 'none';
+      okButton.onclick = null;
+      cancelButton.onclick = null;
+      input.onkeydown = null;
+      resolve(value);
+    };
+    okButton.onclick = () => finish(input.value);
+    cancelButton.onclick = () => finish(null);
+    input.onkeydown = (event) => {
+      event.stopPropagation();
+      if (event.key === 'Enter') {
+        finish(input.value);
+      } else if (event.key === 'Escape') {
+        finish(null);
+      }
+    };
+    overlay.style.display = 'flex';
+    input.focus();
+  });
+}
+
 function makeQRCode(str) {
   let elem = document.getElementById('qrcode');
   elem.innerHTML = '';
@@ -207,9 +240,11 @@ function makeQRCode(str) {
 
 async function startTransfer(filesSelected) {
 
-  // if we need password, make sure we have it before prompting for files/folder
+  // in hotspot mode, joiners must enter the host's password before starting. shared network
+  // senders are prompted after choosing files instead, so that file selection isn't blocked
+  // on the receiver having started yet.
   let password = null;
-  if (await needPassword()) {
+  if (await needPassword() && connectionMode !== 'shared_network') {
     password = document.getElementById('passwordBox').value;
     if (password.length < 8) {
       output('Must enter password from the other device.');
@@ -233,7 +268,7 @@ async function startTransfer(filesSelected) {
       for (let i = 0; i < interfaces.length; i++) {
         alertString += `${i+1}: ${interfaces[i][0]}\n`
       }
-      let choice = parseInt(prompt(alertString));
+      let choice = parseInt(await showPrompt(alertString));
       if (choice && choice > 0 && choice <= interfaces.length) {
         wifiInterface = interfaces[choice - 1];
         output(`Using interface: ${wifiInterface[0]}`);
@@ -285,16 +320,40 @@ async function startTransfer(filesSelected) {
     }
   }
   
-  // if we're generating the password (hosting in hotspot mode, or sending in shared network mode),
+  // shared network sender: files are chosen, now get the password from the receiving device
+  if (connectionMode === 'shared_network' && selectedMode === 'send') {
+    let promptMessage = 'Enter the password displayed on the receiving device:';
+    while (true) {
+      password = await showPrompt(promptMessage);
+      if (password === null) {
+        output('Transfer cancelled.');
+        return;
+      }
+      password = password.trim();
+      if (password.length >= 8) {
+        break;
+      }
+      promptMessage = 'Password must be at least 8 characters. Enter the password displayed on the receiving device:';
+    }
+  }
+
+  // if we're generating the password (hosting in hotspot mode, or receiving in shared network mode),
   // and not using bluetooth (which exchanges the password automatically), generate and display it.
   if (!await needPassword() && !usingBluetooth) {
     password = await core.invoke('generate_password');
-    if (selectedPeer === 'ios' || selectedPeer === 'android') {
+    if (connectionMode === 'shared_network') {
+      // peer OS is unknown in shared network mode: show the password as text for desktop/Apple
+      // senders and a QR code for Android senders.
+      makeQRCode(password);
+      output(`Password: ${password}`);
+      output('Start the transfer on the sending device and enter this password when prompted (or scan the QR code on Android).');
+      await dialog.message(`Start the transfer on the sending device and enter this password when prompted (or scan the QR code on Android):\n\n${password}`, { title: 'Flying Carpet' });
+    } else if (selectedPeer === 'ios' || selectedPeer === 'android') {
       output('\nStart the transfer on the other device and scan the QR code when prompted.');
       makeQRCode(password);
     } else {
       output(`Password: ${password}`);
-      alert(`\nStart the transfer on the other device and enter this password when prompted:\n${password}`);
+      await dialog.message(`Start the transfer on the other device and enter this password when prompted:\n\n${password}`, { title: 'Flying Carpet' });
     }
   }
 
@@ -354,7 +413,29 @@ let peerChange = (button) => {
 
 let connectionModeChange = (mode) => {
   connectionMode = mode;
+  applyBluetoothAvailability();
   checkStatus();
+}
+
+// Bluetooth is hotspot-only: in shared network mode the password is exchanged manually
+// (receiver displays it, sender types it), so the switch is forced off and disabled.
+let bluetoothCheckedBeforeShared = null; // remembers the switch state while in shared network mode
+let applyBluetoothAvailability = () => {
+  if (connectionMode === 'shared_network') {
+    if (bluetoothCheckedBeforeShared === null) {
+      bluetoothCheckedBeforeShared = bluetoothSwitch.checked;
+    }
+    bluetoothSwitch.checked = false;
+    bluetoothSwitch.disabled = true;
+    usingBluetooth = false;
+  } else {
+    bluetoothSwitch.disabled = !canUseBluetooth;
+    if (bluetoothCheckedBeforeShared !== null) {
+      bluetoothSwitch.checked = canUseBluetooth && bluetoothCheckedBeforeShared;
+      bluetoothCheckedBeforeShared = null;
+    }
+    usingBluetooth = bluetoothSwitch.checked;
+  }
 }
 
 let checkStatus = () => {
@@ -373,12 +454,13 @@ let checkStatus = () => {
 }
 
 let needPassword = async () => {
-  if (usingBluetooth) {
-    return false;
-  }
-  // Shared network: receiver generates password, sender enters it (consistent with hotspot same-platform convention)
+  // Shared network: receiver generates password, sender enters it (consistent with hotspot
+  // same-platform convention). Bluetooth is never used in shared network mode.
   if (connectionMode === 'shared_network') {
     return selectedMode === 'send';
+  }
+  if (usingBluetooth) {
+    return false;
   }
   // if linux, joining windows, hosting mac/ios/android or linux if receiving.
   // if windows, always hosting unless windows and sending.
@@ -398,7 +480,9 @@ let needPassword = async () => {
 }
 
 let showPassword = async () => {
-  let showPassword = await needPassword();
+  // the password box is hotspot-only: shared network senders are prompted for the
+  // password after choosing files instead
+  let showPassword = await needPassword() && connectionMode !== 'shared_network';
   if (showPassword) {
     document.getElementById('passwordBox').style.display = '';
   } else {
@@ -411,10 +495,8 @@ let enableUi = async () => {
   startButton.style.display = '';
   // hide cancel button
   cancelButton.style.display = 'none';
-  // enable bluetooth switch
-  if (canUseBluetooth) {
-    document.getElementById('bluetoothSwitch').disabled = false;
-  }
+  // enable bluetooth switch (stays disabled in shared network mode)
+  applyBluetoothAvailability();
   // enable send folder box
   document.getElementById('sendFolderCheckbox').disabled = false;
   // enable radio buttons, file/folder selection buttons
@@ -461,7 +543,9 @@ theron@spiegl.dev
 Copyright (c) 2025, Theron Spiegl
 All rights reserved.
 
-Flying Carpet transfers files between two Android, iOS, Linux, macOS, and Windows devices over ad hoc WiFi. No access point or shared network is required, just two WiFi cards in close range. The only non-working pairings are from one Apple device (macOS or iOS) to another, because Apple no longer allows hotspots to be started programmatically.
+Flying Carpet transfers files between two Android, iOS, Linux, macOS, and Windows devices over ad hoc WiFi. In Hotspot mode, no access point or shared network is required, just two WiFi cards in close range. Hotspot mode does not work from one Apple device (macOS or iOS) to another, because Apple no longer allows hotspots to be started programmatically: use Shared Network mode for those transfers.
+
+In Shared Network mode, both devices must be connected to the same network. No hotspot is created: the devices find each other on the network automatically. Bluetooth is not used in this mode. The receiving device generates and displays a password, which must be entered on the sending device (or scanned on Android).
 
 INSTRUCTIONS
 

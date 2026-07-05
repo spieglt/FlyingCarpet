@@ -16,3 +16,22 @@ body {
   flex-direction: row;
   justify-content: space-between;
 }
+
+#promptOverlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+
+#promptCard {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  min-width: 320px;
+  max-width: 90%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}

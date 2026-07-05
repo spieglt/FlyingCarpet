@@ -34,26 +34,7 @@ pub async fn connect_to_peer<T: UI>(
 ) -> Result<PeerResource, FCError> {
     let hosting = is_hosting(&peer, &mode);
     if hosting {
-        if !check_for_firewall_rule()? {
-            // open firewall
-            let (tx, mut rx) = tokio::sync::mpsc::channel::<Option<String>>(1);
-            tokio::spawn(async move {
-                let res = add_firewall_rule();
-                tx.send(res)
-                    .await
-                    .expect("couldn't send firewall UAC prompt response");
-            });
-
-            ui.output("Waiting for permission to add firewall rule, please see UAC prompt in your taskbar.");
-            let res = rx.recv().await;
-            let res = res.expect("couldn't unwrap value over channel");
-            match res {
-                Some(err_msg) => fc_error(&format!("couldn't add firewall rule. {}", err_msg))?,
-                None => ui.output("Added firewall rule"),
-            }
-        } else {
-            ui.output("Firewall rule already in place.");
-        }
+        ensure_firewall_rules(ui).await?;
 
         // start hotspot
         let hosted_network = start_wifi_direct(&ssid, &password, ui)?;
@@ -646,34 +627,97 @@ fn join_hotspot(ssid: &str, password: &str, guid: &GUID) -> Result<bool, FCError
     }
 }
 
-fn check_for_firewall_rule() -> Result<bool, FCError> {
-    let path = &current_exe()?;
+/// Makes sure the inbound TCP and UDP rules for port 3290 exist, prompting for UAC if not.
+/// TCP is needed whenever this machine is the TCP server (hotspot host, or receiver in
+/// shared network mode); UDP is needed for shared network discovery announcements.
+pub async fn ensure_firewall_rules<T: UI>(ui: &T) -> Result<(), FCError> {
+    let path = current_exe()?;
+    let path_string = path.to_string_lossy().to_string();
     let file_name = path
         .file_name()
         .expect("Error: couldn't convert path to string.")
-        .to_string_lossy();
-    let name = format!("name=\"{}\"", file_name);
+        .to_string_lossy()
+        .to_string();
+    let udp_rule_name = format!("{} UDP", file_name);
+    // The UDP rule was introduced with shared network mode, so it can be missing on
+    // machines that already have the TCP rule from an earlier version.
+    let need_tcp = !check_for_firewall_rule(&file_name, &path_string)?;
+    let need_udp = !check_for_firewall_rule(&udp_rule_name, &path_string)?;
+    if need_tcp || need_udp {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Option<String>>(1);
+        tokio::spawn(async move {
+            let res = add_firewall_rule(need_tcp, need_udp);
+            tx.send(res)
+                .await
+                .expect("couldn't send firewall UAC prompt response");
+        });
+
+        ui.output(
+            "Waiting for permission to add firewall rule, please see UAC prompt in your taskbar.",
+        );
+        let res = rx.recv().await;
+        let res = res.expect("couldn't unwrap value over channel");
+        match res {
+            Some(err_msg) => fc_error(&format!("couldn't add firewall rule. {}", err_msg))?,
+            None => ui.output("Added firewall rule"),
+        }
+
+        // netsh runs in a separate elevated process, so confirm the rules actually landed
+        for _ in 0..10 {
+            if check_for_firewall_rule(&file_name, &path_string)?
+                && check_for_firewall_rule(&udp_rule_name, &path_string)?
+            {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        ui.output("Warning: could not verify the firewall rules were added. Incoming connections on port 3290 may be blocked.");
+    } else {
+        ui.output("Firewall rules already in place.");
+    }
+    Ok(())
+}
+
+/// Returns true only if an enabled rule with this name exists for *this* executable's path.
+/// Matching by name alone isn't enough: an installed copy of Flying Carpet leaves rules with
+/// the same name but a different program path, which don't allow this binary's traffic.
+fn check_for_firewall_rule(rule_name: &str, program_path: &str) -> Result<bool, FCError> {
+    // No embedded quotes: process::Command already passes this as one argument, and
+    // netsh would otherwise search for a rule whose name literally contains quotes
+    // (which made rule names with spaces, like the UDP rule, look permanently missing).
+    let name = format!("name={}", rule_name);
     const CREATE_NO_WINDOW: u32 = 0x08000000; // https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
     let mut command = process::Command::new("netsh");
     let command = command
-        .args(vec!["advfirewall", "firewall", "show", "rule", &name])
+        .args(vec![
+            "advfirewall",
+            "firewall",
+            "show",
+            "rule",
+            &name,
+            "verbose",
+        ])
         .creation_flags(CREATE_NO_WINDOW);
     match command.output() {
         Ok(output) => {
-            // if output contains enabled: true, return true
             let output_string = String::from_utf8_lossy(&output.stdout).to_string();
             let regex = Regex::new(r"Action:\s+Block")?;
             if regex.is_match(&output_string) {
                 fc_error("a Windows Firewall rule is blocking Flying Carpet connections. Please delete or modify the rule to allow incoming connections on TCP port 3290.")?;
             }
-            let regex = Regex::new(r"Enabled:\s+Yes")?;
-            Ok(regex.is_match(&output_string))
+            if !Regex::new(r"Enabled:\s+Yes")?.is_match(&output_string) {
+                return Ok(false);
+            }
+            // verbose output includes a "Program:" line per rule; require our own path
+            Ok(output_string
+                .to_lowercase()
+                .contains(&program_path.to_lowercase()))
         }
         Err(e) => Err(e)?,
     }
 }
 
-fn add_firewall_rule() -> Option<String> {
+fn add_firewall_rule(add_tcp: bool, add_udp: bool) -> Option<String> {
     let path = &current_exe().expect("Error: couldn't get path to current executable.");
     let file_name = path
         .file_name()
@@ -683,23 +727,27 @@ fn add_firewall_rule() -> Option<String> {
     let program = "netsh";
 
     // TCP rule for file transfer
-    let tcp_parameters = "advfirewall firewall add rule name=\"".to_string()
-        + &file_name
-        + "\" dir=in action=allow program=\""
-        + &path.to_string_lossy()
-        + "\" enable=yes profile=any localport=3290 protocol=tcp";
-    if let Err(e) = run_shell_execute(program, Some(&tcp_parameters), true) {
-        return Some(e.to_string());
+    if add_tcp {
+        let tcp_parameters = "advfirewall firewall add rule name=\"".to_string()
+            + &file_name
+            + "\" dir=in action=allow program=\""
+            + &path.to_string_lossy()
+            + "\" enable=yes profile=any localport=3290 protocol=tcp";
+        if let Err(e) = run_shell_execute(program, Some(&tcp_parameters), true) {
+            return Some(e.to_string());
+        }
     }
 
     // UDP rule for discovery (multicast + unicast)
-    let udp_parameters = "advfirewall firewall add rule name=\"".to_string()
-        + &file_name
-        + " UDP\" dir=in action=allow program=\""
-        + &path.to_string_lossy()
-        + "\" enable=yes profile=any localport=3290 protocol=udp";
-    if let Err(e) = run_shell_execute(program, Some(&udp_parameters), true) {
-        return Some(e.to_string());
+    if add_udp {
+        let udp_parameters = "advfirewall firewall add rule name=\"".to_string()
+            + &file_name
+            + " UDP\" dir=in action=allow program=\""
+            + &path.to_string_lossy()
+            + "\" enable=yes profile=any localport=3290 protocol=udp";
+        if let Err(e) = run_shell_execute(program, Some(&udp_parameters), true) {
+            return Some(e.to_string());
+        }
     }
 
     None
@@ -762,13 +810,16 @@ mod test {
 
     #[test]
     fn check_for_firewall_rule() {
-        if !super::check_for_firewall_rule().unwrap() {
-            add_firewall_rule();
+        let path = std::env::current_exe().unwrap();
+        let path_string = path.to_string_lossy().to_string();
+        let file_name = path.file_name().unwrap().to_string_lossy().to_string();
+        if !super::check_for_firewall_rule(&file_name, &path_string).unwrap() {
+            add_firewall_rule(true, true);
         } else {
             println!("firewall rule present");
         }
         std::thread::sleep(std::time::Duration::from_secs(2));
-        let rule_present = super::check_for_firewall_rule().unwrap();
+        let rule_present = super::check_for_firewall_rule(&file_name, &path_string).unwrap();
         assert!(rule_present);
     }
 

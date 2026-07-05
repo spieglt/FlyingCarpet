@@ -14,7 +14,6 @@ val DISCOVERY_MAGIC = byteArrayOf('F'.code.toByte(), 'C'.code.toByte(), 'A'.code
 const val ANNOUNCEMENT_SIZE = 93
 const val TIMESTAMP_WINDOW_SECS = 60L
 const val DISCOVERY_INTERVAL_MS = 500L
-const val DISCOVERY_TIMEOUT_SECS = 120L
 const val MAX_UNICAST_SCAN_HOSTS = 1024
 
 enum class DiscoveryRole(val value: Byte) {
@@ -187,189 +186,179 @@ class DiscoveryManager(
         cancelled.set(true)
     }
 
+    // Mirrors the Rust and Apple implementations: a single socket bound to DISCOVERY_PORT
+    // receives both multicast and unicast announcements, while a multicast sender and a
+    // unicast subnet scan run in parallel (so a network that blocks multicast still works).
+    // Announcements are HMAC-signed with the password-derived key; the first valid
+    // announcement from the opposite role wins.
     suspend fun discoverPeer(): Inet4Address? = withContext(Dispatchers.IO) {
-        outputText("Starting peer discovery...")
+        outputText("Searching for peer via multicast ($MULTICAST_ADDR) and unicast subnet scan...")
 
-        // Try multicast first
-        val multicastResult = try {
-            discoverMulticast()
-        } catch (e: Exception) {
-            outputText("Multicast discovery failed: ${e.message}. Trying unicast fallback...")
-            null
-        }
-
-        if (multicastResult != null) {
-            return@withContext multicastResult
-        }
-
-        // Fallback to unicast only
-        discoverUnicast()
-    }
-
-    private suspend fun discoverMulticast(): Inet4Address? = withContext(Dispatchers.IO) {
-        // Acquire multicast lock
+        // Android filters multicast in the WiFi driver unless a MulticastLock is held
         val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         multicastLock = wifiManager.createMulticastLock("FlyingCarpetDiscovery")
-        multicastLock?.setReferenceCounted(true)
         multicastLock?.acquire()
 
+        var recvSocket: MulticastSocket? = null
+        var sendSocket: DatagramSocket? = null
         try {
-            val multicastAddr = InetAddress.getByName(MULTICAST_ADDR)
+            // Receives multicast and unicast announcements on the discovery port, and
+            // sends our multicast announcements.
             val socket = MulticastSocket(DISCOVERY_PORT)
-            socket.reuseAddress = true
-            socket.soTimeout = 100 // 100ms timeout for non-blocking behavior
-
+            recvSocket = socket
+            socket.soTimeout = 100 // 100ms timeout so the receive loop can check for cancellation
+            val multicastAddr = InetAddress.getByName(MULTICAST_ADDR)
             try {
-                socket.joinGroup(InetSocketAddress(multicastAddr, DISCOVERY_PORT), NetworkInterface.getByInetAddress(localIp))
+                val networkInterface = NetworkInterface.getByInetAddress(localIp)
+                socket.networkInterface = networkInterface
+                socket.joinGroup(InetSocketAddress(multicastAddr, DISCOVERY_PORT), networkInterface)
             } catch (e: Exception) {
                 Log.w("Discovery", "Could not join multicast group: ${e.message}")
+                // unicast discovery still works
             }
 
-            outputText("Listening for peer on multicast $MULTICAST_ADDR:$DISCOVERY_PORT")
+            // Sends the unicast subnet scan from an ephemeral port. The peer's
+            // announcements always arrive on the discovery port socket above.
+            val unicastSocket = DatagramSocket()
+            sendSocket = unicastSocket
 
-            val result = CompletableDeferred<Inet4Address?>()
+            coroutineScope {
+                val result = CompletableDeferred<Inet4Address?>()
 
-            // Sender coroutine - sends multicast announcements in parallel
-            val sender = launch {
-                val multicastDest = InetSocketAddress(multicastAddr, DISCOVERY_PORT)
-                var sequence = 0
-                while (isActive && !cancelled.get()) {
-                    val announcement = DiscoveryAnnouncement.create(role, localIp, sequence)
-                    announcement.sign(key)
-                    val data = announcement.serialize()
-                    try {
-                        socket.send(DatagramPacket(data, data.size, multicastDest))
+                val multicastSender = launch {
+                    val dest = InetSocketAddress(multicastAddr, DISCOVERY_PORT)
+                    var sequence = 0
+                    while (isActive && !cancelled.get()) {
+                        val announcement = DiscoveryAnnouncement.create(role, localIp, sequence)
+                        announcement.sign(key)
+                        val data = announcement.serialize()
+                        try {
+                            socket.send(DatagramPacket(data, data.size, dest))
+                        } catch (e: Exception) {
+                            Log.w("Discovery", "Failed to send multicast: ${e.message}")
+                        }
                         sequence++
-                    } catch (e: Exception) {
-                        Log.w("Discovery", "Failed to send multicast: ${e.message}")
+                        delay(DISCOVERY_INTERVAL_MS)
                     }
-                    delay(DISCOVERY_INTERVAL_MS)
                 }
-            }
 
-            // Receiver coroutine - listens for announcements in parallel
-            val receiver = launch {
-                while (isActive && !cancelled.get()) {
-                    val receiveBuffer = ByteArray(1024)
-                    val receivePacket = DatagramPacket(receiveBuffer, receiveBuffer.size)
-                    try {
-                        socket.receive(receivePacket)
+                val unicastSender = launch {
+                    val prefixLength = getPrefixLength(localIp)
+                    val targets = unicastScanTargets(localIp, prefixLength)
+                    if (targets == null) {
+                        outputText("Subnet too large for unicast scan (/$prefixLength), relying on multicast only.")
+                        return@launch
+                    }
+                    outputText("Scanning ${targets.size} addresses on the local /$prefixLength subnet...")
+                    var sequence = 0
+                    var loggedSendFailure = false
+                    while (isActive && !cancelled.get()) {
+                        // sign one announcement per round and reuse its bytes for every host
+                        val announcement = DiscoveryAnnouncement.create(role, localIp, sequence)
+                        announcement.sign(key)
+                        val data = announcement.serialize()
+                        for (target in targets) {
+                            if (!isActive || cancelled.get()) return@launch
+                            try {
+                                unicastSocket.send(DatagramPacket(data, data.size, InetSocketAddress(target, DISCOVERY_PORT)))
+                            } catch (e: Exception) {
+                                // hosts that don't exist are expected; log the first failure
+                                // in case the whole scan is broken (e.g. permission denied)
+                                if (!loggedSendFailure) {
+                                    loggedSendFailure = true
+                                    Log.w("Discovery", "Unicast send to $target failed: ${e.message}")
+                                }
+                            }
+                        }
+                        sequence++
+                        delay(DISCOVERY_INTERVAL_MS)
+                    }
+                }
+
+                // There's no discovery timeout (the other device may not be started for a
+                // long time), so problems are reported inline, once each, while the search
+                // continues.
+                val receiver = launch {
+                    val buffer = ByteArray(1024)
+                    val started = System.currentTimeMillis()
+                    var receivedPeerPacket = false
+                    var warnedQuiet = false
+                    var warnedHmac = false
+                    var warnedStale = false
+                    var warnedRole = false
+                    while (isActive && !cancelled.get()) {
+                        val packet = DatagramPacket(buffer, buffer.size)
+                        try {
+                            socket.receive(packet)
+                        } catch (e: SocketTimeoutException) {
+                            // expected poll timeout: check for cancellation and try again. if
+                            // nothing from the peer has arrived after a while, hint at likely
+                            // causes (the other device may also simply not be started yet)
+                            if (!warnedQuiet && !receivedPeerPacket
+                                && System.currentTimeMillis() - started >= 30_000
+                            ) {
+                                warnedQuiet = true
+                                outputText("Still searching. If the other device has already started the transfer, check that both devices are on the same network and that no firewall is blocking UDP port 3290.")
+                            }
+                            continue
+                        }
 
                         val received = DiscoveryAnnouncement.deserialize(
-                            receivePacket.data.sliceArray(0 until receivePacket.length)
+                            packet.data.sliceArray(0 until packet.length)
                         )
-
-                        if (received != null) {
-                            val receivedIp = InetAddress.getByAddress(received.ipAddress)
-                            if (receivedIp == localIp) continue
-                            if (!received.verify(key)) continue
-                            if (!received.isTimestampValid()) continue
-                            if (received.role == role) continue
-
-                            outputText("Discovered peer at $receivedIp")
-                            result.complete(receivedIp as? Inet4Address)
-                            return@launch
+                        if (received == null) {
+                            Log.i("Discovery", "Unparseable ${packet.length}-byte datagram from ${packet.address}")
+                            continue
                         }
-                    } catch (e: SocketTimeoutException) {
-                        // Expected timeout, continue loop
-                    }
-                }
-            }
 
-            val peerIp = withTimeoutOrNull(DISCOVERY_TIMEOUT_SECS * 1000) {
-                result.await()
-            }
-
-            sender.cancel()
-            receiver.cancel()
-            socket.close()
-
-            peerIp
-        } finally {
-            multicastLock?.release()
-            multicastLock = null
-        }
-    }
-
-    private suspend fun discoverUnicast(): Inet4Address? = withContext(Dispatchers.IO) {
-        val prefixLength = getPrefixLength(localIp)
-        val targets = unicastScanTargets(localIp, prefixLength)
-
-        if (targets == null) {
-            outputText("Subnet too large for unicast scan (/$prefixLength), relying on multicast only.")
-            return@withContext null
-        }
-
-        outputText("Starting unicast subnet scan (/$prefixLength, ${targets.size} hosts)...")
-
-        val socket = DatagramSocket()
-        socket.soTimeout = 100
-
-        val result = CompletableDeferred<Inet4Address?>()
-
-        // Sender coroutine
-        val sender = launch {
-            var sequence = 0
-            while (isActive && !cancelled.get()) {
-                for (targetIp in targets) {
-                    if (!isActive || cancelled.get()) return@launch
-
-                    val announcement = DiscoveryAnnouncement.create(role, localIp, sequence)
-                    announcement.sign(key)
-                    val data = announcement.serialize()
-
-                    try {
-                        val packet = DatagramPacket(
-                            data, data.size,
-                            InetSocketAddress(targetIp, DISCOVERY_PORT)
-                        )
-                        socket.send(packet)
-                    } catch (e: Exception) {
-                        // Ignore send errors
-                    }
-                }
-                sequence++
-                delay(DISCOVERY_INTERVAL_MS)
-            }
-        }
-
-        // Receiver coroutine
-        val receiver = launch {
-            while (isActive && !cancelled.get()) {
-                val receiveBuffer = ByteArray(1024)
-                val receivePacket = DatagramPacket(receiveBuffer, receiveBuffer.size)
-                try {
-                    socket.receive(receivePacket)
-
-                    val received = DiscoveryAnnouncement.deserialize(
-                        receivePacket.data.sliceArray(0 until receivePacket.length)
-                    )
-
-                    if (received != null) {
                         val receivedIp = InetAddress.getByAddress(received.ipAddress)
-                        if (receivedIp == localIp) continue
-                        if (!received.verify(key)) continue
-                        if (!received.isTimestampValid()) continue
-                        if (received.role == role) continue
+                        if (receivedIp == localIp) continue // our own announcement
+                        receivedPeerPacket = true
+                        if (!received.verify(key)) {
+                            if (!warnedHmac) {
+                                warnedHmac = true
+                                outputText("Received an announcement that failed authentication. If it came from the other device, check that the password matches on both. Still searching...")
+                            }
+                            Log.i("Discovery", "Announcement from ${packet.address} failed HMAC check (different password?)")
+                            continue
+                        }
+                        if (!received.isTimestampValid()) {
+                            if (!warnedStale) {
+                                warnedStale = true
+                                outputText("Received an announcement with an out-of-date timestamp. Check that both devices' clocks are set correctly. Still searching...")
+                            }
+                            Log.i("Discovery", "Announcement from ${packet.address} has a stale timestamp")
+                            continue
+                        }
+                        if (received.role == role) {
+                            if (!warnedRole) {
+                                warnedRole = true
+                                outputText("Received an announcement from a device in the same mode as this one. If it's the other device of this transfer, one side must select Send and the other Receive. Still searching...")
+                            }
+                            Log.i("Discovery", "Announcement from ${packet.address} has our own role, ignoring")
+                            continue
+                        }
 
-                        outputText("Discovered peer at $receivedIp")
+                        outputText("Discovered peer at ${receivedIp.hostAddress}")
                         result.complete(receivedIp as? Inet4Address)
                         return@launch
                     }
-                } catch (e: SocketTimeoutException) {
-                    // Expected timeout
+                    result.complete(null)
                 }
+
+                // no timeout: wait until the peer is found or the transfer is cancelled
+                val peerIp = result.await()
+                cancelled.set(true)
+                multicastSender.cancel()
+                unicastSender.cancel()
+                receiver.cancel()
+                peerIp
             }
+        } finally {
+            recvSocket?.close()
+            sendSocket?.close()
+            multicastLock?.release()
+            multicastLock = null
         }
-
-        val peerIp = withTimeoutOrNull(DISCOVERY_TIMEOUT_SECS * 1000) {
-            result.await()
-        }
-
-        sender.cancel()
-        receiver.cancel()
-        socket.close()
-
-        peerIp
     }
 }

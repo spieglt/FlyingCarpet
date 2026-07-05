@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc;
-use tokio::time::{interval, timeout};
+use tokio::time::interval;
 
 pub const MULTICAST_ADDR: &str = "239.255.73.67";
 pub const DISCOVERY_PORT: u16 = 3290;
@@ -16,7 +16,6 @@ pub const DISCOVERY_MAGIC: [u8; 4] = *b"FCAP";
 pub const ANNOUNCEMENT_SIZE: usize = 93;
 const TIMESTAMP_WINDOW_SECS: u64 = 60;
 const DISCOVERY_INTERVAL_MS: u64 = 500;
-const DISCOVERY_TIMEOUT_SECS: u64 = 120;
 const MAX_UNICAST_SCAN_HOSTS: u32 = 1024;
 
 // Compile-time check that ANNOUNCEMENT_SIZE matches the sum of all field sizes.
@@ -279,6 +278,17 @@ pub struct DiscoveryService {
     cancel: Arc<AtomicBool>,
 }
 
+/// Sets the discovery cancel flag when dropped. discover_peer() holds one across its
+/// awaits so that if the transfer task is aborted mid-discovery, the spawned
+/// sender/receiver tasks still exit and release the discovery port.
+struct CancelOnDrop(Arc<AtomicBool>);
+
+impl Drop for CancelOnDrop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
+
 impl DiscoveryService {
     pub fn new(key: [u8; 32], mode: &Mode, local_ip: Ipv4Addr, prefix_len: u8) -> Self {
         DiscoveryService {
@@ -297,29 +307,42 @@ impl DiscoveryService {
     pub async fn discover_peer<T: UI>(&self, ui: &T) -> Result<Ipv4Addr, FCError> {
         ui.output("Starting peer discovery...");
 
+        // Stop the spawned tasks below even if this future is dropped (transfer cancelled).
+        let _cancel_guard = CancelOnDrop(self.cancel.clone());
+
         let multicast_addr: Ipv4Addr = MULTICAST_ADDR.parse().unwrap();
         let bind_addr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, DISCOVERY_PORT);
 
         // Create multicast socket on DISCOVERY_PORT.
         // This socket receives both multicast and unicast announcements from the peer.
+        // No SO_REUSEADDR: if another process holds the port we want a loud bind error,
+        // not two sockets silently splitting the incoming packets.
         let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
             .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?;
 
-        socket
-            .set_reuse_address(true)
-            .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?;
+        socket.bind(&bind_addr.into()).map_err(|e| {
+            DiscoveryError::MulticastBindFailed(format!(
+                "{} (is another copy of Flying Carpet running?)",
+                e
+            ))
+        })?;
 
-        socket
-            .bind(&bind_addr.into())
-            .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?;
-
-        socket
-            .join_multicast_v4(&multicast_addr, &self.local_ip)
-            .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?;
-
-        socket
-            .set_multicast_loop_v4(false)
-            .map_err(|e| DiscoveryError::MulticastBindFailed(e.to_string()))?;
+        // Multicast setup is best-effort: on failure the unicast subnet scan still works.
+        if let Err(e) = socket.join_multicast_v4(&multicast_addr, &self.local_ip) {
+            println!(
+                "[Discovery] Warning: could not join multicast group on {}: {}. Continuing with unicast discovery.",
+                self.local_ip, e
+            );
+        }
+        // Send multicast out the interface that owns local_ip. Without this, machines with
+        // several adapters (VPNs, virtual switches) can send multicast into the wrong network.
+        if let Err(e) = socket.set_multicast_if_v4(&self.local_ip) {
+            println!(
+                "[Discovery] Warning: could not set multicast interface to {}: {}",
+                self.local_ip, e
+            );
+        }
+        let _ = socket.set_multicast_loop_v4(false);
 
         socket
             .set_nonblocking(true)
@@ -354,13 +377,22 @@ impl DiscoveryService {
 
         // Spawn receiver task on the multicast socket.
         // Receives both multicast and direct unicast announcements on DISCOVERY_PORT.
+        // There's no discovery timeout (the other device may not be started for a long
+        // time), so problems are reported inline, once each, while the search continues.
         {
             let recv_socket = recv_socket.clone();
             let cancel = cancel.clone();
             let tx = tx.clone();
+            let ui = ui.clone();
 
             tokio::spawn(async move {
                 let mut buf = [0u8; 1024];
+                let started = std::time::Instant::now();
+                let mut received_peer_packet = false;
+                let mut warned_quiet = false;
+                let mut warned_hmac = false;
+                let mut warned_stale = false;
+                let mut warned_role = false;
                 loop {
                     if cancel.load(Ordering::SeqCst) {
                         break;
@@ -372,8 +404,12 @@ impl DiscoveryService {
                     )
                     .await
                     {
-                        Ok(Ok((len, _src_addr))) => {
+                        Ok(Ok((len, src_addr))) => {
                             if len < ANNOUNCEMENT_SIZE {
+                                println!(
+                                    "[Discovery] Ignoring {}-byte datagram from {} (too short)",
+                                    len, src_addr
+                                );
                                 continue;
                             }
 
@@ -381,23 +417,74 @@ impl DiscoveryService {
                                 DiscoveryAnnouncement::deserialize(&buf[..len])
                             {
                                 if announcement.get_ip_address() == local_ip {
+                                    // our own announcement echoed back (multicast loopback)
                                     continue;
                                 }
+                                received_peer_packet = true;
                                 if !announcement.verify(&key) {
+                                    if !warned_hmac {
+                                        warned_hmac = true;
+                                        ui.output("Received an announcement that failed authentication. If it came from the other device, check that the password matches on both. Still searching...");
+                                    }
+                                    println!(
+                                        "[Discovery] Announcement from {} failed HMAC check (different password?)",
+                                        src_addr
+                                    );
                                     continue;
                                 }
                                 if !announcement.is_timestamp_valid() {
+                                    if !warned_stale {
+                                        warned_stale = true;
+                                        ui.output("Received an announcement with an out-of-date timestamp. Check that both devices' clocks are set correctly. Still searching...");
+                                    }
+                                    println!(
+                                        "[Discovery] Announcement from {} has a stale timestamp (clocks out of sync?)",
+                                        src_addr
+                                    );
                                     continue;
                                 }
                                 if announcement.role == our_role {
+                                    if !warned_role {
+                                        warned_role = true;
+                                        ui.output("Received an announcement from a device in the same mode as this one. If it's the other device of this transfer, one side must select Send and the other Receive. Still searching...");
+                                    }
+                                    println!(
+                                        "[Discovery] Announcement from {} has our own role, ignoring",
+                                        src_addr
+                                    );
                                     continue;
                                 }
 
+                                println!(
+                                    "[Discovery] Valid peer announcement from {} (source {})",
+                                    announcement.get_ip_address(),
+                                    src_addr
+                                );
                                 let _ = tx.send(announcement.get_ip_address()).await;
                                 break;
+                            } else {
+                                println!(
+                                    "[Discovery] Unparseable {}-byte datagram from {}",
+                                    len, src_addr
+                                );
                             }
                         }
-                        Ok(Err(_)) | Err(_) => {}
+                        Ok(Err(e)) => {
+                            // e.g. WSAECONNRESET on Windows after an ICMP unreachable; not fatal
+                            println!("[Discovery] recv error: {}", e);
+                        }
+                        Err(_) => {
+                            // 100ms poll timeout: check cancellation and continue. If nothing
+                            // from the peer has arrived after a while, hint at likely causes
+                            // (the other device may also simply not be started yet).
+                            if !warned_quiet
+                                && !received_peer_packet
+                                && started.elapsed().as_secs() >= 30
+                            {
+                                warned_quiet = true;
+                                ui.output("Still searching. If the other device has already started the transfer, check that both devices are on the same network and that no firewall is blocking UDP port 3290.");
+                            }
+                        }
                     }
                 }
             });
@@ -430,6 +517,11 @@ impl DiscoveryService {
         // Spawn unicast sender task (subnet scan) if subnet is small enough
         if let Some(targets) = unicast_scan_targets(self.local_ip, self.prefix_len) {
             let cancel = cancel.clone();
+            ui.output(&format!(
+                "Scanning {} addresses on the local /{} subnet...",
+                targets.len(),
+                self.prefix_len
+            ));
 
             tokio::spawn(async move {
                 let mut sequence = 0u32;
@@ -460,8 +552,10 @@ impl DiscoveryService {
             ui.output("Subnet too large for unicast scan, relying on multicast only.");
         }
 
-        // Wait for peer discovery with timeout
-        let result = timeout(Duration::from_secs(DISCOVERY_TIMEOUT_SECS), async {
+        // Wait for peer discovery. There's deliberately no timeout: the user may start
+        // this side long before the other, so keep searching until the peer appears or
+        // the transfer is cancelled.
+        let result: Result<Ipv4Addr, FCError> = async {
             loop {
                 tokio::select! {
                     Some(peer_ip) = rx.recv() => {
@@ -476,19 +570,18 @@ impl DiscoveryService {
                     }
                 }
             }
-        })
+        }
         .await;
 
         // Stop all background tasks
         self.cancel.store(true, Ordering::SeqCst);
 
         match result {
-            Ok(Ok(peer_ip)) => {
+            Ok(peer_ip) => {
                 ui.output(&format!("Discovered peer at {}", peer_ip));
                 Ok(peer_ip)
             }
-            Ok(Err(e)) => Err(e),
-            Err(_) => Err(DiscoveryError::TimeoutWaitingForPeer.into()),
+            Err(e) => Err(e),
         }
     }
 }
@@ -516,6 +609,33 @@ mod tests {
         assert_eq!(deserialized.port, DISCOVERY_PORT);
         assert_eq!(deserialized.sequence, 42);
         assert!(deserialized.verify(&key));
+    }
+
+    // Known-answer test shared with the Android implementation
+    // (DiscoveryUnitTest.kt) to guarantee the wire formats match.
+    #[test]
+    fn test_cross_platform_vector() {
+        let mut announcement = DiscoveryAnnouncement {
+            magic: DISCOVERY_MAGIC,
+            version: 1,
+            role: DiscoveryRole::Receiver,
+            capabilities: 0,
+            ip_address: [192, 168, 1, 42],
+            port: DISCOVERY_PORT,
+            timestamp: 1750000000,
+            sequence: 7,
+            nonce: [0x11; 32],
+            hmac: [0; 32],
+        };
+        let key: [u8; 32] = std::array::from_fn(|i| i as u8);
+        announcement.sign(&key);
+        let serialized = announcement.serialize();
+        let hex: String = serialized.iter().map(|b| format!("{:02x}", b)).collect();
+        assert_eq!(
+            hex,
+            "4643415000010100000000c0a8012a0cda00000000684ee180000000071111111111111111111111111111111111111111111111111111111111111111adc75d44854c84be1627ef8933f16d0fcb26807fccb7562ea3609f13982f7a9a"
+        );
+        assert!(announcement.verify(&key));
     }
 
     #[test]
