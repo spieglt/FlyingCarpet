@@ -184,6 +184,7 @@ async fn main() {
             expand_files,
             generate_password,
             get_wifi_interfaces,
+            get_network_interfaces,
             check_support,
             user_bluetooth_pair,
             has_network_connection,
@@ -249,6 +250,16 @@ fn get_wifi_interfaces() -> Vec<WiFiInterface> {
     match network::get_wifi_interfaces() {
         Ok(interfaces) => interfaces,
         Err(_e) => vec![], // if there was an error, just return empty list of interfaces and let javascript detect "no wifi card found"
+    }
+}
+
+// shared network mode works over wired connections too, so it uses this broader list
+// (WiFi + Ethernet interfaces with an IPv4 address) instead of get_wifi_interfaces
+#[tauri::command]
+fn get_network_interfaces() -> Vec<WiFiInterface> {
+    match network::get_connected_interfaces() {
+        Ok(interfaces) => interfaces,
+        Err(_e) => vec![], // if there was an error, just return empty list of interfaces and let javascript report it
     }
 }
 

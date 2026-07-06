@@ -282,13 +282,14 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     private suspend fun findPeerOnSharedNetwork() {
         val connectivityManager = application
             .getSystemService(AppCompatActivity.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val (network, localIp) = getWifiNetworkAndIp(connectivityManager)
+        val (network, localIp) = getSharedNetworkAndIp(connectivityManager)
             ?: throw Exception(
-                "No WiFi network connection. Shared Network mode requires both devices to be "
-                        + "connected to the same network. Connect to WiFi or use Hotspot mode."
+                "No network connection. Shared Network mode requires both devices to be "
+                        + "connected to the same network. Connect to WiFi (or wired Ethernet) "
+                        + "or use Hotspot mode."
             )
-        // route our traffic over WiFi even if Android prefers another network, e.g. cellular
-        // because the WiFi network has no internet access
+        // route our traffic over this network even if Android prefers another one, e.g.
+        // cellular because the local network has no internet access
         connectivityManager.bindProcessToNetwork(network)
         boundToWifiNetwork = true
         outputText("Local IP: ${localIp.hostAddress}")
@@ -328,20 +329,25 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         }
     }
 
-    private fun getWifiNetworkAndIp(connectivityManager: ConnectivityManager): Pair<Network, Inet4Address>? {
+    // Prefer WiFi, but accept Ethernet (e.g. USB-C adapters) so wired devices work too.
+    private fun getSharedNetworkAndIp(connectivityManager: ConnectivityManager): Pair<Network, Inet4Address>? {
+        var wired: Pair<Network, Inet4Address>? = null
         @Suppress("DEPRECATION")
         for (network in connectivityManager.allNetworks) {
             val capabilities = connectivityManager.getNetworkCapabilities(network) ?: continue
-            if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
+            val isWifi = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+            val isEthernet = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+            if (!isWifi && !isEthernet) continue
             val linkProperties = connectivityManager.getLinkProperties(network) ?: continue
             for (linkAddress in linkProperties.linkAddresses) {
                 val address = linkAddress.address
                 if (address is Inet4Address && !address.isLoopbackAddress && !address.isLinkLocalAddress) {
-                    return Pair(network, address)
+                    if (isWifi) return Pair(network, address)
+                    if (wired == null) wired = Pair(network, address)
                 }
             }
         }
-        return null
+        return wired
     }
 
     // same charset as the desktop version's generate_password()

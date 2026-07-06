@@ -252,19 +252,27 @@ async function startTransfer(filesSelected) {
     }
   }
 
-  // make sure we have a wifi interface and prompt for which if more than one
+  // make sure we have a usable interface and prompt for which if more than one.
+  // hotspot mode needs a wifi interface; shared network mode works over wired
+  // (ethernet) interfaces too, so it uses the broader list.
   let wifiInterface;
-  let interfaces = await core.invoke('get_wifi_interfaces');
+  let interfaces = connectionMode === 'shared_network'
+    ? await core.invoke('get_network_interfaces')
+    : await core.invoke('get_wifi_interfaces');
   // console.log('interfaces:', interfaces);
   switch (interfaces.length) {
     case 0:
-      output('No WiFi interfaces found. Flying Carpet only works over WiFi.');
+      if (connectionMode === 'shared_network') {
+        output('No connected network interfaces found. Connect to a network (WiFi or Ethernet) and try again.');
+      } else {
+        output('No WiFi interfaces found. Hotspot mode only works over WiFi.');
+      }
       return;
     case 1:
       wifiInterface = interfaces[0];
       break;
     default:
-      let alertString = 'Enter the number for which WiFi interface to use (e.g. "1" or "2"):\n'
+      let alertString = 'Enter the number for which network interface to use (e.g. "1" or "2"):\n'
       for (let i = 0; i < interfaces.length; i++) {
         alertString += `${i+1}: ${interfaces[i][0]}\n`
       }
@@ -273,7 +281,7 @@ async function startTransfer(filesSelected) {
         wifiInterface = interfaces[choice - 1];
         output(`Using interface: ${wifiInterface[0]}`);
       } else {
-        output('Invalid interface selected. Please enter just the number of the WiFi interface you would like to use, e.g. "1" or "3".');
+        output('Invalid interface selected. Please enter just the number of the network interface you would like to use, e.g. "1" or "3".');
         return;
       }
   }

@@ -261,25 +261,28 @@ pub fn has_network_connection(interface: &WiFiInterface) -> Result<bool, FCError
     Ok(!stdout.trim().is_empty())
 }
 
-/// Get all network interfaces that have an active IPv4 connection
+/// Get WiFi and Ethernet interfaces that have an IPv4 address, for shared network
+/// mode (which works over wired connections too, unlike hotspot mode). Filtering by
+/// nmcli device type keeps virtual interfaces (docker0, VPN tunnels, bridges) out of
+/// the interface chooser.
 pub fn get_connected_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
-    // Get all interfaces with IPv4 addresses
-    let output = run_command("ip", Some(vec!["-4", "-o", "addr", "show"]))?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
+    let command_output = run_command("nmcli", Some(vec!["-t", "device"]))?;
+    let output = String::from_utf8_lossy(&command_output.stdout);
     let mut interfaces = Vec::new();
-    for line in stdout.lines() {
-        // Format: "2: eth0    inet 192.168.1.100/24 brd 192.168.1.255 scope global eth0"
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 2 {
-            let iface_name = parts[1].trim_end_matches(':');
-            // Skip loopback
-            if iface_name != "lo" {
-                interfaces.push(WiFiInterface(iface_name.to_string(), String::new()));
-            }
+    for line in output.lines() {
+        // Format: DEVICE:TYPE:STATE:CONNECTION
+        let split_line: Vec<&str> = line.split(':').collect();
+        if split_line.len() < 2 {
+            continue;
+        }
+        if split_line[1] != "wifi" && split_line[1] != "ethernet" {
+            continue;
+        }
+        let interface = WiFiInterface(split_line[0].to_string(), String::new());
+        if has_network_connection(&interface).unwrap_or(false) {
+            interfaces.push(interface);
         }
     }
-
     Ok(interfaces)
 }
 
