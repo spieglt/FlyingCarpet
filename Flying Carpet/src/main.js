@@ -347,13 +347,15 @@ async function startTransfer(filesSelected) {
       makeQRCode(password);
       output(`Password: ${password}`);
       output('Start the transfer on the sending device and enter this password when prompted (or scan the QR code on Android).');
-      await dialog.message(`Start the transfer on the sending device and enter this password when prompted (or scan the QR code on Android):\n\n${password}`, { title: 'Flying Carpet' });
+      // not awaited: the transfer below must start without waiting for the dialog to be dismissed
+      dialog.message(`Start the transfer on the sending device and enter this password when prompted (or scan the QR code on Android):\n\n${password}`, { title: 'Flying Carpet' });
     } else if (selectedPeer === 'ios' || selectedPeer === 'android') {
       output('\nStart the transfer on the other device and scan the QR code when prompted.');
       makeQRCode(password);
     } else {
       output(`Password: ${password}`);
-      await dialog.message(`Start the transfer on the other device and enter this password when prompted:\n\n${password}`, { title: 'Flying Carpet' });
+      // not awaited: the transfer below must start without waiting for the dialog to be dismissed
+      dialog.message(`Start the transfer on the other device and enter this password when prompted:\n\n${password}`, { title: 'Flying Carpet' });
     }
   }
 
