@@ -189,8 +189,12 @@ class DiscoveryManager(
     // Mirrors the Rust and Apple implementations: a single socket bound to DISCOVERY_PORT
     // receives both multicast and unicast announcements, while a multicast sender and a
     // unicast subnet scan run in parallel (so a network that blocks multicast still works).
-    // Announcements are HMAC-signed with the password-derived key; the first valid
-    // announcement from the opposite role wins.
+    // Announcements are HMAC-signed with the password-derived key. In the sender role,
+    // the first valid announcement from the opposite role wins. In the receiver role this
+    // never returns a peer: it announces our presence and surfaces diagnostics until
+    // cancelled, because the receiver's real completion signal is the sender's TCP
+    // connection (the sender stops announcing as soon as it hears us, possibly before we
+    // ever hear it, so waiting to hear the sender can deadlock).
     suspend fun discoverPeer(): Inet4Address? = withContext(Dispatchers.IO) {
         outputText("Searching for peer via multicast ($MULTICAST_ADDR) and unicast subnet scan...")
 
@@ -282,6 +286,7 @@ class DiscoveryManager(
                     val buffer = ByteArray(1024)
                     val started = System.currentTimeMillis()
                     var receivedPeerPacket = false
+                    var foundSender = false
                     var warnedQuiet = false
                     var warnedHmac = false
                     var warnedStale = false
@@ -339,6 +344,16 @@ class DiscoveryManager(
                             continue
                         }
 
+                        if (role == DiscoveryRole.RECEIVER) {
+                            // The receiver's completion signal is the sender's TCP connection,
+                            // not discovery. Keep announcing so the sender can find us; this
+                            // is informational only.
+                            if (!foundSender) {
+                                foundSender = true
+                                outputText("Found the sender at ${receivedIp.hostAddress}. Waiting for it to connect...")
+                            }
+                            continue
+                        }
                         outputText("Discovered peer at ${receivedIp.hostAddress}")
                         result.complete(receivedIp as? Inet4Address)
                         return@launch

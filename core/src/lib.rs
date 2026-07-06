@@ -420,35 +420,36 @@ async fn start_shared_network_transfer<T: UI>(
         None
     };
 
-    // Create discovery service and find peer
+    // Create discovery service
     let discovery = DiscoveryService::new(*key, mode, local_ip, prefix_len);
-    let peer_ip = discovery.discover_peer(ui).await?;
 
-    let stream = match role {
+    let (peer_ip, stream) = match role {
         DiscoveryRole::Receiver => {
+            // The sender discovers us and connects, and it stops announcing as soon as
+            // it hears us — possibly before we ever hear it. So the TCP connection
+            // itself is the receiver's completion signal: discovery runs alongside the
+            // listener only to announce our presence and surface diagnostics
+            // (receiver-role discovery never resolves with a peer), and must not gate
+            // the accept. No timeout on the accept either: the sender may not be
+            // started for a long time.
             let listener = listener.unwrap();
-            ui.output("Waiting for TCP connection from peer...");
-
-            // Wait for connection with timeout
-            let accept_result =
-                tokio::time::timeout(std::time::Duration::from_secs(30), listener.accept()).await;
-
-            match accept_result {
-                Ok(Ok((stream, addr))) => {
+            tokio::select! {
+                result = discovery.discover_peer(ui) => {
+                    // only returns on failure or cancellation
+                    result?;
+                    fc_error("Discovery ended unexpectedly")?;
+                    unreachable!()
+                }
+                accepted = listener.accept() => {
+                    let (stream, addr) = accepted?;
                     ui.output(&format!("TCP connection accepted from {}", addr));
-                    stream
-                }
-                Ok(Err(e)) => {
-                    fc_error(&format!("Error accepting TCP connection: {}", e))?;
-                    unreachable!()
-                }
-                Err(_) => {
-                    fc_error("Timeout waiting for TCP connection")?;
-                    unreachable!()
+                    (addr.ip().to_string(), stream)
                 }
             }
         }
         DiscoveryRole::Sender => {
+            let peer_ip = discovery.discover_peer(ui).await?;
+
             // Sender connects to receiver
             ui.output(&format!("Connecting to peer at {}:3290", peer_ip));
 
@@ -476,12 +477,12 @@ async fn start_shared_network_transfer<T: UI>(
                 }
             }
 
-            stream.unwrap()
+            (peer_ip.to_string(), stream.unwrap())
         }
     };
 
     ui.output("TCP connection established");
-    Ok((PeerResource::WifiClient(peer_ip.to_string()), stream))
+    Ok((PeerResource::WifiClient(peer_ip), stream))
 }
 
 async fn confirm_mode(

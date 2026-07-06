@@ -304,6 +304,12 @@ impl DiscoveryService {
         self.cancel.store(true, Ordering::SeqCst);
     }
 
+    /// Sender role: resolves with the receiver's IP once a valid announcement arrives.
+    /// Receiver role: never resolves with a peer — it announces our presence and surfaces
+    /// diagnostics until cancelled or dropped. The receiver's real completion signal is
+    /// the sender's TCP connection (see start_shared_network_transfer): the sender stops
+    /// announcing as soon as it hears us, possibly before we ever hear it, so waiting to
+    /// hear the sender would deadlock on networks where UDP only works one way.
     pub async fn discover_peer<T: UI>(&self, ui: &T) -> Result<Ipv4Addr, FCError> {
         ui.output("Starting peer discovery...");
 
@@ -389,6 +395,7 @@ impl DiscoveryService {
                 let mut buf = [0u8; 1024];
                 let started = std::time::Instant::now();
                 let mut received_peer_packet = false;
+                let mut found_sender = false;
                 let mut warned_quiet = false;
                 let mut warned_hmac = false;
                 let mut warned_stale = false;
@@ -460,6 +467,19 @@ impl DiscoveryService {
                                     announcement.get_ip_address(),
                                     src_addr
                                 );
+                                if our_role == DiscoveryRole::Receiver {
+                                    // The receiver's completion signal is the sender's TCP
+                                    // connection, not discovery. Keep announcing so the
+                                    // sender can find us; this is informational only.
+                                    if !found_sender {
+                                        found_sender = true;
+                                        ui.output(&format!(
+                                            "Found the sender at {}. Waiting for it to connect...",
+                                            announcement.get_ip_address()
+                                        ));
+                                    }
+                                    continue;
+                                }
                                 let _ = tx.send(announcement.get_ip_address()).await;
                                 break;
                             } else {
@@ -554,7 +574,9 @@ impl DiscoveryService {
 
         // Wait for peer discovery. There's deliberately no timeout: the user may start
         // this side long before the other, so keep searching until the peer appears or
-        // the transfer is cancelled.
+        // the transfer is cancelled. In the receiver role nothing is ever sent on the
+        // channel, so this waits (while the tasks above keep announcing) until the
+        // future is cancelled or dropped when the sender's TCP connection arrives.
         let result: Result<Ipv4Addr, FCError> = async {
             loop {
                 tokio::select! {

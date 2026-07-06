@@ -91,6 +91,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     lateinit var promptForPassword: () -> Unit // shared network mode: sender asks user for the receiver's password
     lateinit var displaySharedNetworkPassword: (String) -> Unit // shared network mode: receiver shows generated password as QR code
     var discoveryManager: DiscoveryManager? = null
+    private var discoveryJob: Job? = null // receiver-role background discovery in shared network mode
     private var boundToWifiNetwork = false
     private val handler = Handler(Looper.getMainLooper())
     private var _output = MutableLiveData<String>()
@@ -170,6 +171,8 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         // cancel shared network discovery if it's running
         discoveryManager?.cancel()
         discoveryManager = null
+        discoveryJob?.cancel()
+        discoveryJob = null
         // unbind from the WiFi network if we bound to it for a shared network transfer
         if (boundToWifiNetwork) {
             val connectivityManager = application
@@ -296,7 +299,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         if (mode == Mode.Receiving) {
             withContext(Dispatchers.IO) {
                 server = ServerSocket(PORT)
-                server.soTimeout = 30_000
+                server.soTimeout = 1_000 // poll interval so the accept loop in startTCP() notices cancellation
             }
             outputText("TCP listener ready on port $PORT.")
         }
@@ -304,10 +307,25 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         val role = if (mode == Mode.Sending) DiscoveryRole.SENDER else DiscoveryRole.RECEIVER
         val discovery = DiscoveryManager(getApplication(), key, role, localIp, ::outputText)
         discoveryManager = discovery
-        // discoverPeer() searches until the peer is found or the transfer is cancelled
-        val peer = discovery.discoverPeer() ?: throw Exception("Discovery cancelled.")
-        discoveryManager = null
-        peerIP = peer
+        if (mode == Mode.Receiving) {
+            // The sender discovers us and connects, and it stops announcing as soon as it
+            // hears us — possibly before we ever hear it. So the TCP connection (accepted
+            // in startTCP()) is the receiver's completion signal: discovery runs in the
+            // background only to announce our presence and surface diagnostics
+            // (receiver-role discoverPeer() never returns a peer).
+            discoveryJob = GlobalScope.launch(Dispatchers.IO) {
+                try {
+                    discovery.discoverPeer()
+                } catch (e: Exception) {
+                    outputText("Discovery error: ${e.message}")
+                }
+            }
+        } else {
+            // discoverPeer() searches until the peer is found or the transfer is cancelled
+            val peer = discovery.discoverPeer() ?: throw Exception("Discovery cancelled.")
+            discoveryManager = null
+            peerIP = peer
+        }
     }
 
     private fun getWifiNetworkAndIp(connectivityManager: ConnectivityManager): Pair<Network, Inet4Address>? {
@@ -537,11 +555,24 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 // before discovery started, in findPeerOnSharedNetwork().
                 if (mode == Mode.Receiving) {
                     outputText("Waiting for TCP connection from sender...")
-                    try {
-                        client = server.accept() // 30 second soTimeout set when the server was bound
-                    } catch (e: SocketTimeoutException) {
-                        throw Exception("Timed out waiting for TCP connection from sender.")
+                    // No timeout: the sender may not be started for a long time. Keep
+                    // listening until it connects or the transfer is cancelled (the 1s
+                    // soTimeout set at bind is just a poll so cancellation is noticed;
+                    // cleanUpTransfer() also closes the server socket).
+                    while (true) {
+                        try {
+                            client = server.accept()
+                            break
+                        } catch (e: SocketTimeoutException) {
+                            if (!isActive) throw CancellationException("Transfer cancelled.")
+                        }
                     }
+                    // the sender is connected: stop announcing
+                    discoveryManager?.cancel()
+                    discoveryManager = null
+                    discoveryJob?.cancel()
+                    discoveryJob = null
+                    peerIP = client.inetAddress as? Inet4Address
                     outputText("TCP connection accepted")
                 } else {
                     connectToSharedNetworkPeer()
