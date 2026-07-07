@@ -50,6 +50,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bluetoothSwitch: SwitchCompat
     private lateinit var bluetoothIcon: ImageView
     private var bluetoothAvailable = false
+    // remembers the bluetooth switch state while in shared network mode, which forces
+    // it off; restored when the user returns to hotspot mode (mirrors the desktop UI)
+    private var bluetoothCheckedBeforeShared: Boolean? = null
 
     private fun getFilePicker(): ActivityResultLauncher<Array<String>> {
         return registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -363,13 +366,25 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyConnectionModeUi() {
         if (viewModel.connectionMode == ConnectionMode.SharedNetwork) {
-            // peer OS is found via discovery and bluetooth isn't used in shared network mode
-            peerGroup.isVisible = false
-            peerInstruction.isVisible = false
+            // bluetooth isn't used in shared network mode: turn the switch off, not just
+            // disabled, remembering its state so hotspot mode can restore it. unchecking
+            // fires the switch listener, which also sets bluetooth.active = false.
+            if (bluetoothCheckedBeforeShared == null) {
+                bluetoothCheckedBeforeShared = bluetoothSwitch.isChecked
+            }
+            bluetoothSwitch.isChecked = false
             bluetoothSwitch.isEnabled = false
             bluetoothIcon.isVisible = false
+            // peer OS is found via discovery, so no peer group either. set after the
+            // switch listener has run, since it makes the peer group visible.
+            peerGroup.isVisible = false
+            peerInstruction.isVisible = false
         } else {
             bluetoothSwitch.isEnabled = bluetoothAvailable
+            bluetoothCheckedBeforeShared?.let {
+                bluetoothSwitch.isChecked = bluetoothAvailable && it
+                bluetoothCheckedBeforeShared = null
+            }
             bluetoothIcon.isVisible = bluetoothSwitch.isChecked
             peerGroup.isVisible = !viewModel.bluetooth.active
             peerInstruction.isVisible = !viewModel.bluetooth.active
@@ -639,10 +654,10 @@ class MainActivity : AppCompatActivity() {
         viewModel.bluetooth.active = initialized
         bluetoothAvailable = initialized
         bluetoothSwitch.isChecked = initialized
-        // the switch stays disabled in shared network mode even when bluetooth works
-        val hotspotMode = viewModel.connectionMode == ConnectionMode.Hotspot
-        bluetoothSwitch.isEnabled = initialized && hotspotMode
-        bluetoothIcon.isVisible = initialized && hotspotMode
+        // reassert the connection mode UI: in shared network mode this forces the switch
+        // back off (remembering that bluetooth is available so hotspot mode can restore
+        // it) and keeps the peer group hidden
+        applyConnectionModeUi()
         return initialized
     }
 
