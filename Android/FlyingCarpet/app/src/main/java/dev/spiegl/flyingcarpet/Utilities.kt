@@ -60,6 +60,18 @@ fun formatTime(seconds: Double): String {
     }
 }
 
+// Peer-supplied filenames may carry "/" separators for folder transfers, but must not
+// be able to escape the receive directory: reject ".." components and collapse
+// empty/"." ones. Mirrors the desktop and Apple implementations — we don't rely on the
+// SAF provider rejecting ".." display names.
+fun sanitizeRelativeFilename(filename: String): String {
+    val components = filename.split('/').filter { it.isNotEmpty() && it != "." }
+    if (components.isEmpty() || components.contains("..")) {
+        throw Exception("Received invalid filename: $filename")
+    }
+    return components.joinToString("/")
+}
+
 fun MainViewModel.makeParentDirectories(filename: String): DocumentFile? {
     var currentDir = DocumentFile.fromTreeUri(getApplication(), receiveDir)
     val childDirs = File(filename).parent?.split('/') ?: return null

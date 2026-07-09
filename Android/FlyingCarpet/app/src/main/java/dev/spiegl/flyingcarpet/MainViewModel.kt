@@ -151,9 +151,14 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             }
 
         } else if (mode == Mode.Receiving) {
-            // find out how many files we're receiving
+            // find out how many files we're receiving. sanity bound: no legitimate
+            // transfer approaches it, and a corrupt or hostile stream shouldn't be
+            // able to put us into a near-endless receive loop.
             val numFilesBytes = readNBytes(8, inputStream)
             val numFiles = ByteBuffer.wrap(numFilesBytes).long
+            if (numFiles < 0 || numFiles > 1_000_000) {
+                throw Exception("File count $numFiles from peer is out of range")
+            }
 
             // receive files
             for (i in 0 until numFiles) {
@@ -699,11 +704,14 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     }
 
     fun findNewFilename(destinationDir: DocumentFile, filename: String): String {
-        var newFileName = filename.split("/").last()
-        var fileHandle = destinationDir.findFile(filename)
+        // work with the base name: destinationDir is already the file's parent
+        // directory, and a "(n) name" alternative must not contain separators
+        val base = filename.split("/").last()
+        var newFileName = base
+        var fileHandle = destinationDir.findFile(newFileName)
         var i = 1
         while (fileHandle != null) {
-            newFileName = "($i) $filename"
+            newFileName = "($i) $base"
             fileHandle = destinationDir.findFile(newFileName)
             i++
         }

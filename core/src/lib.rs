@@ -30,6 +30,10 @@ use utils::get_key_and_ssid;
 
 const CHUNKSIZE: usize = 1_000_000; // 1 MB
 const MAJOR_VERSION: u64 = 9;
+// Sanity bound on the peer-supplied file count (companion to the header bounds in
+// receiving.rs): no legitimate transfer approaches it, and a corrupt or hostile
+// stream shouldn't be able to put us into a near-endless receive loop.
+const MAX_FILE_COUNT: u64 = 1_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ConnectionMode {
@@ -306,6 +310,13 @@ pub async fn start_transfer<T: UI>(
                     return Some(stream);
                 }
             };
+            if num_files > MAX_FILE_COUNT {
+                ui.output(&format!(
+                    "Error: file count {} from peer is out of range",
+                    num_files
+                ));
+                return Some(stream);
+            }
             // receive files
             for i in 0..num_files {
                 ui.output("=========================");

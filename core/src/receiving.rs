@@ -13,6 +13,16 @@ use tokio::{
     time::{sleep, timeout},
 };
 
+// Sanity bounds on peer-supplied header values, checked before they're used to size an
+// allocation (see also MAX_FILE_COUNT in lib.rs). Chosen so every legitimate transfer
+// passes — Apple and Android senders use 5MB chunks, ours are CHUNKSIZE (1MB) — while
+// absurd values, which are memory-exhaustion levers, are rejected as corrupt/hostile.
+const MAX_FILENAME_BYTES: u64 = 8192;
+const MAX_CHUNK_BYTES: u64 = 5_000_000 + 4096;
+// nonce (12) + GCM tag (16): the smallest possible encrypted chunk. anything shorter
+// (but nonzero) would panic slicing the nonce off below.
+const MIN_CHUNK_BYTES: u64 = 12 + 16;
+
 pub async fn receive_file<T: UI>(
     folder: &Path,
     key: &[u8],
@@ -76,7 +86,9 @@ pub async fn receive_file<T: UI>(
         if decrypted_bytes.len() == 0 {
             break;
         }
-        bytes_left -= decrypted_bytes.len() as u64;
+        // saturating: a peer that sends more data than the advertised file size must
+        // not underflow (the loop is bounded by the end-of-file sentinel, not by this)
+        bytes_left = bytes_left.saturating_sub(decrypted_bytes.len() as u64);
         out_file.write_all(&decrypted_bytes)?;
         let percent_done = ((file_size - bytes_left) as f64 / file_size as f64) * 100.0;
         ui.update_progress_bar(percent_done as u8);
@@ -129,21 +141,28 @@ async fn receive_and_decrypt_chunk(
     cipher: &Aes256Gcm,
     stream: &mut TcpStream,
 ) -> Result<Vec<u8>, FCError> {
-    // receive chunk size
-    let chunk_size = stream.read_u64().await? as usize;
+    // receive chunk size. 0 is the legitimate end-of-file sentinel; anything else
+    // outside the range of a real encrypted chunk means a corrupt or hostile stream,
+    // and must be rejected before we allocate a receive buffer of that size.
+    let chunk_size = stream.read_u64().await?;
     if chunk_size == 0 {
-        Ok(vec![])
-    } else {
-        // receive chunk
-        let mut chunk = vec![0u8; chunk_size];
-        stream.read_exact(&mut chunk).await?;
-        // decrypt
-        let nonce = &chunk[..12];
-        let ciphertext = &chunk[12..];
-        let nonce = aes_gcm::Nonce::from_slice(nonce);
-        let decrypted_chunk = cipher.decrypt(nonce, ciphertext)?;
-        Ok(decrypted_chunk)
+        return Ok(vec![]);
     }
+    if !(MIN_CHUNK_BYTES..=MAX_CHUNK_BYTES).contains(&chunk_size) {
+        fc_error(&format!(
+            "Chunk size {} from peer is out of range",
+            chunk_size
+        ))?;
+    }
+    // receive chunk
+    let mut chunk = vec![0u8; chunk_size as usize];
+    stream.read_exact(&mut chunk).await?;
+    // decrypt
+    let nonce = &chunk[..12];
+    let ciphertext = &chunk[12..];
+    let nonce = aes_gcm::Nonce::from_slice(nonce);
+    let decrypted_chunk = cipher.decrypt(nonce, ciphertext)?;
+    Ok(decrypted_chunk)
 }
 
 fn sanitize_relative_filename(filename: &str) -> Result<PathBuf, FCError> {
@@ -164,10 +183,17 @@ fn sanitize_relative_filename(filename: &str) -> Result<PathBuf, FCError> {
 }
 
 async fn receive_file_details(stream: &mut TcpStream) -> Result<(String, u64), FCError> {
-    // receive size of filename
-    let filename_size = stream.read_u64().await? as usize;
+    // receive size of filename. real paths fit comfortably under the bound; an
+    // unbounded value is a memory-exhaustion lever, so reject before allocating.
+    let filename_size = stream.read_u64().await?;
+    if filename_size > MAX_FILENAME_BYTES {
+        fc_error(&format!(
+            "Filename length {} from peer is out of range",
+            filename_size
+        ))?;
+    }
     // receive filename
-    let mut filename_bytes = vec![0; filename_size];
+    let mut filename_bytes = vec![0; filename_size as usize];
     stream.read_exact(&mut filename_bytes).await?;
     let filename = String::from_utf8(filename_bytes)?;
     // receive file size

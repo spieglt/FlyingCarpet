@@ -546,18 +546,37 @@ unsafe fn unregister_hotspot_callback(client_handle: HANDLE) {
     // don't really care if this failed, don't need to error handle here?
 }
 
+// Escapes a string for interpolation into WLAN profile XML. The SSID and password can
+// come from the peer (e.g. an Android hotspot host), so they must not be able to
+// inject profile elements.
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
 fn join_hotspot(ssid: &str, password: &str, guid: &GUID) -> Result<bool, FCError> {
     let mut client_handle = HANDLE::default();
+
+    // 802.11 SSIDs are at most 32 bytes; enforce that before building the fixed-size
+    // DOT11_SSID buffer below (which would otherwise panic on a hostile value)
+    if ssid.len() > 32 {
+        fc_error(&format!("SSID from peer is too long: {}", ssid))?;
+    }
+    let ssid_escaped = xml_escape(ssid);
+    let password_escaped = xml_escape(password);
 
     let xml = "<?xml version=\"1.0\"?>\r\n".to_string()
         + "<WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">\r\n"
         + "	<name>"
-        + ssid
+        + &ssid_escaped
         + "</name>\r\n"
         + "	<SSIDConfig>\r\n"
         + "		<SSID>\r\n"
         + "			<name>"
-        + ssid
+        + &ssid_escaped
         + "</name>\r\n"
         + "		</SSID>\r\n"
         + "	</SSIDConfig>\r\n"
@@ -574,7 +593,7 @@ fn join_hotspot(ssid: &str, password: &str, guid: &GUID) -> Result<bool, FCError
         + "				<keyType>passPhrase</keyType>\r\n"
         + "				<protected>false</protected>\r\n"
         + "				<keyMaterial>"
-        + password
+        + &password_escaped
         + "</keyMaterial>\r\n"
         + "			</sharedKey>\r\n"
         + "		</security>\r\n"
@@ -794,7 +813,11 @@ mod test {
     use crate::network::add_firewall_rule;
     use windows::core::GUID;
 
+    // Manual test: fill in a real SSID and password below and run with
+    // `cargo test join_hotspot -- --ignored`. As checked in (empty credentials),
+    // Windows rejects the profile, so it's excluded from normal test runs.
     #[test]
+    #[ignore]
     fn join_hotspot() {
         // put ssid and password here
         let interfaces = super::get_wifi_interfaces().expect("couldn't get wifi interfaces");

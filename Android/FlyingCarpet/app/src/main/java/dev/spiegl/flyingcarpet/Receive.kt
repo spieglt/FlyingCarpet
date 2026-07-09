@@ -8,11 +8,20 @@ import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
+// Sanity bounds on peer-supplied header values, checked before they're used to size an
+// allocation. Chosen so every legitimate transfer passes while negative or absurd
+// values (memory-exhaustion levers) are rejected as corrupt/hostile.
+const val MAX_FILENAME_BYTES = 8192L
+const val MAX_CHUNK_BYTES = chunkSize + 4096L // one encrypted chunk + nonce/tag slack
+const val MIN_CHUNK_BYTES = 12L + 16L // nonce + GCM tag: smallest possible chunk
+
 suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
     val start = System.currentTimeMillis()
 
-    // receive file details
-    val (filename, fileSize) = receiveFileDetails()
+    // receive file details. the filename is peer-supplied: allow "/" separators for
+    // folder transfers, but nothing that could escape the receive directory.
+    val (rawFilename, fileSize) = receiveFileDetails()
+    val filename = sanitizeRelativeFilename(rawFilename)
     outputText("Filename: $filename.  Size: ${makeSizeReadable(fileSize)}")
     val needTransfer = checkForFileReceiving(filename, fileSize)
     if (!needTransfer) {
@@ -84,16 +93,22 @@ suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
 }
 
 private fun MainViewModel.receiveAndDecryptChunk(): ByteArray {
-    // receive size
+    // receive size. 0 is the legitimate end-of-file sentinel; anything else outside
+    // the range of a real encrypted chunk means a corrupt or hostile stream, and must
+    // be rejected before we allocate a receive buffer of that size (or truncate it
+    // into a negative Int).
     val sizeBytes = readNBytes(8, inputStream)
-    val size = ByteBuffer.wrap(sizeBytes).long.toInt()
+    val size = ByteBuffer.wrap(sizeBytes).long
 
-    if (size == 0) {
+    if (size == 0L) {
         return ByteArray(0)
+    }
+    if (size < MIN_CHUNK_BYTES || size > MAX_CHUNK_BYTES) {
+        throw Exception("Chunk size $size from peer is out of range")
     }
 
     // receive chunk
-    val encryptedChunk = readNBytes(size, inputStream)
+    val encryptedChunk = readNBytes(size.toInt(), inputStream)
 
     // decrypt
     val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -105,12 +120,16 @@ private fun MainViewModel.receiveAndDecryptChunk(): ByteArray {
 }
 
 private fun MainViewModel.receiveFileDetails(): Pair<String, Long> {
-    // receive size of filename
+    // receive size of filename. real paths fit comfortably under the bound; a negative
+    // or unbounded value is rejected before we allocate that many bytes.
     val filenameLenBytes = readNBytes(8, inputStream)
-    val filenameLen = ByteBuffer.wrap(filenameLenBytes).long.toInt()
+    val filenameLen = ByteBuffer.wrap(filenameLenBytes).long
+    if (filenameLen < 0 || filenameLen > MAX_FILENAME_BYTES) {
+        throw Exception("Filename length $filenameLen from peer is out of range")
+    }
 
     // receive filename
-    val filenameBytes = readNBytes(filenameLen, inputStream)
+    val filenameBytes = readNBytes(filenameLen.toInt(), inputStream)
     val filename = String(filenameBytes)
 
     // receive file size
