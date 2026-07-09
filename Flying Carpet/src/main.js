@@ -228,6 +228,49 @@ let showPrompt = (message) => {
   });
 }
 
+// same modal as showPrompt, but with a single-choice dropdown prepopulated with
+// `options` instead of a text input. resolves with the selected index, or null on cancel.
+let showSelect = (message, options) => {
+  return new Promise((resolve) => {
+    let overlay = document.getElementById('promptOverlay');
+    let input = document.getElementById('promptInput');
+    let select = document.getElementById('promptSelect');
+    let okButton = document.getElementById('promptOk');
+    let cancelButton = document.getElementById('promptCancel');
+    document.getElementById('promptMessage').innerText = message;
+    input.style.display = 'none';
+    select.style.display = '';
+    select.innerHTML = '';
+    for (let i = 0; i < options.length; i++) {
+      let option = document.createElement('option');
+      option.value = i;
+      option.innerText = options[i];
+      select.appendChild(option);
+    }
+    let finish = (value) => {
+      overlay.style.display = 'none';
+      input.style.display = '';
+      select.style.display = 'none';
+      okButton.onclick = null;
+      cancelButton.onclick = null;
+      select.onkeydown = null;
+      resolve(value);
+    };
+    okButton.onclick = () => finish(parseInt(select.value));
+    cancelButton.onclick = () => finish(null);
+    select.onkeydown = (event) => {
+      event.stopPropagation();
+      if (event.key === 'Enter') {
+        finish(parseInt(select.value));
+      } else if (event.key === 'Escape') {
+        finish(null);
+      }
+    };
+    overlay.style.display = 'flex';
+    select.focus();
+  });
+}
+
 function makeQRCode(str) {
   let elem = document.getElementById('qrcode');
   elem.innerHTML = '';
@@ -271,19 +314,16 @@ async function startTransfer(filesSelected) {
     case 1:
       wifiInterface = interfaces[0];
       break;
-    default:
-      let alertString = 'Enter the number for which network interface to use (e.g. "1" or "2"):\n'
-      for (let i = 0; i < interfaces.length; i++) {
-        alertString += `${i+1}: ${interfaces[i][0]}\n`
-      }
-      let choice = parseInt(await showPrompt(alertString));
-      if (choice && choice > 0 && choice <= interfaces.length) {
-        wifiInterface = interfaces[choice - 1];
-        output(`Using interface: ${wifiInterface[0]}`);
-      } else {
-        output('Invalid interface selected. Please enter just the number of the network interface you would like to use, e.g. "1" or "3".');
+    default: {
+      let names = interfaces.map((iface) => iface[0]);
+      let choice = await showSelect('Select which network interface to use:', names);
+      if (choice === null) {
+        output('Transfer cancelled.');
         return;
       }
+      wifiInterface = interfaces[choice];
+      output(`Using interface: ${wifiInterface[0]}`);
+    }
   }
 
   // if using shared network mode, check that we have a network connection
