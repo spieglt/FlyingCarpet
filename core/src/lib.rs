@@ -91,6 +91,15 @@ pub enum PeerResource {
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct WiFiInterface(pub String, pub String);
 
+// returned by the interface-enumeration functions so the UI can label interfaces with
+// their IP (or lack of one); name and guid follow the WiFiInterface conventions above
+#[derive(serde::Serialize)]
+pub struct InterfaceInfo {
+    pub name: String,
+    pub guid: String,
+    pub ip: Option<String>,
+}
+
 pub struct Transfer {
     pub cancel_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub hotspot: Arc<Mutex<Option<PeerResource>>>,

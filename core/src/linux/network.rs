@@ -1,6 +1,6 @@
 use crate::error::{fc_error, FCError};
 use crate::utils::run_command;
-use crate::{Mode, Peer, PeerResource, WiFiInterface, UI};
+use crate::{InterfaceInfo, Mode, Peer, PeerResource, WiFiInterface, UI};
 use tokio::task;
 
 // stub
@@ -181,21 +181,51 @@ async fn join_hotspot<T: UI>(
     Ok(())
 }
 
-pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
+pub fn get_wifi_interfaces() -> Result<Vec<InterfaceInfo>, FCError> {
     let command = "nmcli";
     let options = vec!["-t", "device"];
     let command_output = run_command(command, Some(options))?;
     let output = String::from_utf8_lossy(&command_output.stdout);
-    let mut interfaces: Vec<WiFiInterface> = vec![];
-    output
-        .lines()
-        .map(|line| line.split(":").collect())
-        .for_each(|split_line: Vec<&str>| {
-            if split_line[1] == "wifi" {
-                interfaces.push(WiFiInterface(split_line[0].to_string(), "".to_string()));
-            }
+    let mut interfaces: Vec<InterfaceInfo> = vec![];
+    for line in output.lines() {
+        // Format: DEVICE:TYPE:STATE:CONNECTION
+        let split_line: Vec<&str> = line.split(':').collect();
+        if split_line.len() < 2 || split_line[1] != "wifi" {
+            continue;
+        }
+        // ip is best-effort: hosting a hotspot doesn't require a connection
+        let name = split_line[0].to_string();
+        let ip = interface_ipv4(&name);
+        interfaces.push(InterfaceInfo {
+            name,
+            guid: String::new(),
+            ip,
         });
+    }
     Ok(interfaces)
+}
+
+/// Returns the interface's usable IPv4 address as text, or None if it has none.
+/// Link-local (169.254.x) addresses mean there's no real network.
+fn interface_ipv4(interface_name: &str) -> Option<String> {
+    let iface = WiFiInterface(interface_name.to_string(), String::new());
+    let cidr = get_ip_cidr(&iface).ok()?;
+    let ip = cidr.split('/').next()?.trim().to_string();
+    if ip.is_empty() || ip.starts_with("169.254.") {
+        None
+    } else {
+        Some(ip)
+    }
+}
+
+/// Name of the interface owning the default route, if any (for preselection).
+fn default_route_interface() -> Option<String> {
+    let output = run_command("sh", Some(vec!["-c", "ip -4 route show default"])).ok()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Format: "default via 192.168.1.1 dev eth0 proto dhcp ..."
+    let tokens: Vec<&str> = stdout.split_whitespace().collect();
+    let dev_idx = tokens.iter().position(|&t| t == "dev")?;
+    tokens.get(dev_idx + 1).map(|s| s.to_string())
 }
 
 fn find_gateway(interface: &str) -> Result<String, FCError> {
@@ -265,10 +295,12 @@ pub fn has_network_connection(interface: &WiFiInterface) -> Result<bool, FCError
 /// mode (which works over wired connections too, unlike hotspot mode). Filtering by
 /// nmcli device type keeps virtual interfaces (docker0, VPN tunnels, bridges) out of
 /// the interface chooser.
-pub fn get_connected_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
+pub fn get_connected_interfaces() -> Result<Vec<InterfaceInfo>, FCError> {
     let command_output = run_command("nmcli", Some(vec!["-t", "device"]))?;
     let output = String::from_utf8_lossy(&command_output.stdout);
-    let mut interfaces = Vec::new();
+    let default_iface = default_route_interface();
+    let mut with_gateway = Vec::new();
+    let mut without_gateway = Vec::new();
     for line in output.lines() {
         // Format: DEVICE:TYPE:STATE:CONNECTION
         let split_line: Vec<&str> = line.split(':').collect();
@@ -278,12 +310,27 @@ pub fn get_connected_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
         if split_line[1] != "wifi" && split_line[1] != "ethernet" {
             continue;
         }
-        let interface = WiFiInterface(split_line[0].to_string(), String::new());
-        if has_network_connection(&interface).unwrap_or(false) {
-            interfaces.push(interface);
+        let name = split_line[0].to_string();
+        // omit interfaces without a usable IPv4: they can't work in shared mode
+        let ip = match interface_ipv4(&name) {
+            Some(ip) => ip,
+            None => continue,
+        };
+        let is_default = default_iface.as_deref() == Some(name.as_str());
+        let info = InterfaceInfo {
+            name,
+            guid: String::new(),
+            ip: Some(ip),
+        };
+        // list the default-route interface first so the UI can preselect it
+        if is_default {
+            with_gateway.push(info);
+        } else {
+            without_gateway.push(info);
         }
     }
-    Ok(interfaces)
+    with_gateway.append(&mut without_gateway);
+    Ok(with_gateway)
 }
 
 fn get_username() -> String {
@@ -303,7 +350,7 @@ mod test {
         let ssid = "flyingCarpet_1234";
         let password = "password";
         let _pr = PeerResource::WifiClient("".to_string());
-        let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].0;
+        let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].name;
         crate::network::start_hotspot(ssid, password, interface).unwrap();
         std::thread::sleep(std::time::Duration::from_secs(5));
         crate::network::stop_hotspot(Some(&_pr), Some(ssid)).unwrap();
@@ -324,7 +371,7 @@ mod test {
         let ssid = "";
         let password = "";
         let pr = PeerResource::WifiClient("".to_string());
-        let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].0;
+        let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].name;
         let interface = interface.to_string();
         let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
         tokio::spawn(async move {
@@ -340,7 +387,7 @@ mod test {
 
     #[test]
     fn find_gateway() {
-        let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].0;
+        let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].name;
         let gateway = crate::network::find_gateway(interface).unwrap();
         println!("interface: {}", interface);
         println!("gateway: {}", gateway);

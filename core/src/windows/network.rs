@@ -1,4 +1,4 @@
-use crate::{fc_error, FCError, Mode, Peer, PeerResource, WiFiInterface, UI};
+use crate::{fc_error, FCError, InterfaceInfo, Mode, Peer, PeerResource, WiFiInterface, UI};
 use regex::Regex;
 use std::env::current_exe;
 use std::ffi::{c_void, CString};
@@ -68,10 +68,57 @@ pub async fn connect_to_peer<T: UI>(
 }
 
 fn parse_interface_guid(interface: &WiFiInterface) -> Result<GUID, FCError> {
-    let guid_u128 = u128::from_str_radix(&interface.1, 10).map_err(|e| FCError {
+    Ok(GUID::from_u128(interface_guid_u128(interface)?))
+}
+
+// The GUID string stored in WiFiInterface is the adapter GUID (the same GUID the WLAN
+// API reports as InterfaceGuid), formatted as a base-10 u128.
+fn interface_guid_u128(interface: &WiFiInterface) -> Result<u128, FCError> {
+    u128::from_str_radix(&interface.1, 10).map_err(|e| FCError {
         message: format!("Invalid interface GUID '{}': {}", interface.1, e),
-    })?;
-    Ok(GUID::from_u128(guid_u128))
+    })
+}
+
+// Parses an adapter's AdapterName (a braced GUID string like "{4B0A...}") into the
+// same u128 form GUID::to_u128() produces, so entries from GetAdaptersAddresses and
+// from the WLAN API share one matching key. Note that this is the *adapter* GUID:
+// NetworkGuid identifies the network profile instead, which two adapters on the same
+// network can share, so it can't be used to identify an adapter.
+unsafe fn adapter_guid_u128(adapter: *mut IpHelper::IP_ADAPTER_ADDRESSES_LH) -> Option<u128> {
+    let name = (*adapter).AdapterName;
+    if name.is_null() {
+        return None;
+    }
+    let name = std::ffi::CStr::from_ptr(name.0 as *const _).to_string_lossy();
+    let hex: String = name.chars().filter(|c| c.is_ascii_hexdigit()).collect();
+    if hex.len() != 32 {
+        return None;
+    }
+    u128::from_str_radix(&hex, 16).ok()
+}
+
+// First IPv4 address on the adapter that could carry a transfer (loopback and
+// link-local/APIPA addresses mean there's no usable network).
+unsafe fn first_usable_ipv4(
+    adapter: *mut IpHelper::IP_ADAPTER_ADDRESSES_LH,
+) -> Option<std::net::Ipv4Addr> {
+    let mut unicast = (*adapter).FirstUnicastAddress;
+    while !unicast.is_null() {
+        let address = (*unicast).Address;
+        if !address.lpSockaddr.is_null() {
+            let sa_data = (*address.lpSockaddr).sa_data;
+            let mut octets = [0u8; 4];
+            for i in 2..=5 {
+                octets[i - 2] = sa_data[i] as u8;
+            }
+            let ip = std::net::Ipv4Addr::from(octets);
+            if !ip.is_loopback() && !ip.is_link_local() && !ip.is_unspecified() {
+                return Some(ip);
+            }
+        }
+        unicast = (*unicast).Next;
+    }
+    None
 }
 
 fn start_wifi_direct<T: UI>(ssid: &str, password: &str, ui: &T) -> Result<WindowsHotspot, FCError> {
@@ -161,7 +208,7 @@ fn run_shell_execute(
 
 /// Get local IPv4 address on the specified interface (works for WiFi or wired)
 pub fn get_local_ip(interface: &WiFiInterface) -> Result<std::net::Ipv4Addr, FCError> {
-    let target_guid = parse_interface_guid(interface)?;
+    let target_guid = interface_guid_u128(interface)?;
 
     let working_buffer_size = 15_000;
     let family = 2; // IPv4
@@ -187,18 +234,9 @@ pub fn get_local_ip(interface: &WiFiInterface) -> Result<std::net::Ipv4Addr, FCE
         }
 
         while !pip_ip_adapter_addresses_lh.is_null() {
-            if (*pip_ip_adapter_addresses_lh).NetworkGuid == target_guid {
-                let unicast = (*pip_ip_adapter_addresses_lh).FirstUnicastAddress;
-                if !unicast.is_null() {
-                    let address = (*unicast).Address;
-                    let sa_data = (*address.lpSockaddr).sa_data;
-
-                    let mut octets = [0u8; 4];
-                    for i in 2..=5 {
-                        octets[i - 2] = sa_data[i] as u8;
-                    }
-
-                    return Ok(std::net::Ipv4Addr::from(octets));
+            if adapter_guid_u128(pip_ip_adapter_addresses_lh) == Some(target_guid) {
+                if let Some(ip) = first_usable_ipv4(pip_ip_adapter_addresses_lh) {
+                    return Ok(ip);
                 }
             }
 
@@ -212,7 +250,7 @@ pub fn get_local_ip(interface: &WiFiInterface) -> Result<std::net::Ipv4Addr, FCE
 
 /// Get the subnet prefix length (e.g. 24 for /24) on the specified interface
 pub fn get_prefix_length(interface: &WiFiInterface) -> Result<u8, FCError> {
-    let target_guid = parse_interface_guid(interface)?;
+    let target_guid = interface_guid_u128(interface)?;
 
     let working_buffer_size = 15_000;
     let family = 2; // IPv4
@@ -238,7 +276,7 @@ pub fn get_prefix_length(interface: &WiFiInterface) -> Result<u8, FCError> {
         }
 
         while !pip_ip_adapter_addresses_lh.is_null() {
-            if (*pip_ip_adapter_addresses_lh).NetworkGuid == target_guid {
+            if adapter_guid_u128(pip_ip_adapter_addresses_lh) == Some(target_guid) {
                 let unicast = (*pip_ip_adapter_addresses_lh).FirstUnicastAddress;
                 if !unicast.is_null() {
                     return Ok((*unicast).OnLinkPrefixLength);
@@ -314,17 +352,23 @@ pub fn has_network_connection(interface: &WiFiInterface) -> Result<bool, FCError
     }
 }
 
-/// Get all network interfaces that have an active IPv4 connection
-pub fn get_connected_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
+/// WiFi and Ethernet interfaces that are up and have a usable IPv4 address, for shared
+/// network mode (which works over wired connections too, unlike hotspot mode).
+/// Interfaces without a network are omitted — they can't work in shared mode and only
+/// clutter the chooser (unplugged adapters, hidden WiFi-Direct virtual adapters,
+/// Bluetooth PAN). Interfaces holding a default route are listed first so the UI can
+/// preselect the one most likely to be right.
+pub fn get_connected_interfaces() -> Result<Vec<InterfaceInfo>, FCError> {
     let working_buffer_size = 15_000;
     let family = 2; // IPv4
-    let flags = IpHelper::GAA_FLAG_INCLUDE_PREFIX;
+    let flags = IpHelper::GAA_FLAG_INCLUDE_PREFIX | IpHelper::GAA_FLAG_INCLUDE_GATEWAYS;
     let mut ip_adapter_addresses_lh = vec![0u8; working_buffer_size];
     let mut pip_ip_adapter_addresses_lh =
         (ip_adapter_addresses_lh.as_mut_ptr()) as *mut IpHelper::IP_ADAPTER_ADDRESSES_LH;
     let mut size = working_buffer_size as u32;
 
-    let mut interfaces = Vec::new();
+    let mut with_gateway = Vec::new();
+    let mut without_gateway = Vec::new();
 
     unsafe {
         let res = IpHelper::GetAdaptersAddresses(
@@ -342,25 +386,82 @@ pub fn get_connected_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
         }
 
         while !pip_ip_adapter_addresses_lh.is_null() {
-            // Only include WiFi and Ethernet interfaces with IP addresses
-            if ((*pip_ip_adapter_addresses_lh).IfType == IpHelper::IF_TYPE_IEEE80211
-                || (*pip_ip_adapter_addresses_lh).IfType == IpHelper::IF_TYPE_ETHERNET_CSMACD)
-                && !(*pip_ip_adapter_addresses_lh).FirstUnicastAddress.is_null()
+            let adapter = pip_ip_adapter_addresses_lh;
+            pip_ip_adapter_addresses_lh = (*adapter).Next;
+
+            if (*adapter).IfType != IpHelper::IF_TYPE_IEEE80211
+                && (*adapter).IfType != IpHelper::IF_TYPE_ETHERNET_CSMACD
             {
+                continue;
+            }
+            // IF_OPER_STATUS is a newtype over i32; IfOperStatusUp == 1
+            if (*adapter).OperStatus.0 != 1 {
+                continue;
+            }
+            let (guid, ip) = match (adapter_guid_u128(adapter), first_usable_ipv4(adapter)) {
+                (Some(guid), Some(ip)) => (guid, ip),
+                _ => continue,
+            };
+
+            let name = String::from_utf16_lossy(&(*adapter).FriendlyName.as_wide())
+                .trim_matches(char::from(0))
+                .to_string();
+            let info = InterfaceInfo {
+                name,
+                guid: format!("{}", guid),
+                ip: Some(ip.to_string()),
+            };
+            if (*adapter).FirstGatewayAddress.is_null() {
+                without_gateway.push(info);
+            } else {
+                with_gateway.push(info);
+            }
+        }
+    }
+
+    with_gateway.append(&mut without_gateway);
+    Ok(with_gateway)
+}
+
+// Looks up an adapter's friendly name (as shown in Windows' Network Connections panel)
+// and usable IPv4 by adapter GUID. Used to label WLAN interfaces, whose WLAN-API name
+// is the hardware description.
+fn adapter_display_info(guid: u128) -> (Option<String>, Option<std::net::Ipv4Addr>) {
+    let working_buffer_size = 15_000;
+    let family = 2; // IPv4
+    let flags = IpHelper::GAA_FLAG_INCLUDE_PREFIX;
+    let mut ip_adapter_addresses_lh = vec![0u8; working_buffer_size];
+    let mut pip_ip_adapter_addresses_lh =
+        (ip_adapter_addresses_lh.as_mut_ptr()) as *mut IpHelper::IP_ADAPTER_ADDRESSES_LH;
+    let mut size = working_buffer_size as u32;
+
+    unsafe {
+        let res = IpHelper::GetAdaptersAddresses(
+            family,
+            flags,
+            None,
+            Some(pip_ip_adapter_addresses_lh),
+            &mut size,
+        );
+        if WIN32_ERROR(res) != ERROR_SUCCESS {
+            return (None, None);
+        }
+
+        while !pip_ip_adapter_addresses_lh.is_null() {
+            if adapter_guid_u128(pip_ip_adapter_addresses_lh) == Some(guid) {
                 let name = String::from_utf16_lossy(
                     &(*pip_ip_adapter_addresses_lh).FriendlyName.as_wide(),
                 )
                 .trim_matches(char::from(0))
                 .to_string();
-
-                let guid_u128 = format!("{}", (*pip_ip_adapter_addresses_lh).NetworkGuid.to_u128());
-                interfaces.push(WiFiInterface(name, guid_u128));
+                let ip = first_usable_ipv4(pip_ip_adapter_addresses_lh);
+                return (Some(name), ip);
             }
             pip_ip_adapter_addresses_lh = (*pip_ip_adapter_addresses_lh).Next;
         }
     }
 
-    Ok(interfaces)
+    (None, None)
 }
 
 // returns Ok(Some(gateway)) if gateway found, Ok(None) if no gateway found but no error, and Err otherwise.
@@ -440,7 +541,7 @@ unsafe fn wlan_enum_multiple_interfaces(
     Ok(interfaces.to_vec())
 }
 
-pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
+pub fn get_wifi_interfaces() -> Result<Vec<InterfaceInfo>, FCError> {
     unsafe {
         // get client handle
         let mut client_handle = HANDLE::default();
@@ -454,14 +555,22 @@ pub fn get_wifi_interfaces() -> Result<Vec<WiFiInterface>, FCError> {
         let mut p_interface_list: *mut WiFi::WLAN_INTERFACE_INFO_LIST = &mut interface_list;
 
         let wlan_interfaces = wlan_enum_multiple_interfaces(client_handle, &mut p_interface_list)?;
-        let mut interfaces: Vec<WiFiInterface> = vec![];
+        let mut interfaces: Vec<InterfaceInfo> = vec![];
         for wlan_interface in wlan_interfaces {
-            let name = String::from_utf16_lossy(&wlan_interface.strInterfaceDescription)
+            let description = String::from_utf16_lossy(&wlan_interface.strInterfaceDescription)
                 .trim_matches(char::from(0))
                 .to_string();
             let guid = wlan_interface.InterfaceGuid.to_u128();
-            let guid = format!("{}", guid); // store u128 GUID formatted as string because javascript can't handle 128-bit numbers
-            interfaces.push(WiFiInterface(name, guid));
+            // label with the friendly name from the adapter list ("Wi-Fi") rather than
+            // the WLAN API's hardware description, plus the IP if it has a network.
+            // no IP is fine here: hosting a hotspot doesn't need a connection.
+            let (friendly_name, ip) = adapter_display_info(guid);
+            interfaces.push(InterfaceInfo {
+                name: friendly_name.unwrap_or(description),
+                // store u128 GUID formatted as string because javascript can't handle 128-bit numbers
+                guid: format!("{}", guid),
+                ip: ip.map(|ip| ip.to_string()),
+            });
         }
         WiFi::WlanFreeMemory(p_interface_list as *const c_void);
         WiFi::WlanCloseHandle(client_handle, None);
@@ -821,8 +930,8 @@ mod test {
     fn join_hotspot() {
         // put ssid and password here
         let interfaces = super::get_wifi_interfaces().expect("couldn't get wifi interfaces");
-        let guid =
-            u128::from_str_radix(&interfaces[0].1, 10).expect("couldn't get u128 guid from string");
+        let guid = u128::from_str_radix(&interfaces[0].guid, 10)
+            .expect("couldn't get u128 guid from string");
         let guid = GUID::from_u128(guid);
         super::join_hotspot("", "", &guid).unwrap();
         // unsafe {
@@ -851,7 +960,7 @@ mod test {
         match crate::network::get_wifi_interfaces() {
             Ok(ifaces) => {
                 for i in ifaces {
-                    println!("{:?}", i.0);
+                    println!("{} {:?}", i.name, i.ip);
                 }
             }
             Err(e) => println!("{}", e),

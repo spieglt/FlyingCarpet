@@ -297,11 +297,15 @@ async function startTransfer(filesSelected) {
 
   // make sure we have a usable interface and prompt for which if more than one.
   // hotspot mode needs a wifi interface; shared network mode works over wired
-  // (ethernet) interfaces too, so it uses the broader list.
+  // (ethernet) interfaces too, so it uses the broader list. each interface is
+  // {name, guid, ip}; label it with its IP (or lack of one) so the user can tell
+  // connected interfaces apart, and pass [name, guid] to the backend (a WiFiInterface).
   let wifiInterface;
+  let chosen;
   let interfaces = connectionMode === 'shared_network'
     ? await core.invoke('get_network_interfaces')
     : await core.invoke('get_wifi_interfaces');
+  let interfaceLabel = (iface) => iface.ip ? `${iface.name} (${iface.ip})` : `${iface.name} (no network)`;
   // console.log('interfaces:', interfaces);
   switch (interfaces.length) {
     case 0:
@@ -312,19 +316,21 @@ async function startTransfer(filesSelected) {
       }
       return;
     case 1:
-      wifiInterface = interfaces[0];
+      chosen = interfaces[0];
+      output(`Using interface: ${interfaceLabel(chosen)}`);
       break;
     default: {
-      let names = interfaces.map((iface) => iface[0]);
-      let choice = await showSelect('Select which network interface to use:', names);
+      let labels = interfaces.map(interfaceLabel);
+      let choice = await showSelect('Select which network interface to use:', labels);
       if (choice === null) {
         output('Transfer cancelled.');
         return;
       }
-      wifiInterface = interfaces[choice];
-      output(`Using interface: ${wifiInterface[0]}`);
+      chosen = interfaces[choice];
+      output(`Using interface: ${interfaceLabel(chosen)}`);
     }
   }
+  wifiInterface = [chosen.name, chosen.guid];
 
   // if using shared network mode, check that we have a network connection
   if (connectionMode === 'shared_network') {

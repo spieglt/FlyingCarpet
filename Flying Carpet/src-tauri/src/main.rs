@@ -4,8 +4,8 @@
 )]
 
 use flying_carpet_core::{
-    bluetooth, clean_up_transfer, network, start_transfer, utils, ConnectionMode, Transfer,
-    WiFiInterface, UI,
+    bluetooth, clean_up_transfer, network, start_transfer, utils, ConnectionMode, InterfaceInfo,
+    Transfer, WiFiInterface, UI,
 };
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -246,7 +246,7 @@ fn generate_password() -> String {
 }
 
 #[tauri::command]
-fn get_wifi_interfaces() -> Vec<WiFiInterface> {
+fn get_wifi_interfaces() -> Vec<InterfaceInfo> {
     match network::get_wifi_interfaces() {
         Ok(interfaces) => interfaces,
         Err(_e) => vec![], // if there was an error, just return empty list of interfaces and let javascript detect "no wifi card found"
@@ -256,7 +256,7 @@ fn get_wifi_interfaces() -> Vec<WiFiInterface> {
 // shared network mode works over wired connections too, so it uses this broader list
 // (WiFi + Ethernet interfaces with an IPv4 address) instead of get_wifi_interfaces
 #[tauri::command]
-fn get_network_interfaces() -> Vec<WiFiInterface> {
+fn get_network_interfaces() -> Vec<InterfaceInfo> {
     match network::get_connected_interfaces() {
         Ok(interfaces) => interfaces,
         Err(_e) => vec![], // if there was an error, just return empty list of interfaces and let javascript report it
