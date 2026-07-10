@@ -84,14 +84,6 @@ impl From<FromUtf8Error> for FCError {
     }
 }
 
-impl From<aes_gcm::Error> for FCError {
-    fn from(value: aes_gcm::Error) -> Self {
-        FCError {
-            message: format!("AES-GCM error: {}", value),
-        }
-    }
-}
-
 impl From<std::path::StripPrefixError> for FCError {
     fn from(value: std::path::StripPrefixError) -> Self {
         FCError {

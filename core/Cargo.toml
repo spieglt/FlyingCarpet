@@ -5,7 +5,6 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [dependencies]
-aes-gcm = "0.10"
 futures = "0.3.31"
 hmac = "0.12"
 pbkdf2 = "0.12"

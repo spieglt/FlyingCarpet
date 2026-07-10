@@ -58,7 +58,9 @@ on the password (§7). A real PAKE would deny even that; CryptoKit can't give us
 **Explicitly out of scope:** traffic *volume* and *timing*. The length prefix of each
 encrypted record is in the clear (you must know how many bytes to read), so an observer
 still sees the approximate total transferred and the record cadence. Hiding that needs
-padding/cover traffic, which we do not do.
+padding/cover traffic, which we do not do. Also out of scope: the **plaintext preamble**
+(protocol version and send/receive direction) that precedes the handshake — these are not
+secret, and tampering with them only causes the transfer to abort (§7).
 
 ---
 
@@ -196,10 +198,18 @@ connection; check the password and that you trust this network," not "wrong pass
 
 ## 6. The record layer (this is where metadata gets encrypted)
 
+> **Wire-order note (implemented design).** The version and send/receive mode are
+> negotiated in a **plaintext preamble** on the raw TCP socket *before* the Noise
+> handshake; everything after the handshake — file count, all metadata, and all file data
+> — is inside Noise. This holds for **both** hotspot and shared network mode: they are
+> identical past the preamble. See §10 for why the preamble is plaintext and §7 for the
+> (minor) security implication.
+
 The important architectural point: **we do not rewrite the send/receive protocol.** The
 existing logic — send file count, send filename length, send filename, send size, send
 chunks — runs unchanged, but writes into an *encrypting wrapper* instead of the raw
-socket. Every logical message becomes one AEAD record:
+socket. The chunks are sent as **raw bytes** (no application-level cipher); Noise is the
+sole encryption layer. Every logical message becomes one AEAD record:
 
 ```
 on the wire:  [ 2-byte big-endian length ] [ ciphertext || 16-byte AEAD tag ]
@@ -293,8 +303,14 @@ the case for a PAKE returns:
 
 **Caveats that remain regardless.** An active attacker can still *disrupt* a transfer —
 intercept-and-abort is a denial of service available to anyone in-path, unrelated to the
-crypto and not fixable by it. And this is still a hand-assembled handshake, not a proven
-PAKE; §8 is why it should be built on the Noise pattern rather than free-handed.
+crypto and not fixable by it. The **plaintext preamble** (§6) is one instance of this: an
+attacker who flips a bit in the version or mode exchange makes the two sides disagree and
+abort — a DoS, nothing more. The preamble carries no secret, cannot force a crypto
+downgrade (v10 only ever speaks v10), and cannot flip a sender into a receiver (each side
+decided its own role locally; the exchange only *verifies* they're opposite). Optional
+future hardening if the preamble ever carries negotiated crypto parameters: feed the
+preamble bytes into the Noise **prologue**, so any tampering changes the handshake hash and
+fails the handshake. Not needed for version/mode alone.
 
 ---
 
@@ -361,8 +377,10 @@ Noise spec and the protocol name. What each platform must still pin identically:
   big-endian** integer (`u16`), tag appended (not prepended). 2 bytes, not 4, because
   Noise caps messages at 65535 bytes; the same framing is used for the two handshake
   messages and every transport record.
-- **Roles:** the shared-network sender (TCP client) is the Noise **initiator**; the
-  receiver (TCP server) is the **responder**.
+- **Roles:** the Noise **initiator is the TCP client**, the **responder is the TCP
+  server** — for *both* modes. Shared network: sender = client = initiator, receiver =
+  server = responder. Hotspot: the guest that joined and connected = client = initiator,
+  the host = server = responder.
 
 **Spec conformance is verified against the official vectors.** `core/src/noise.rs` test
 `official_noise_test_vector` drives `snow` with the canonical
@@ -410,12 +428,21 @@ that otherwise surface as "handshake fails, no idea why."
 - **Cipher: ChaCha20-Poly1305.** Noise protocol name **`Noise_NNpsk0_25519_ChaChaPoly_SHA256`**.
   (AES-GCM is also in CryptoKit and would be equally valid; ChaChaPoly chosen as Noise's
   most-tested cipher.)
+- **Noise over BOTH modes.** Hotspot mode also runs the Noise handshake now (password =
+  the hotspot password, known to both sides), so there is one encryption path for all
+  transfers. WPA2 still wraps the hotspot link, but the app no longer relies on it for
+  confidentiality.
+- **No inner AES.** The old per-chunk AES-256-GCM (keyed by `SHA256(password)`) is
+  **removed** — Noise is the sole encryption layer; chunks are raw bytes inside it. The
+  `aes-gcm` dependency is gone. `SHA256(password)` survives only for the SSID and the
+  discovery HMAC.
+- **Plaintext version/mode preamble.** Version confirmation and send/receive negotiation
+  happen on the raw socket before the handshake (§6, §7), for clean version-mismatch
+  reporting.
 - **No v9 compatibility.** v10 is a clean break; a v9 peer is rejected with a clear message.
 - **Discovery unchanged for now.** Still `HMAC(SHA256(password), announcement)`; it reveals
   only presence/IP, never file data. Folding it into the hardened scheme is possible later,
   out of scope here.
-- **Hotspot mode unaffected.** WPA2 around the link; nothing here touches
-  `ConnectionMode::Hotspot`.
 
 **Version bump — already implemented** (the only code landed ahead of the Noise work):
 
@@ -438,9 +465,10 @@ the Noise wire format never ships under the *same* number as a non-Noise build:
   protocol and a v9 peer fails the version exchange with the message above. No downgrade
   path.
 
-**The logical send/receive protocol does not change** — only the transport under it. The
-header-value bounds and filename sanitization already added remain, applied to decrypted
-values.
+**The logical send/receive protocol does not change** — only the transport under it (and
+the removal of the redundant per-chunk AES). The header-value bounds and filename
+sanitization already added remain, applied to the values read from the Noise-decrypted
+stream.
 
 ---
 
@@ -454,43 +482,41 @@ Version bump + mismatch messaging (§10). The only pre-Noise code change.
 
 ### Phase 1 — Rust core reference implementation (`snow`) — **done**
 Landed in `core/src/noise.rs` and wired into `core/src/lib.rs`:
-1. `snow` and `pbkdf2` added to `core/Cargo.toml`; protocol
+1. `snow` and `pbkdf2` added to `core/Cargo.toml` (and `aes-gcm` removed); protocol
    `Noise_NNpsk0_25519_ChaChaPoly_SHA256`.
 2. `derive_psk()` = PBKDF2-HMAC-SHA256 with the fixed salt/iters constants (§9).
-3. The handshake runs in `start_transfer`'s shared-network arm, right after
-   `start_shared_network_transfer` returns the TCP stream and *before* `confirm_version`.
-   Sender = initiator, receiver = responder. A wrong password fails the handshake with a
-   clear message ("Could not establish a secure connection. Check that the password
-   matches…").
+3. `start_transfer` runs the **plaintext version/mode preamble** on the raw TCP stream,
+   then the Noise handshake, for **both** modes. Noise initiator = TCP client, responder =
+   TCP server (§9). A wrong password fails the handshake with a clear message ("Could not
+   establish a secure connection. Check that the password matches…").
 4. `EncryptedStream<S>` implements tokio `AsyncRead + AsyncWrite`, transparently splitting
    the byte stream into ≤64 KiB Noise records with a 2-byte length prefix. `send_file` /
-   `receive_file` / `confirm_version` / `confirm_mode` are now generic over the stream, so
-   their bodies are unchanged; a `TransferStream` enum (`Plain` for hotspot, `Encrypted`
-   for shared network) keeps a single stream binding. Hotspot mode is byte-for-byte
-   unchanged.
-5. **Spec conformance verified against the official Noise vectors:**
+   `receive_file` / `confirm_version` / `confirm_mode` are generic over the stream; a
+   `TransferStream` enum represents the `Plain`→`Encrypted` transition (Plain during the
+   preamble, Encrypted after the handshake).
+5. **Inner AES removed:** `send_file`/`receive_file` send/receive raw chunks; Noise is the
+   sole encryption layer. `SHA256(password)` remains only for the SSID and discovery HMAC.
+6. **Spec conformance verified against the official Noise vectors:**
    `official_noise_test_vector` drives `snow` with the canonical cacophony vector for the
    protocol and asserts the message ciphertexts, handshake hash, and transport record
    match byte-for-byte — this is the real cross-platform interop guarantee. Additional
    app-parameter KAT vectors (`psk_known_answer`, `handshake_known_answer`) are transcribed
    into §9 as a determinism check.
-6. Verified: `end_to_end_encrypted_transfer` runs the real send/receive over an encrypted
+7. Verified: `end_to_end_encrypted_transfer` runs the real send/receive over an encrypted
    duplex with a 200 KB (multi-record) file; `wrong_password_fails_handshake`,
-   `round_trip_small_and_large`, and `tampering_is_detected` all pass. 18 core tests green.
+   `round_trip_small_and_large`, and `tampering_is_detected` all pass. 19 core tests green.
 
-**Known Phase-1 redundancy (intentional, revisit later):** the file *chunks* are now
-double-encrypted — the unchanged `send_file`/`receive_file` still AES-256-GCM each chunk
-with `SHA256(password)`, and the Noise layer then ChaChaPoly-wraps everything. This is the
-cost of "don't rewrite the logical protocol"; the metadata protection (the actual goal) is
-achieved. A later cleanup could drop the inner AES-GCM once all platforms are on Noise, but
-that is itself a wire change and out of scope for getting parity.
+Phases 2 and 3 must mirror the **full** design: plaintext version/mode preamble → Noise
+handshake (both modes) → raw chunks inside Noise (no per-chunk AES). The role rule is the
+same everywhere: TCP client = initiator, TCP server = responder.
 
 ### Phase 2 — Android (`noise-java`)
 1. Add `noise-java` (or `java-noise`) to Gradle; same protocol name.
-2. Same PSK derivation (identical salt/iters); verify against the Phase 1 vector in a
-   `DiscoveryUnitTest`-style unit test *before* wiring anything live.
-3. Wrap the socket streams (`Receive.kt` / `Send.kt` / `MainViewModel.startTransfer`) in a
-   Noise transport mirroring the Rust `EncryptedStream`. Sender = initiator, receiver =
+2. Same PSK derivation (identical salt/iters); verify against the cacophony vector and the
+   §9 app KATs in a `DiscoveryUnitTest`-style test *before* wiring anything live.
+3. Move version/mode confirmation to a plaintext preamble, then wrap the socket streams
+   (`Receive.kt` / `Send.kt` / `MainViewModel.startTransfer`) in a Noise transport for both
+   modes, and **remove the per-chunk AES** (raw chunks). Client = initiator, server =
    responder.
 4. Verify Android↔Windows both directions against the Phase 1 reference.
 
@@ -498,8 +524,9 @@ that is itself a wire change and out of scope for getting parity.
 1. Implement the `NNpsk0` handshake + transport from `Curve25519.KeyAgreement`,
    `HKDF<SHA256>`, `ChaChaPoly`, and `HMAC<SHA256>`, following the Noise spec's
    `MixHash`/`MixKey`/`Split` symmetric-state schedule and the `psk` token. No third-party
-   library (Apple-standard-crypto constraint).
-2. Port the Phase 1 test vector into an XCTest and make it pass **before** any live transfer
+   library (Apple-standard-crypto constraint). Same structure: plaintext preamble → Noise
+   (both modes) → raw chunks (remove the per-chunk AES).
+2. Port the cacophony vector into an XCTest and make it pass **before** any live transfer
    — this is the highest-risk step and the vector is the guard.
 3. Same PSK derivation via CommonCrypto PBKDF2 (identical salt/iters).
 4. Wrap the `NWConnection` I/O (`TCPConnectionWrapper` / `TCPServer`) in the Noise transport.

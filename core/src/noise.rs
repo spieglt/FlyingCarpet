@@ -1,11 +1,13 @@
-// Shared network mode encrypted transport (v10+).
+// Encrypted transport for all transfers (v10+): both hotspot and shared network mode.
 //
 // Wraps the TCP connection in a Noise `NNpsk0` handshake and record layer so that file
 // contents AND metadata (filenames, sizes, counts, hashes) are confidential and
 // tamper-evident, with forward secrecy from ephemeral X25519 keys. The password is fed in
-// as the Noise pre-shared key. See docs/shared-network-crypto.md for the full design and
-// threat model; this is the Phase-1 Rust reference implementation the Swift and Kotlin
-// ports are tested against.
+// as the Noise pre-shared key. This is the sole encryption layer — there is no separate
+// application-level chunk cipher. The handshake runs after the plaintext version/mode
+// preamble (see start_transfer). See docs/shared-network-crypto.md for the full design and
+// threat model; this is the Rust reference implementation the Swift and Kotlin ports are
+// tested against.
 //
 // EncryptedStream implements tokio's AsyncRead + AsyncWrite, transparently splitting the
 // byte stream into <=64 KiB Noise transport messages, so the existing send/receive code

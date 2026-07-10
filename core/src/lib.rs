@@ -237,31 +237,23 @@ pub async fn start_transfer<T: UI>(
         *_state_ssid = Some(ssid.clone());
     }
 
-    // Handle connection based on mode
-    let (peer_resource, mut stream) = match connection_mode {
+    // Establish the raw TCP connection and determine the Noise role. The Noise initiator
+    // must be the TCP client (it sends the first handshake message). No handshake yet:
+    // version and mode are negotiated in plaintext first (below), then the connection is
+    // wrapped in Noise, for BOTH modes.
+    let (peer_resource, tcp, noise_role) = match connection_mode {
         ConnectionMode::SharedNetwork => {
-            // Shared Network Mode: Use discovery to find peer on existing network
+            // Shared Network Mode: Use discovery to find peer on existing network. Both
+            // sides are labeled WifiClient, so the role comes from send/receive: the sender
+            // is the TCP client (initiator), the receiver is the TCP server (responder).
             match start_shared_network_transfer(&mode, &key, &interface, ui).await {
                 Ok((resource, tcp)) => {
-                    // v10+: wrap the connection in the Noise encrypted transport before any
-                    // file data or metadata is exchanged. Sender = initiator, receiver =
-                    // responder (roles already fixed). A wrong password fails here.
                     let role = if matches!(mode, Mode::Send(_)) {
                         noise::Role::Initiator
                     } else {
                         noise::Role::Responder
                     };
-                    ui.output("Establishing encrypted connection...");
-                    match noise::handshake(tcp, role, &password).await {
-                        Ok(enc) => {
-                            ui.output("Encrypted connection established.");
-                            (resource, TransferStream::Encrypted(Box::new(enc)))
-                        }
-                        Err(e) => {
-                            ui.output(&format!("Error in shared network mode: {}", e));
-                            return None;
-                        }
-                    }
+                    (resource, tcp, role)
                 }
                 Err(e) => {
                     ui.output(&format!("Error in shared network mode: {}", e));
@@ -282,17 +274,24 @@ pub async fn start_transfer<T: UI>(
                 }
             };
 
-            // start hotspot or connect to peer's
-            let peer_resource =
-                match network::connect_to_peer(peer, mode.clone(), ssid, password, interface, ui)
-                    .await
-                {
-                    Ok(p) => p,
-                    Err(e) => {
-                        ui.output(&format!("Error connecting to peer: {}", e));
-                        return None;
-                    }
-                };
+            // start hotspot or connect to peer's. Clone the password: it's still needed for
+            // the Noise handshake after connecting.
+            let peer_resource = match network::connect_to_peer(
+                peer,
+                mode.clone(),
+                ssid,
+                password.clone(),
+                interface,
+                ui,
+            )
+            .await
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    ui.output(&format!("Error connecting to peer: {}", e));
+                    return None;
+                }
+            };
 
             tokio::task::yield_now().await;
 
@@ -305,10 +304,20 @@ pub async fn start_transfer<T: UI>(
                 }
             };
 
-            // Hotspot mode is unchanged: plaintext over the WPA2-protected link.
-            (peer_resource, TransferStream::Plain(stream))
+            // The hotspot host is the TCP server (responder); the guest that joined and
+            // connected is the client (initiator). start_tcp uses exactly this split.
+            let role = match peer_resource {
+                PeerResource::WifiClient(_) => noise::Role::Initiator,
+                _ => noise::Role::Responder,
+            };
+            (peer_resource, stream, role)
         }
     };
+
+    // Plaintext preamble on the raw TCP stream: version, then send/receive mode. These are
+    // not secret and only cause an abort if tampered with (a DoS already available to any
+    // in-path attacker); keeping them outside Noise gives clean version-mismatch reporting.
+    let mut stream = TransferStream::Plain(tcp);
 
     // make sure the versions are compatible
     match confirm_version(&peer_resource, &mut stream).await {
@@ -325,6 +334,25 @@ pub async fn start_transfer<T: UI>(
         Err(e) => {
             ui.output(&format!("Error confirming mode: {}", e));
             return Some(stream);
+        }
+    };
+
+    // Now establish the Noise encrypted transport over the same connection, for both modes.
+    // Everything after this — file count, metadata, and file data — is confidential and
+    // tamper-evident. A wrong password fails the handshake with a clear message.
+    let tcp = match stream {
+        TransferStream::Plain(tcp) => tcp,
+        TransferStream::Encrypted(_) => unreachable!("stream is Plain until the handshake"),
+    };
+    ui.output("Establishing encrypted connection...");
+    let mut stream = match noise::handshake(tcp, noise_role, &password).await {
+        Ok(enc) => {
+            ui.output("Encrypted connection established.");
+            TransferStream::Encrypted(Box::new(enc))
+        }
+        Err(e) => {
+            ui.output(&format!("{}", e));
+            return None;
         }
     };
 
@@ -374,7 +402,7 @@ pub async fn start_transfer<T: UI>(
                     files.len(),
                     file_name
                 ));
-                match sending::send_file(file, common_folder, &key, &mut stream, ui).await {
+                match sending::send_file(file, common_folder, &mut stream, ui).await {
                     Ok(_) => (),
                     Err(e) => {
                         ui.output(&format!("Error sending file: {}", e));
@@ -404,7 +432,7 @@ pub async fn start_transfer<T: UI>(
                 ui.output("=========================");
                 ui.output(&format!("Receiving file {} of {}.", i + 1, num_files,));
                 let last_file = i == num_files - 1;
-                match receiving::receive_file(&folder, &key, &mut stream, ui, last_file).await {
+                match receiving::receive_file(&folder, &mut stream, ui, last_file).await {
                     Ok(_) => (),
                     Err(e) => {
                         ui.output(&format!("Error receiving file: {}", e));
@@ -716,7 +744,6 @@ async fn confirm_version<S: AsyncRead + AsyncWrite + Unpin>(
 mod transfer_tests {
     use super::*;
     use crate::noise::{handshake, Role};
-    use crate::utils::get_key_and_ssid;
 
     #[derive(Clone)]
     struct TestUi;
@@ -744,7 +771,6 @@ mod transfer_tests {
         std::fs::write(&src, &data).unwrap();
 
         let password = "correct horse battery staple";
-        let (key, _ssid) = get_key_and_ssid(password);
 
         let (a, b) = tokio::io::duplex(64 * 1024);
         let src2 = src.clone();
@@ -754,7 +780,7 @@ mod transfer_tests {
         let sender = tokio::spawn(async move {
             let mut enc = handshake(a, Role::Initiator, password).await.unwrap();
             enc.write_u64(1).await.unwrap(); // file count, as the orchestrator does
-            sending::send_file(&src2, &send_dir2, &key, &mut enc, &TestUi)
+            sending::send_file(&src2, &send_dir2, &mut enc, &TestUi)
                 .await
                 .unwrap();
             enc.flush().await.unwrap();
@@ -763,7 +789,7 @@ mod transfer_tests {
             let mut enc = handshake(b, Role::Responder, password).await.unwrap();
             let count = enc.read_u64().await.unwrap();
             assert_eq!(count, 1);
-            receiving::receive_file(&recv_dir2, &key, &mut enc, &TestUi, true)
+            receiving::receive_file(&recv_dir2, &mut enc, &TestUi, true)
                 .await
                 .unwrap();
         });

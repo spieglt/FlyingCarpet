@@ -1,5 +1,4 @@
 use crate::{utils, FCError, CHUNKSIZE, UI};
-use aes_gcm::{aead::Aead, AeadCore, Aes256Gcm, KeyInit};
 use std::{
     fs::{metadata, File},
     io::Read,
@@ -8,15 +7,16 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+// v10+: file contents are protected by the Noise transport (see core/src/noise.rs), which
+// wraps the whole connection, so chunks are sent as raw bytes here — no separate
+// application-level encryption.
 pub async fn send_file<S: AsyncRead + AsyncWrite + Unpin, T: UI>(
     file: &Path,
     prefix: &Path,
-    key: &[u8],
     stream: &mut S,
     ui: &T,
 ) -> Result<(), FCError> {
     let start = Instant::now();
-    let cipher = Aes256Gcm::new_from_slice(key).expect("Invalid AES-256-GCM key length");
     let mut handle = File::open(file)?;
     let metadata = metadata(file)?;
     let size = metadata.len();
@@ -52,7 +52,7 @@ pub async fn send_file<S: AsyncRead + AsyncWrite + Unpin, T: UI>(
             }
             Ok(bytes_read) => {
                 bytes_left -= bytes_read as u64;
-                encrypt_and_send_chunk(&buffer[..bytes_read], &cipher, stream).await?;
+                send_chunk(&buffer[..bytes_read], stream).await?;
                 let percent_done = ((size - bytes_left) as f64 / size as f64) * 100.;
                 ui.update_progress_bar(percent_done as u8);
             }
@@ -83,26 +83,10 @@ pub async fn send_file<S: AsyncRead + AsyncWrite + Unpin, T: UI>(
     Ok(())
 }
 
-async fn encrypt_and_send_chunk<S: AsyncWrite + Unpin>(
-    chunk: &[u8],
-    cipher: &Aes256Gcm,
-    stream: &mut S,
-) -> Result<(), FCError> {
-    // generate nonce
-    let nonce = aes_gcm::Aes256Gcm::generate_nonce(rand::thread_rng());
-
-    // encrypt
-    let mut encrypted_chunk = cipher.encrypt(&nonce, chunk)?;
-
-    let mut nonce_and_chunk = nonce.to_vec();
-    nonce_and_chunk.append(&mut encrypted_chunk);
-
-    // send size
-    stream.write_u64(nonce_and_chunk.len() as u64).await?;
-
-    // write chunk
-    stream.write_all(&nonce_and_chunk).await?;
-
+async fn send_chunk<S: AsyncWrite + Unpin>(chunk: &[u8], stream: &mut S) -> Result<(), FCError> {
+    // length-prefixed raw bytes; confidentiality/integrity come from the Noise transport
+    stream.write_u64(chunk.len() as u64).await?;
+    stream.write_all(chunk).await?;
     Ok(())
 }
 

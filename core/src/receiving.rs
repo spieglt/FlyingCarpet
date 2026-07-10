@@ -1,5 +1,4 @@
 use crate::{error::fc_error, utils, FCError, UI};
-use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit};
 use core::time;
 use std::{
     fs,
@@ -17,20 +16,18 @@ use tokio::{
 // passes — Apple and Android senders use 5MB chunks, ours are CHUNKSIZE (1MB) — while
 // absurd values, which are memory-exhaustion levers, are rejected as corrupt/hostile.
 const MAX_FILENAME_BYTES: u64 = 8192;
-const MAX_CHUNK_BYTES: u64 = 5_000_000 + 4096;
-// nonce (12) + GCM tag (16): the smallest possible encrypted chunk. anything shorter
-// (but nonzero) would panic slicing the nonce off below.
-const MIN_CHUNK_BYTES: u64 = 12 + 16;
+const MAX_CHUNK_BYTES: u64 = 5_000_000;
 
+// v10+: file contents are protected by the Noise transport (see core/src/noise.rs), which
+// wraps the whole connection, so chunks arrive as raw bytes here — no application-level
+// decryption.
 pub async fn receive_file<S: AsyncRead + AsyncWrite + Unpin, T: UI>(
     folder: &Path,
-    key: &[u8],
     stream: &mut S,
     ui: &T,
     last_file: bool,
 ) -> Result<(), FCError> {
     let folder = folder.to_owned();
-    let cipher = Aes256Gcm::new_from_slice(key).expect("Invalid AES-256-GCM key length");
     let start = Instant::now();
 
     // check destination folder
@@ -81,14 +78,14 @@ pub async fn receive_file<S: AsyncRead + AsyncWrite + Unpin, T: UI>(
     // receive file
     loop {
         tokio::task::yield_now().await;
-        let decrypted_bytes = receive_and_decrypt_chunk(&cipher, stream).await?;
-        if decrypted_bytes.len() == 0 {
+        let chunk = receive_chunk(stream).await?;
+        if chunk.len() == 0 {
             break;
         }
         // saturating: a peer that sends more data than the advertised file size must
         // not underflow (the loop is bounded by the end-of-file sentinel, not by this)
-        bytes_left = bytes_left.saturating_sub(decrypted_bytes.len() as u64);
-        out_file.write_all(&decrypted_bytes)?;
+        bytes_left = bytes_left.saturating_sub(chunk.len() as u64);
+        out_file.write_all(&chunk)?;
         let percent_done = ((file_size - bytes_left) as f64 / file_size as f64) * 100.0;
         ui.update_progress_bar(percent_done as u8);
     }
@@ -136,32 +133,24 @@ pub async fn receive_file<S: AsyncRead + AsyncWrite + Unpin, T: UI>(
     Ok(())
 }
 
-async fn receive_and_decrypt_chunk<S: AsyncRead + Unpin>(
-    cipher: &Aes256Gcm,
-    stream: &mut S,
-) -> Result<Vec<u8>, FCError> {
-    // receive chunk size. 0 is the legitimate end-of-file sentinel; anything else
-    // outside the range of a real encrypted chunk means a corrupt or hostile stream,
-    // and must be rejected before we allocate a receive buffer of that size.
+async fn receive_chunk<S: AsyncRead + Unpin>(stream: &mut S) -> Result<Vec<u8>, FCError> {
+    // receive chunk size. 0 is the legitimate end-of-file sentinel; a larger-than-possible
+    // value means a corrupt or hostile stream, and must be rejected before we allocate a
+    // receive buffer of that size.
     let chunk_size = stream.read_u64().await?;
     if chunk_size == 0 {
         return Ok(vec![]);
     }
-    if !(MIN_CHUNK_BYTES..=MAX_CHUNK_BYTES).contains(&chunk_size) {
+    if chunk_size > MAX_CHUNK_BYTES {
         fc_error(&format!(
             "Chunk size {} from peer is out of range",
             chunk_size
         ))?;
     }
-    // receive chunk
+    // receive chunk (raw bytes; the Noise transport already authenticated and decrypted it)
     let mut chunk = vec![0u8; chunk_size as usize];
     stream.read_exact(&mut chunk).await?;
-    // decrypt
-    let nonce = &chunk[..12];
-    let ciphertext = &chunk[12..];
-    let nonce = aes_gcm::Nonce::from_slice(nonce);
-    let decrypted_chunk = cipher.decrypt(nonce, ciphertext)?;
-    Ok(decrypted_chunk)
+    Ok(chunk)
 }
 
 fn sanitize_relative_filename(filename: &str) -> Result<PathBuf, FCError> {
