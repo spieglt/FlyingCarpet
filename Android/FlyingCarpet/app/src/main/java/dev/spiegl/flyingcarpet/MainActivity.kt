@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothManager
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Color
 import android.net.Uri
 import android.net.wifi.WifiManager
@@ -395,7 +396,7 @@ class MainActivity : AppCompatActivity() {
     private fun promptForPassword() {
         val input = EditText(this)
         input.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Password")
             .setMessage(getString(R.string.passwordPrompt))
             .setView(input)
@@ -421,6 +422,19 @@ class MainActivity : AppCompatActivity() {
             }
             .setCancelable(false)
             .show()
+        // In dark mode the default purple button text is nearly unreadable on the dark
+        // dialog surface; force high-contrast white for OK / Cancel / Scan QR Code.
+        val nightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
+        if (nightMode) {
+            for (button in intArrayOf(
+                AlertDialog.BUTTON_POSITIVE,
+                AlertDialog.BUTTON_NEGATIVE,
+                AlertDialog.BUTTON_NEUTRAL,
+            )) {
+                dialog.getButton(button)?.setTextColor(Color.WHITE)
+            }
+        }
     }
 
     // shared network mode, receiving: show the generated password as a QR code so Android
