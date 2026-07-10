@@ -249,9 +249,23 @@ on the wire:  [ 2-byte big-endian length ] [ ciphertext || 16-byte AEAD tag ]
 | Confidentiality of **metadata** (names, sizes, count, hashes) | ✅ record layer |
 | Integrity / tamper-evidence | ✅ AEAD tags + key confirmation |
 | Forward secrecy (past transfers safe if password later leaks) | ✅ ephemeral X25519 |
-| Offline password crack by **passive** eavesdropper (Attacker A) | ✅ **impossible** |
+| Offline password crack by **passive** eavesdropper (Attacker A), *from the Noise channel* | ✅ **impossible** |
+| Offline password crack by **passive** eavesdropper, *from the discovery announcement* | ⚠️ possible (fast HMAC), but **yields nothing of value** — see note below |
 | Active MITM goes undetected | ✅ **prevented** (key confirmation) |
 | Offline password crack by **active** attacker (Attacker B) | ⚠️ possible, but **yields nothing of value** — see below |
+
+**Discovery is a residual fast oracle (shared network only).** The above rows about the
+Noise channel are correct, but they are **not the whole wire**: the UDP discovery
+announcement (§0 of the flow, still `HMAC(SHA256(password), …)` — a *fast* hash) lets a
+passive eavesdropper who captures a single announcement mount an offline dictionary attack
+and recover the password. So the honest statement is: a passive attacker *can* recover the
+password (from discovery), just not usefully. Two things defang it, the same two that defang
+the active-attacker gap: **(1) forward secrecy** — the Noise session key comes from the
+ephemeral X25519 DH, not the password, so knowing the password does **not** let a passive
+attacker decrypt any transfer; and **(2) single-use passwords** — the recovered value is
+dead before the (slow-ish) crack even finishes and is never reused. Net: the discovery
+oracle leaks a password that decrypts nothing and authorizes nothing. It is nonetheless a
+real imperfection versus the clean "passive learns nothing" ideal; see §10 for the fix.
 
 **The abstract residual gap.** An active attacker (Attacker B) who *terminates* one side's
 connection and runs the DH with the victim themselves receives that victim's
@@ -340,12 +354,14 @@ Fix the protocol name up front — proposed: **`Noise_NNpsk0_25519_ChaChaPoly_SH
   maintained (0.10.0 released mid-2026), supports the `NNpsk0` pattern. Pure-Rust crypto by
   default, no C deps. Caveat: no formal audit (but it is the de-facto Rust Noise library,
   widely deployed). This is the reference implementation the other two match against.
-- **Android → use a Noise library, not raw Tink.** `noise-java` (rweather) is the plain-Java
-  reference implementation; it uses JCE where available and ships pure-Java fallbacks for
-  primitives an older Android JDK lacks (notably Curve25519), so it works across Android
-  versions without an API-30 floor or a BouncyCastle dependency. `java-noise` (jchambers) is
-  a newer alternative. Either gives you the whole handshake; do **not** try to assemble it
-  from Tink (§3).
+- **Android → hand-rolled on JCA + a vendored X25519** (see §11 Phase 2 for the full
+  rationale). The obvious libraries don't fit `minSdk 29` / Java 8 / modern `NNpsk0`:
+  `noise-java` (rweather) implements the *deprecated* pre-2018 PSK scheme (incompatible with
+  snow — verified against the cacophony vector), and `java-noise` (jchambers) needs Java 17
+  and JCA `X25519`, which Android's platform only added in **API 34**. So Android hand-rolls
+  the symmetric state + handshake in Kotlin using JCA ChaCha20-Poly1305 (API 28+) and
+  HMAC/SHA-256, plus the one pure-Java file `Curve25519.java` vendored from noise-java for
+  X25519 (API 29 / Java 8 safe). Do **not** try to assemble it from Tink (§3).
 - **Apple → hand-implement `NNpsk0` on CryptoKit.** The "Apple standard crypto only"
   constraint forbids a third-party Noise library, and there is no well-established CryptoKit
   Noise library anyway. But Noise is small: the handshake needs only X25519
@@ -440,9 +456,17 @@ that otherwise surface as "handshake fails, no idea why."
   happen on the raw socket before the handshake (§6, §7), for clean version-mismatch
   reporting.
 - **No v9 compatibility.** v10 is a clean break; a v9 peer is rejected with a clear message.
-- **Discovery unchanged for now.** Still `HMAC(SHA256(password), announcement)`; it reveals
-  only presence/IP, never file data. Folding it into the hardened scheme is possible later,
-  out of scope here.
+- **Discovery unchanged for now — but note it's a fast password oracle.** Still
+  `HMAC(SHA256(password), announcement)`. The packet reveals only presence/IP, but because
+  it's a *fast* HMAC over the password, a passive eavesdropper can offline-crack the
+  password from a single captured announcement (§7). That recovered password is defanged by
+  forward secrecy (it can't decrypt any Noise transfer) and single-use (it's dead before the
+  crack finishes), so data security is intact — but the clean "passive learns nothing" claim
+  needs this asterisk. Now that Noise is the real authenticator, the discovery HMAC is
+  essentially just a coarse rendezvous filter; the proper fix (future work) is to stop
+  leaking a fast oracle — either derive the discovery HMAC key with PBKDF2 too, or drop
+  discovery authentication entirely and let the Noise handshake be the sole gate (a wrong
+  password already fails the handshake). Out of scope for the port work.
 
 **Version bump — already implemented** (the only code landed ahead of the Noise work):
 
@@ -510,15 +534,38 @@ Phases 2 and 3 must mirror the **full** design: plaintext version/mode preamble 
 handshake (both modes) → raw chunks inside Noise (no per-chunk AES). The role rule is the
 same everywhere: TCP client = initiator, TCP server = responder.
 
-### Phase 2 — Android (`noise-java`)
-1. Add `noise-java` (or `java-noise`) to Gradle; same protocol name.
-2. Same PSK derivation (identical salt/iters); verify against the cacophony vector and the
-   §9 app KATs in a `DiscoveryUnitTest`-style test *before* wiring anything live.
-3. Move version/mode confirmation to a plaintext preamble, then wrap the socket streams
-   (`Receive.kt` / `Send.kt` / `MainViewModel.startTransfer`) in a Noise transport for both
-   modes, and **remove the per-chunk AES** (raw chunks). Client = initiator, server =
-   responder.
-4. Verify Android↔Windows both directions against the Phase 1 reference.
+### Phase 2 — Android (hand-rolled on JCA + vendored X25519) — **done**
+
+**Library dead-end (why hand-rolled).** Neither obvious Java Noise library fits this app
+(`minSdk 29`, Java 8, must speak modern `NNpsk0`):
+- **rweather/noise-java** implements the *deprecated pre-2018 PSK scheme* (`NoisePSK_`
+  prefix, no `psk` token, `SymmetricState` has no `mixKeyAndHash`). Verified empirically:
+  it can't parse `Noise_NNpsk0_…` ("Handshake pattern is not recognized"), and its
+  `NoisePSK_NN_…` output diverges from the official cacophony `NNpsk0` vector after the
+  ephemeral — cryptographically incompatible with the Rust/snow side.
+- **jchambers/java-noise** does modern `psk0` but is **Java 17** source and calls JCA
+  `KeyAgreement.getInstance("X25519")`, which Android's platform (Conscrypt) only added in
+  **Android 14 / API 34** — so it would force `minSdk 34` (dropping everything below Android
+  14) or bundling BouncyCastle as a provider. Not acceptable.
+
+So Android hand-rolls the `NNpsk0` symmetric state + handshake + transport in Kotlin
+(`Noise.kt`), the same shape as the Apple/CryptoKit side. Only the primitive that isn't in
+API-29 platform crypto is vendored:
+- **X25519**: the single pure-Java file `com/southernstorm/noise/crypto/Curve25519.java`
+  (from rweather/noise-java, MIT; only its *crypto leaf*, not its handshake layer). Works on
+  API 29 / Java 8.
+- **ChaCha20-Poly1305** (JCA, `Cipher "ChaCha20-Poly1305"`, Android 9 / API 28+),
+  **HMAC-SHA256 / SHA-256** (JCA). PSK = the same PBKDF2 as Rust, hand-computed over the
+  UTF-8 password so it can't hit `PBEKeySpec` char-encoding ambiguity.
+
+Verified: `NoiseUnitTest` reproduces the official cacophony vector **and** the §9 app KATs
+byte-for-byte, plus a multi-record stream round-trip and a wrong-password rejection — 5
+tests, matching the Rust reference. Wiring mirrors Phase 1: plaintext version/mode preamble
+(already on the raw socket) → `noiseHandshake` for both modes (client = initiator, server =
+responder) → the socket streams are swapped for `NoiseInputStream`/`NoiseOutputStream`, and
+the per-chunk AES is removed from `Send.kt`/`Receive.kt` (raw chunks). Live Android↔Windows
+verification is still pending real devices, but the shared cacophony/app KATs are the
+interop guarantee.
 
 ### Phase 3 — Apple (hand-rolled on CryptoKit)
 1. Implement the `NNpsk0` handshake + transport from `Curve25519.KeyAgreement`,

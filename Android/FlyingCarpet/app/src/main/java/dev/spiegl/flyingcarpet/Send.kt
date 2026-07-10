@@ -5,11 +5,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.nio.ByteBuffer
-import java.security.SecureRandom
-import javax.crypto.Cipher
-import javax.crypto.spec.GCMParameterSpec
-import javax.crypto.spec.SecretKeySpec
 
+// v10+: file contents are protected by the Noise transport (see Noise.kt), which wraps the
+// whole connection, so chunks are sent as raw bytes here — no application-level encryption.
 suspend fun MainViewModel.sendFile(file: DocumentFile, fileStream: InputStream, filePath: String) {
     val start = System.currentTimeMillis()
     outputText("File size: ${makeSizeReadable(file.length())}")
@@ -31,7 +29,7 @@ suspend fun MainViewModel.sendFile(file: DocumentFile, fileStream: InputStream, 
         }
 
         bytesLeft -= bytesRead
-        encryptAndSendChunk(buffer.sliceArray(0 until bytesRead))
+        sendChunk(buffer.sliceArray(0 until bytesRead))
         val percentDone = ((file.length() - bytesLeft).toDouble() / file.length()) * 100
         progressBarMut.postValue(percentDone.toInt())
     }
@@ -60,28 +58,10 @@ suspend fun MainViewModel.sendFile(file: DocumentFile, fileStream: InputStream, 
     }
 }
 
-private fun MainViewModel.encryptAndSendChunk(chunk: ByteArray) {
-    val secureRandom = SecureRandom()
-    val nonce = ByteArray(96 / 8) // 96 bits
-    secureRandom.nextBytes(nonce)
-    var nonceString = ""
-    for (byte in nonce) {
-        nonceString += "%02x ".format(byte)
-    }
-    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-    val keySpec = SecretKeySpec(key, "AES")
-    val gcmSpec = GCMParameterSpec(128, nonce)
-    cipher.init(Cipher.ENCRYPT_MODE, keySpec, gcmSpec)
-
-    // want to use update() here, but it doesn't let you change the nonce for each encryption, so this is what rust and swift do?
-    val ciphertext = cipher.doFinal(chunk)
-    val encryptedChunk = nonce + ciphertext
-
-    // send size
-    val size = longToBigEndianBytes(encryptedChunk.size.toLong())
-    outputStream.write(size)
-    // write chunk
-    outputStream.write(encryptedChunk)
+private fun MainViewModel.sendChunk(chunk: ByteArray) {
+    // length-prefixed raw bytes; confidentiality/integrity come from the Noise transport
+    outputStream.write(longToBigEndianBytes(chunk.size.toLong()))
+    outputStream.write(chunk)
 }
 
 private fun MainViewModel.sendFileDetails(file: DocumentFile, path: String) {

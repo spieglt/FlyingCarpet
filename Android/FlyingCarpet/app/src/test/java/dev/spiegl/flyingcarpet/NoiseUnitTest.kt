@@ -1,0 +1,158 @@
+package dev.spiegl.flyingcarpet
+
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.fail
+import org.junit.Test
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+
+class NoiseUnitTest {
+
+    private fun hex(s: String): ByteArray =
+        ByteArray(s.length / 2) {
+            ((s[it * 2].digitToInt(16) shl 4) or s[it * 2 + 1].digitToInt(16)).toByte()
+        }
+
+    private fun toHex(b: ByteArray): String = b.joinToString("") { "%02x".format(it) }
+
+    // Spec conformance: drive the hand-rolled NNpsk0 with the official cacophony test vector
+    // for Noise_NNpsk0_25519_ChaChaPoly_SHA256 and assert the handshake message ciphertexts,
+    // the handshake hash, and the first transport record match byte-for-byte. This is the
+    // same vector asserted by the Rust reference (core/src/noise.rs, official_noise_test_vector),
+    // so passing it proves Android interoperates with Rust.
+    @Test
+    fun officialNoiseTestVector() {
+        val prologue = hex("4a6f686e2047616c74") // "John Galt"
+        val psk = hex("54686973206973206d7920417573747269616e20706572737065637469766521")
+        val initEph = hex("893e28b9dc6ca8d611ab664754b8ceb7bac5117349a4439a6b0569da977c464a")
+        val respEph = hex("bbdb4cdbd309f1a1f2e1456967fe288cadd6f712d65dc7b7793d5e63da6b375b")
+
+        val init = NoiseHandshakeState(NoiseRole.INITIATOR, psk, prologue, initEph)
+        val resp = NoiseHandshakeState(NoiseRole.RESPONDER, psk, prologue, respEph)
+
+        // message 0: initiator -> responder ("Ludwig von Mises")
+        val p0 = hex("4c756477696720766f6e204d69736573")
+        val msg0 = init.writeMessage(p0)
+        assertEquals(
+            "ca35def5ae56cec33dc2036731ab14896bc4c75dbb07a61f879f8e3afa4c794479b962b8aff8485742ac32f905ba45369e2465fb59e138a93d67a0d1266b6a54",
+            toHex(msg0),
+        )
+        assertArrayEquals(p0, resp.readMessage(msg0))
+
+        // message 1: responder -> initiator ("Murray Rothbard")
+        val p1 = hex("4d757272617920526f746862617264")
+        val msg1 = resp.writeMessage(p1)
+        assertEquals(
+            "95ebc60d2b1fa672c1f46a8aa265ef51bfe38e7ccb39ec5be34069f144808843d6062704d5a9c422a8e834423f8c1feada7e8d0d910a1a2cd030fb584221e3",
+            toHex(msg1),
+        )
+        assertArrayEquals(p1, init.readMessage(msg1))
+
+        // handshake hash matches the spec value
+        val expectedHh = "f4d03dc34495c95729ea6de9e1b59004b59733102488b3e24bc441e0be208eaf"
+        assertEquals(expectedHh, toHex(init.handshakeHash()))
+        assertEquals(expectedHh, toHex(resp.handshakeHash()))
+
+        // first transport message: initiator -> responder ("F. A. Hayek")
+        val (initSend, _) = init.split()
+        val (_, respRecv) = resp.split()
+        val p2 = hex("462e20412e20486179656b")
+        val record = initSend.encryptWithAd(ByteArray(0), p2)
+        assertEquals("e632c3763d7669067383433197a3baddf146e9e70ad4b4e9e59e0f", toHex(record))
+        assertArrayEquals(p2, respRecv.decryptWithAd(ByteArray(0), record))
+    }
+
+    // Cross-platform known-answer for the PSK derivation (must match Rust's derive_psk).
+    @Test
+    fun pskKnownAnswer() {
+        assertEquals(
+            "a3d8b7f17f2252e4c2847a365ab2f392beaa996b7e51dd6fa19ff1ad08938619",
+            toHex(derivePsk("flyingcarpet")),
+        )
+    }
+
+    // App-parameter known-answer (empty prologue, fixed PSK/ephemerals) matching the Rust
+    // reference's handshake_known_answer (docs §9): confirms our exact usage produces
+    // identical bytes across implementations.
+    @Test
+    fun appHandshakeKnownAnswer() {
+        val psk = ByteArray(32) { 0x2a }
+        val initEph = ByteArray(32) { 0x01 }
+        val respEph = ByteArray(32) { 0x02 }
+
+        val init = NoiseHandshakeState(NoiseRole.INITIATOR, psk, ByteArray(0), initEph)
+        val resp = NoiseHandshakeState(NoiseRole.RESPONDER, psk, ByteArray(0), respEph)
+
+        val msg1 = init.writeMessage()
+        assertEquals(
+            "a4e09292b651c278b9772c569f5fa9bb13d906b46ab68c9df9dc2b4409f8a209a3e9c18456aba2185de800ffaca55b22",
+            toHex(msg1),
+        )
+        resp.readMessage(msg1)
+
+        val msg2 = resp.writeMessage()
+        assertEquals(
+            "ce8d3ad1ccb633ec7b70c17814a5c76ecd029685050d344745ba05870e587d59d887595caf8a0b110dfab84e6b41eafc",
+            toHex(msg2),
+        )
+        init.readMessage(msg2)
+
+        val (initSend, _) = init.split()
+        val record = initSend.encryptWithAd(ByteArray(0), "hello flying carpet".toByteArray())
+        assertEquals(
+            "124a00c03b4544f746828bbf9ae2d8d595a9ac1fea988f43f7206c3880180b954f9147",
+            toHex(record),
+        )
+    }
+
+    private fun handshakeInMemory(password: String): Pair<NoiseCipherState, NoiseCipherState> {
+        val psk = derivePsk(password)
+        val init = NoiseHandshakeState(NoiseRole.INITIATOR, psk)
+        val resp = NoiseHandshakeState(NoiseRole.RESPONDER, psk)
+        resp.readMessage(init.writeMessage())
+        init.readMessage(resp.writeMessage())
+        val (initSend, _) = init.split()
+        val (_, respRecv) = resp.split()
+        return Pair(initSend, respRecv)
+    }
+
+    // Exercises NoiseOutputStream/NoiseInputStream framing with a payload larger than one
+    // Noise record (so it spans several records), end to end.
+    @Test
+    fun streamRoundTripMultiRecord() {
+        val (initSend, respRecv) = handshakeInMemory("correct horse")
+        val big = ByteArray(200_000) { (it % 251).toByte() }
+
+        val wire = ByteArrayOutputStream()
+        val nout = NoiseOutputStream(wire, initSend)
+        nout.write(big)
+        nout.flush()
+
+        val nin = NoiseInputStream(ByteArrayInputStream(wire.toByteArray()), respRecv)
+        val got = ByteArray(big.size)
+        var read = 0
+        while (read < got.size) {
+            val n = nin.read(got, read, got.size - read)
+            if (n < 0) break
+            read += n
+        }
+        assertEquals(big.size, read)
+        assertArrayEquals(big, got)
+    }
+
+    // A mismatched password makes the responder's read of the first message fail, so the
+    // handshake cannot complete.
+    @Test
+    fun wrongPasswordFailsHandshake() {
+        val init = NoiseHandshakeState(NoiseRole.INITIATOR, derivePsk("password-one"))
+        val resp = NoiseHandshakeState(NoiseRole.RESPONDER, derivePsk("password-two"))
+        val msg1 = init.writeMessage()
+        try {
+            resp.readMessage(msg1)
+            fail("responder should have rejected the message under a mismatched PSK")
+        } catch (e: Exception) {
+            // expected: bad tag / decryption failure
+        }
+    }
+}

@@ -4,17 +4,15 @@ import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
-import javax.crypto.Cipher
-import javax.crypto.spec.GCMParameterSpec
-import javax.crypto.spec.SecretKeySpec
 
 // Sanity bounds on peer-supplied header values, checked before they're used to size an
 // allocation. Chosen so every legitimate transfer passes while negative or absurd
 // values (memory-exhaustion levers) are rejected as corrupt/hostile.
 const val MAX_FILENAME_BYTES = 8192L
-const val MAX_CHUNK_BYTES = chunkSize + 4096L // one encrypted chunk + nonce/tag slack
-const val MIN_CHUNK_BYTES = 12L + 16L // nonce + GCM tag: smallest possible chunk
+const val MAX_CHUNK_BYTES = chunkSize.toLong() // max raw chunk (Apple/Android use 5MB)
 
+// v10+: file contents are protected by the Noise transport (see Noise.kt), which wraps the
+// whole connection, so chunks arrive as raw bytes here — no application-level decryption.
 suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
     val start = System.currentTimeMillis()
 
@@ -44,7 +42,7 @@ suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
 
     // receive file
     while (true) {
-        val chunk = receiveAndDecryptChunk()
+        val chunk = receiveChunk()
         if (chunk.isEmpty()) {
             break
         }
@@ -92,31 +90,22 @@ suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
     }
 }
 
-private fun MainViewModel.receiveAndDecryptChunk(): ByteArray {
-    // receive size. 0 is the legitimate end-of-file sentinel; anything else outside
-    // the range of a real encrypted chunk means a corrupt or hostile stream, and must
-    // be rejected before we allocate a receive buffer of that size (or truncate it
-    // into a negative Int).
+private fun MainViewModel.receiveChunk(): ByteArray {
+    // receive size. 0 is the legitimate end-of-file sentinel; a larger-than-possible value
+    // means a corrupt or hostile stream, and must be rejected before we allocate a receive
+    // buffer of that size (or truncate it into a negative Int).
     val sizeBytes = readNBytes(8, inputStream)
     val size = ByteBuffer.wrap(sizeBytes).long
 
     if (size == 0L) {
         return ByteArray(0)
     }
-    if (size < MIN_CHUNK_BYTES || size > MAX_CHUNK_BYTES) {
+    if (size < 0 || size > MAX_CHUNK_BYTES) {
         throw Exception("Chunk size $size from peer is out of range")
     }
 
-    // receive chunk
-    val encryptedChunk = readNBytes(size.toInt(), inputStream)
-
-    // decrypt
-    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-    val keySpec = SecretKeySpec(key, "AES")
-    val nonce = encryptedChunk.sliceArray(0 until 12)
-    val gcmSpec = GCMParameterSpec(128, nonce)
-    cipher.init(Cipher.DECRYPT_MODE, keySpec, gcmSpec)
-    return cipher.doFinal(encryptedChunk.drop(12).toByteArray())
+    // receive chunk (raw bytes; the Noise transport already authenticated and decrypted it)
+    return readNBytes(size.toInt(), inputStream)
 }
 
 private fun MainViewModel.receiveFileDetails(): Pair<String, Long> {
