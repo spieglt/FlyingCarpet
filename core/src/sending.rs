@@ -6,16 +6,13 @@ use std::{
     path::Path,
     time::Instant,
 };
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
-};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub async fn send_file<T: UI>(
+pub async fn send_file<S: AsyncRead + AsyncWrite + Unpin, T: UI>(
     file: &Path,
     prefix: &Path,
     key: &[u8],
-    stream: &mut TcpStream,
+    stream: &mut S,
     ui: &T,
 ) -> Result<(), FCError> {
     let start = Instant::now();
@@ -86,10 +83,10 @@ pub async fn send_file<T: UI>(
     Ok(())
 }
 
-async fn encrypt_and_send_chunk(
+async fn encrypt_and_send_chunk<S: AsyncWrite + Unpin>(
     chunk: &[u8],
     cipher: &Aes256Gcm,
-    stream: &mut TcpStream,
+    stream: &mut S,
 ) -> Result<(), FCError> {
     // generate nonce
     let nonce = aes_gcm::Aes256Gcm::generate_nonce(rand::thread_rng());
@@ -109,10 +106,10 @@ async fn encrypt_and_send_chunk(
     Ok(())
 }
 
-async fn send_file_details(
+async fn send_file_details<S: AsyncWrite + Unpin>(
     filename: &str,
     size: u64,
-    stream: &mut TcpStream,
+    stream: &mut S,
 ) -> std::io::Result<()> {
     // send size of filename
     stream.write_u64(filename.len() as u64).await?;
@@ -124,7 +121,10 @@ async fn send_file_details(
 }
 
 // returns Ok(true) if we need to perform the transfer
-async fn check_for_file(filename: &Path, stream: &mut TcpStream) -> Result<bool, FCError> {
+async fn check_for_file<S: AsyncRead + AsyncWrite + Unpin>(
+    filename: &Path,
+    stream: &mut S,
+) -> Result<bool, FCError> {
     let has_file = stream.read_u64().await?;
     if has_file == 1 {
         let hash = utils::hash_file(filename)?;

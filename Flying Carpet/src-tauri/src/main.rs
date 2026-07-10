@@ -147,7 +147,7 @@ fn start_async(
     };
 
     let cancel_handle = tokio::spawn(async move {
-        let stream: std::option::Option<tokio::net::TcpStream> = start_transfer(
+        let stream: Option<flying_carpet_core::TransferStream> = start_transfer(
             mode,
             using_bluetooth,
             peer,

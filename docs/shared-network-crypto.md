@@ -1,7 +1,8 @@
 # Shared Network Mode: Cryptographic Design
 
-Status: **draft / for review** — not yet implemented. Audience: an engineer implementing
-this across the Rust core, the Swift (iOS/macOS) app, and the Kotlin (Android) app.
+Status: **Phase 1 (Rust core) implemented and verified against the official Noise vectors;
+Android and Apple ports pending.** Audience: an engineer implementing this across the Rust
+core, the Swift (iOS/macOS) app, and the Kotlin (Android) app.
 
 This document explains *why* the design is shaped the way it is, not just what to build,
 so that the person writing the code understands which properties are load-bearing and
@@ -201,8 +202,14 @@ chunks — runs unchanged, but writes into an *encrypting wrapper* instead of th
 socket. Every logical message becomes one AEAD record:
 
 ```
-on the wire:  [ 4-byte big-endian length ] [ ciphertext || 16-byte GCM tag ]
+on the wire:  [ 2-byte big-endian length ] [ ciphertext || 16-byte AEAD tag ]
 ```
+
+> Implementation note: the shipped Rust reference builds this record layer from Noise's
+> transport messages (§8), so the "directional keys" and "counter nonces" below are
+> managed by Noise/`snow` internally rather than derived by hand, and the length prefix is
+> **2 bytes** (`u16`) because Noise caps a message at 65535 bytes. §4–§6 are the conceptual
+> model; §9 lists the exact framing and test vectors the implementation actually uses.
 
 - **Directional keys.** Sender→receiver records use `k_s2c`; receiver→sender records use
   `k_r2s`. Two keys means the two nonce counters live in separate spaces and can never
@@ -342,23 +349,57 @@ model; treat the Noise `NNpsk0` spec as the normative reference for the bytes.
 
 ## 9. Interop and testing (the part that actually eats the time)
 
-Every byte that feeds a hash, HKDF, or AEAD must be **identical** across Rust, Swift, and
-Kotlin, or the three won't interoperate. Nail these down as constants and test them:
+Because the handshake is standard Noise (§8), most byte-level details are fixed by the
+Noise spec and the protocol name. What each platform must still pin identically:
 
-- Exact `info`/label strings (including version, including any separators).
-- Transcript byte order (client public then server public; 32 bytes each; no length
-  prefixes inside the transcript).
-- PBKDF2 iteration count and salt derivation.
-- AEAD choice, key length (32), nonce length (12) and counter encoding (big-endian).
-- Record framing (4-byte big-endian length; tag appended, not prepended).
+- **Protocol name:** `Noise_NNpsk0_25519_ChaChaPoly_SHA256` (exact string).
+- **Prologue:** **empty** (no `.prologue()` call). All platforms must use an empty
+  prologue, or the handshake hashes diverge and nothing interoperates.
+- **PSK derivation:** `PBKDF2-HMAC-SHA256(password_utf8, salt, iters) → 32 bytes`, with
+  `salt = b"Flying Carpet v10 shared network PSK"` and `iters = 600000`.
+- **Record framing:** each Noise message is prefixed by its length as a **2-byte
+  big-endian** integer (`u16`), tag appended (not prepended). 2 bytes, not 4, because
+  Noise caps messages at 65535 bytes; the same framing is used for the two handshake
+  messages and every transport record.
+- **Roles:** the shared-network sender (TCP client) is the Noise **initiator**; the
+  receiver (TCP server) is the **responder**.
 
-Build a **known-answer test vector** exactly like the existing discovery test
-(`test_cross_platform_vector` in `core/src/discovery.rs` and its Kotlin twin in
-`DiscoveryUnitTest.kt`): fixed ephemeral private keys, fixed password, assert the derived
-`k_s2c` / `k_r2s` / confirmation MACs and one encrypted record match a hard-coded hex
-string in all three languages. This vector is what guarantees a macOS sender can talk to an
-Android receiver. Write it first; it will catch the endianness and label mismatches that
-otherwise surface as "handshake fails, no idea why."
+**Spec conformance is verified against the official vectors.** `core/src/noise.rs` test
+`official_noise_test_vector` drives `snow` with the canonical
+`Noise_NNpsk0_25519_ChaChaPoly_SHA256` test vector from
+[haskell-cryptography/cacophony](https://github.com/haskell-cryptography/cacophony)
+(`vectors/cacophony.txt`) — its prologue, PSK, and fixed ephemerals — and
+asserts the handshake message ciphertexts, the handshake hash
+(`f4d03dc3…be208eaf`), and the first transport record match byte-for-byte. This is what
+guarantees the Swift/Kotlin ports (which follow the same spec) interoperate; **each port
+should run the same cacophony vector against its own Noise implementation.** The
+app-specific KAT vectors below (empty prologue, PBKDF2-derived PSK) are a *separate*
+determinism check for our exact parameters, not a spec check.
+
+**Cross-platform known-answer test vectors.** These are emitted and asserted by the Rust
+reference (`core/src/noise.rs`, tests `psk_known_answer` and `handshake_known_answer`);
+Swift and Kotlin must reproduce them exactly. `snow`'s
+`fixed_ephemeral_key_for_testing_only` fixes the ephemerals so the whole handshake is
+deterministic.
+
+- PSK for password `"flyingcarpet"`:
+  `a3d8b7f17f2252e4c2847a365ab2f392beaa996b7e51dd6fa19ff1ad08938619`
+
+With fixed PSK = `2a`×32, initiator ephemeral private = `01`×32, responder ephemeral
+private = `02`×32:
+
+- Handshake msg 1 (initiator → responder), 48 bytes:
+  `a4e09292b651c278b9772c569f5fa9bb13d906b46ab68c9df9dc2b4409f8a209a3e9c18456aba2185de800ffaca55b22`
+- Handshake msg 2 (responder → initiator), 48 bytes:
+  `ce8d3ad1ccb633ec7b70c17814a5c76ecd029685050d344745ba05870e587d59d887595caf8a0b110dfab84e6b41eafc`
+- First transport record from the initiator, plaintext `"hello flying carpet"`:
+  `124a00c03b4544f746828bbf9ae2d8d595a9ac1fea988f43f7206c3880180b954f9147`
+
+(The transport-record vector is the raw Noise message; on the wire it is preceded by its
+2-byte length prefix `0023`.) This is the vector that guarantees a macOS sender can talk to
+an Android receiver; port it into an XCTest / `DiscoveryUnitTest`-style test on each
+platform before wiring live transfers, since it catches label and endianness mismatches
+that otherwise surface as "handshake fails, no idea why."
 
 ---
 
@@ -406,29 +447,43 @@ values.
 ## 11. Implementation plan (phased)
 
 Order chosen so the cheapest, most-verifiable piece comes first and becomes the reference
-the others are tested against. Do **not** start Phase 1 until the two open items at the end
-are closed.
+the others are tested against.
 
 ### Phase 0 — done
 Version bump + mismatch messaging (§10). The only pre-Noise code change.
 
-### Phase 1 — Rust core reference implementation (`snow`)
-1. Add `snow` to `core/Cargo.toml`; configure `Noise_NNpsk0_25519_ChaChaPoly_SHA256`.
-2. Derive the 32-byte PSK: `psk = PBKDF2-HMAC-SHA256(password, salt, iters = 600_000)`, with
-   `salt` and `iters` fixed as shared constants (§9).
-3. Run the handshake immediately after the TCP connection is established in
-   `start_shared_network_transfer` (`core/src/lib.rs`), *before* `confirm_version`. Receiver
-   (TCP server) = Noise **responder**; sender (TCP client) = **initiator** (roles already
-   fixed).
-4. Wrap the `TcpStream` in an `EncryptedStream` that drives a `snow` `TransportState` and
-   exposes the same `read_u64` / `read_exact` / `write_u64` / `write_all` surface the
-   transfer code already uses, so `sending.rs` / `receiving.rs` are **unchanged**. One
-   logical message → one Noise transport message → one length-prefixed record (§6).
-5. Emit the cross-language test vector (§9) from a Rust test: fixed initiator/responder
-   ephemeral privates + fixed password → assert handshake hash / transport keys / first
-   ciphertext as hex.
-6. Verify a Rust↔Rust loopback shared-network transfer end-to-end, plus a wrong-password
-   attempt (must fail cleanly with a user-facing message) and a multi-file folder transfer.
+### Phase 1 — Rust core reference implementation (`snow`) — **done**
+Landed in `core/src/noise.rs` and wired into `core/src/lib.rs`:
+1. `snow` and `pbkdf2` added to `core/Cargo.toml`; protocol
+   `Noise_NNpsk0_25519_ChaChaPoly_SHA256`.
+2. `derive_psk()` = PBKDF2-HMAC-SHA256 with the fixed salt/iters constants (§9).
+3. The handshake runs in `start_transfer`'s shared-network arm, right after
+   `start_shared_network_transfer` returns the TCP stream and *before* `confirm_version`.
+   Sender = initiator, receiver = responder. A wrong password fails the handshake with a
+   clear message ("Could not establish a secure connection. Check that the password
+   matches…").
+4. `EncryptedStream<S>` implements tokio `AsyncRead + AsyncWrite`, transparently splitting
+   the byte stream into ≤64 KiB Noise records with a 2-byte length prefix. `send_file` /
+   `receive_file` / `confirm_version` / `confirm_mode` are now generic over the stream, so
+   their bodies are unchanged; a `TransferStream` enum (`Plain` for hotspot, `Encrypted`
+   for shared network) keeps a single stream binding. Hotspot mode is byte-for-byte
+   unchanged.
+5. **Spec conformance verified against the official Noise vectors:**
+   `official_noise_test_vector` drives `snow` with the canonical cacophony vector for the
+   protocol and asserts the message ciphertexts, handshake hash, and transport record
+   match byte-for-byte — this is the real cross-platform interop guarantee. Additional
+   app-parameter KAT vectors (`psk_known_answer`, `handshake_known_answer`) are transcribed
+   into §9 as a determinism check.
+6. Verified: `end_to_end_encrypted_transfer` runs the real send/receive over an encrypted
+   duplex with a 200 KB (multi-record) file; `wrong_password_fails_handshake`,
+   `round_trip_small_and_large`, and `tampering_is_detected` all pass. 18 core tests green.
+
+**Known Phase-1 redundancy (intentional, revisit later):** the file *chunks* are now
+double-encrypted — the unchanged `send_file`/`receive_file` still AES-256-GCM each chunk
+with `SHA256(password)`, and the Noise layer then ChaChaPoly-wraps everything. This is the
+cost of "don't rewrite the logical protocol"; the metadata protection (the actual goal) is
+achieved. A later cleanup could drop the inner AES-GCM once all platforms are on Noise, but
+that is itself a wire change and out of scope for getting parity.
 
 ### Phase 2 — Android (`noise-java`)
 1. Add `noise-java` (or `java-noise`) to Gradle; same protocol name.
@@ -455,14 +510,13 @@ Full matrix (Win / Linux / macOS / iOS / Android × sender / receiver), wrong-pa
 version-mismatch paths, and a per-file size larger than one record. Remove the old cleartext
 shared-network transport.
 
-### Open items to close before Phase 1
-- **PBKDF2 salt.** Fixed domain-separation string vs transcript-derived. Leaning **fixed
-  string**: the Noise handshake hash already binds the ephemeral transcript, so the salt's
-  only job is domain separation, and a fixed value is simplest to keep byte-identical across
-  languages.
-- **`snow` audit posture.** `snow` has no formal audit (it states this). Acceptable given
-  it's the de-facto Rust Noise library and widely deployed, but note it; the fallback if not
-  is a hand-rolled Rust implementation matched to the Apple one.
+### Open items — resolved
+- **PBKDF2 salt** → **fixed domain string** `b"Flying Carpet v10 shared network PSK"`. The
+  Noise handshake hash already binds the ephemeral transcript, so the salt's only job is
+  domain separation and a fixed value is simplest to keep byte-identical across languages.
+- **`snow` audit posture** → **accepted.** `snow` has no formal audit (it says so), but it
+  is the de-facto Rust Noise library and widely deployed; the fallback if that ever becomes
+  unacceptable is a hand-rolled Rust implementation matched to the Apple one.
 
 ---
 

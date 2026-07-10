@@ -8,6 +8,7 @@ pub mod bluetooth;
 
 pub mod discovery;
 pub mod error;
+pub mod noise;
 mod receiving;
 mod sending;
 pub mod utils;
@@ -18,19 +19,68 @@ use error::{fc_error, FCError};
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
+    pin::Pin,
     str::FromStr,
     sync::{Arc, Mutex},
+    task::{Context, Poll},
 };
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     net::{TcpListener, TcpStream},
     sync::mpsc,
 };
 use utils::get_key_and_ssid;
 
+/// The transport the transfer runs over: a plain TCP stream (hotspot mode) or a Noise
+/// EncryptedStream (shared network mode, v10+). Both implement AsyncRead + AsyncWrite, so
+/// version/mode confirmation and the send/receive code are identical over either. Opaque
+/// to callers — `start_transfer` returns it and `clean_up_transfer` consumes it.
+pub enum TransferStream {
+    Plain(TcpStream),
+    Encrypted(Box<noise::EncryptedStream<TcpStream>>),
+}
+
+impl AsyncRead for TransferStream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        match self.get_mut() {
+            TransferStream::Plain(s) => Pin::new(s).poll_read(cx, buf),
+            TransferStream::Encrypted(s) => Pin::new(&mut **s).poll_read(cx, buf),
+        }
+    }
+}
+
+impl AsyncWrite for TransferStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        match self.get_mut() {
+            TransferStream::Plain(s) => Pin::new(s).poll_write(cx, buf),
+            TransferStream::Encrypted(s) => Pin::new(&mut **s).poll_write(cx, buf),
+        }
+    }
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        match self.get_mut() {
+            TransferStream::Plain(s) => Pin::new(s).poll_flush(cx),
+            TransferStream::Encrypted(s) => Pin::new(&mut **s).poll_flush(cx),
+        }
+    }
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        match self.get_mut() {
+            TransferStream::Plain(s) => Pin::new(s).poll_shutdown(cx),
+            TransferStream::Encrypted(s) => Pin::new(&mut **s).poll_shutdown(cx),
+        }
+    }
+}
+
 const CHUNKSIZE: usize = 1_000_000; // 1 MB
-// v10 is a breaking change: shared network mode and its new protocol are not compatible
-// with v9 or earlier. See docs/shared-network-crypto.md.
+                                    // v10 is a breaking change: shared network mode and its new protocol are not compatible
+                                    // with v9 or earlier. See docs/shared-network-crypto.md.
 const MAJOR_VERSION: u64 = 10;
 // Sanity bound on the peer-supplied file count (companion to the header bounds in
 // receiving.rs): no legitimate transfer approaches it, and a corrupt or hostile
@@ -133,7 +183,7 @@ pub async fn start_transfer<T: UI>(
     state_ssid: Arc<Mutex<Option<String>>>,
     ble_ui_rx: mpsc::Receiver<bool>,
     connection_mode: ConnectionMode,
-) -> Option<TcpStream> {
+) -> Option<TransferStream> {
     // get files or receive directory
     let mode = if mode == "send" {
         let paths = file_list
@@ -192,7 +242,27 @@ pub async fn start_transfer<T: UI>(
         ConnectionMode::SharedNetwork => {
             // Shared Network Mode: Use discovery to find peer on existing network
             match start_shared_network_transfer(&mode, &key, &interface, ui).await {
-                Ok((resource, stream)) => (resource, stream),
+                Ok((resource, tcp)) => {
+                    // v10+: wrap the connection in the Noise encrypted transport before any
+                    // file data or metadata is exchanged. Sender = initiator, receiver =
+                    // responder (roles already fixed). A wrong password fails here.
+                    let role = if matches!(mode, Mode::Send(_)) {
+                        noise::Role::Initiator
+                    } else {
+                        noise::Role::Responder
+                    };
+                    ui.output("Establishing encrypted connection...");
+                    match noise::handshake(tcp, role, &password).await {
+                        Ok(enc) => {
+                            ui.output("Encrypted connection established.");
+                            (resource, TransferStream::Encrypted(Box::new(enc)))
+                        }
+                        Err(e) => {
+                            ui.output(&format!("Error in shared network mode: {}", e));
+                            return None;
+                        }
+                    }
+                }
                 Err(e) => {
                     ui.output(&format!("Error in shared network mode: {}", e));
                     return None;
@@ -235,7 +305,8 @@ pub async fn start_transfer<T: UI>(
                 }
             };
 
-            (peer_resource, stream)
+            // Hotspot mode is unchanged: plaintext over the WPA2-protected link.
+            (peer_resource, TransferStream::Plain(stream))
         }
     };
 
@@ -350,7 +421,7 @@ pub async fn start_transfer<T: UI>(
 }
 
 pub async fn clean_up_transfer<T: UI>(
-    stream: Option<TcpStream>,
+    stream: Option<TransferStream>,
     hotspot: Arc<Mutex<Option<PeerResource>>>,
     ssid: Arc<Mutex<Option<String>>>,
     ui: &T,
@@ -507,10 +578,10 @@ async fn start_shared_network_transfer<T: UI>(
     Ok((PeerResource::WifiClient(peer_ip), stream))
 }
 
-async fn confirm_mode(
+async fn confirm_mode<S: AsyncRead + AsyncWrite + Unpin>(
     mode: Mode,
     peer_resource: &PeerResource,
-    stream: &mut TcpStream,
+    stream: &mut S,
     connection_mode: ConnectionMode,
 ) -> Result<(), FCError> {
     let our_mode: u64 = match mode {
@@ -569,9 +640,9 @@ async fn confirm_mode(
     Ok(())
 }
 
-async fn confirm_version(
+async fn confirm_version<S: AsyncRead + AsyncWrite + Unpin>(
     peer_resource: &PeerResource,
-    stream: &mut TcpStream,
+    stream: &mut S,
 ) -> Result<(), FCError> {
     // only really have to worry about version 6 as that's the only one online and in app store. it will do mode confirmation first,
     // and obey hotspot host/guest rule, and it will write 0 or 1 for mode, so we shouldn't deadlock with both ends waiting.
@@ -640,3 +711,71 @@ async fn confirm_version(
 // remove file selection box and replace start button with Choose Files/Choose Folder? gets in the way of drag and drop... so no?
 // optional password length?
 // move password length constant into rust, fetch in javascript
+
+#[cfg(test)]
+mod transfer_tests {
+    use super::*;
+    use crate::noise::{handshake, Role};
+    use crate::utils::get_key_and_ssid;
+
+    #[derive(Clone)]
+    struct TestUi;
+    impl UI for TestUi {
+        fn output(&self, _msg: &str) {}
+        fn show_progress_bar(&self) {}
+        fn update_progress_bar(&self, _percent: u8) {}
+        fn enable_ui(&self) {}
+        fn show_pin(&self, _pin: &str) {}
+    }
+
+    // End-to-end shared-network path: the real send_file/receive_file run over a Noise
+    // EncryptedStream (backed by an in-memory duplex), with a >64 KiB file so the transfer
+    // spans multiple Noise records. Verifies handshake, encrypted metadata, chunk transfer,
+    // and byte-exact file integrity through the whole stack.
+    #[tokio::test]
+    async fn end_to_end_encrypted_transfer() {
+        let base = std::env::temp_dir().join(format!("fc_noise_test_{}", std::process::id()));
+        let send_dir = base.join("send");
+        let recv_dir = base.join("recv");
+        std::fs::create_dir_all(&send_dir).unwrap();
+        std::fs::create_dir_all(&recv_dir).unwrap();
+        let src = send_dir.join("photo.bin");
+        let data: Vec<u8> = (0..200_000u32).map(|i| (i % 253) as u8).collect();
+        std::fs::write(&src, &data).unwrap();
+
+        let password = "correct horse battery staple";
+        let (key, _ssid) = get_key_and_ssid(password);
+
+        let (a, b) = tokio::io::duplex(64 * 1024);
+        let src2 = src.clone();
+        let send_dir2 = send_dir.clone();
+        let recv_dir2 = recv_dir.clone();
+
+        let sender = tokio::spawn(async move {
+            let mut enc = handshake(a, Role::Initiator, password).await.unwrap();
+            enc.write_u64(1).await.unwrap(); // file count, as the orchestrator does
+            sending::send_file(&src2, &send_dir2, &key, &mut enc, &TestUi)
+                .await
+                .unwrap();
+            enc.flush().await.unwrap();
+        });
+        let receiver = tokio::spawn(async move {
+            let mut enc = handshake(b, Role::Responder, password).await.unwrap();
+            let count = enc.read_u64().await.unwrap();
+            assert_eq!(count, 1);
+            receiving::receive_file(&recv_dir2, &key, &mut enc, &TestUi, true)
+                .await
+                .unwrap();
+        });
+        sender.await.unwrap();
+        receiver.await.unwrap();
+
+        let got = std::fs::read(recv_dir.join("photo.bin")).unwrap();
+        assert_eq!(
+            got, data,
+            "received file must match sent file byte-for-byte"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+}

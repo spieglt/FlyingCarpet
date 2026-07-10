@@ -8,8 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     time::{sleep, timeout},
 };
 
@@ -23,10 +22,10 @@ const MAX_CHUNK_BYTES: u64 = 5_000_000 + 4096;
 // (but nonzero) would panic slicing the nonce off below.
 const MIN_CHUNK_BYTES: u64 = 12 + 16;
 
-pub async fn receive_file<T: UI>(
+pub async fn receive_file<S: AsyncRead + AsyncWrite + Unpin, T: UI>(
     folder: &Path,
     key: &[u8],
-    stream: &mut TcpStream,
+    stream: &mut S,
     ui: &T,
     last_file: bool,
 ) -> Result<(), FCError> {
@@ -137,9 +136,9 @@ pub async fn receive_file<T: UI>(
     Ok(())
 }
 
-async fn receive_and_decrypt_chunk(
+async fn receive_and_decrypt_chunk<S: AsyncRead + Unpin>(
     cipher: &Aes256Gcm,
-    stream: &mut TcpStream,
+    stream: &mut S,
 ) -> Result<Vec<u8>, FCError> {
     // receive chunk size. 0 is the legitimate end-of-file sentinel; anything else
     // outside the range of a real encrypted chunk means a corrupt or hostile stream,
@@ -182,7 +181,9 @@ fn sanitize_relative_filename(filename: &str) -> Result<PathBuf, FCError> {
     Ok(sanitized)
 }
 
-async fn receive_file_details(stream: &mut TcpStream) -> Result<(String, u64), FCError> {
+async fn receive_file_details<S: AsyncRead + Unpin>(
+    stream: &mut S,
+) -> Result<(String, u64), FCError> {
     // receive size of filename. real paths fit comfortably under the bound; an
     // unbounded value is a memory-exhaustion lever, so reject before allocating.
     let filename_size = stream.read_u64().await?;
@@ -202,10 +203,10 @@ async fn receive_file_details(stream: &mut TcpStream) -> Result<(String, u64), F
 }
 
 // returns Ok(true) if we need to perform the transfer
-async fn check_for_file(
+async fn check_for_file<S: AsyncRead + AsyncWrite + Unpin>(
     filename: &Path,
     size: u64,
-    stream: &mut TcpStream,
+    stream: &mut S,
 ) -> Result<bool, FCError> {
     // check if file by this name and size exists
     if filename.is_file() {
