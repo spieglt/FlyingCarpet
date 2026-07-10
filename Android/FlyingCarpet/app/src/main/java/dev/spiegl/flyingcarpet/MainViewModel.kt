@@ -52,7 +52,9 @@ enum class ConnectionMode {
     SharedNetwork,
 }
 
-const val MAJOR_VERSION: Long = 9
+// v10 is a breaking change: shared network mode and its new protocol are not compatible
+// with v9 or earlier. See docs/shared-network-crypto.md in the main repo.
+const val MAJOR_VERSION: Long = 10
 val zero = ByteArray(8) // meant to represent a 64-bit unsigned 0
 val one = byteArrayOf(0, 0, 0, 0, 0, 0, 0, 1) // meant to represent a 64-bit unsigned 1
 const val chunkSize = 5_000_000
@@ -625,18 +627,19 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             }
             if (peerVersion < MAJOR_VERSION) {
                 // peer's version is lower, so we make the decision and report it to them.
-                // compatible with version 8. if transferring with higher version, that version will decide compatibility.
-                if (peerVersion >= 8) {
+                // v10 is a clean break from earlier versions; if transferring with a higher
+                // version, that version decides compatibility.
+                if (peerVersion >= 10) {
                     outputStream.write(one)
                 } else {
                     outputStream.write(zero)
-                    throw Exception("Peer's version of Flying Carpet is not compatible. Please find links to download the newest version at https://flyingcarpet.spiegl.dev.")
+                    throw Exception("The other device is running Flying Carpet version $peerVersion, which is not compatible with this version ($MAJOR_VERSION). Please update both devices to the latest version at https://flyingcarpet.spiegl.dev.")
                 }
             } else if (peerVersion > MAJOR_VERSION) {
                 // peer's version is higher, so they make the decision
                 val isCompatibleBytes = readNBytes(8, inputStream)
                 if (ByteBuffer.wrap(isCompatibleBytes).long != 1L) {
-                    throw Exception("Peer's version of Flying Carpet is not compatible. Please find links to download the newest version at https://flyingcarpet.spiegl.dev.")
+                    throw Exception("The other device is running Flying Carpet version $peerVersion, which is not compatible with this version ($MAJOR_VERSION). Please update both devices to the latest version at https://flyingcarpet.spiegl.dev.")
                 }
             } // otherwise versions match, implicitly compatible
         }

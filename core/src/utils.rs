@@ -136,8 +136,9 @@ pub fn format_time(seconds: f64) -> String {
 }
 
 pub fn is_compatible(peer_version: u64) -> bool {
-    // compatible with version 8. if transferring with higher version, that version will decide compatibility.
-    peer_version >= 8
+    // v10 (shared network mode and the new protocol) is a clean break from earlier
+    // versions. If transferring with a higher version, that version decides compatibility.
+    peer_version >= 10
 }
 
 #[cfg(test)]

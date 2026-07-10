@@ -29,7 +29,9 @@ use tokio::{
 use utils::get_key_and_ssid;
 
 const CHUNKSIZE: usize = 1_000_000; // 1 MB
-const MAJOR_VERSION: u64 = 9;
+// v10 is a breaking change: shared network mode and its new protocol are not compatible
+// with v9 or earlier. See docs/shared-network-crypto.md.
+const MAJOR_VERSION: u64 = 10;
 // Sanity bound on the peer-supplied file count (companion to the header bounds in
 // receiving.rs): no legitimate transfer approaches it, and a corrupt or hostile
 // stream shouldn't be able to put us into a near-endless receive loop.
@@ -594,12 +596,12 @@ async fn confirm_version(
             stream.write_u64(1).await?; // report that versions are compatible
         } else {
             stream.write_u64(0).await?;
-            fc_error(&format!("Peer's version {} not compatible, please update Flying Carpet to the latest version on both devices.", peer_version))?;
+            fc_error(&format!("The other device is running Flying Carpet version {}, which is not compatible with this version ({}). Please update both devices to the latest version at https://flyingcarpet.spiegl.dev.", peer_version, MAJOR_VERSION))?;
         }
     } else if peer_version > MAJOR_VERSION {
         // peer makes decision
         if stream.read_u64().await? == 0 {
-            fc_error(&format!("Peer's version {} not compatible, please update Flying Carpet to the latest version on both devices.", peer_version))?;
+            fc_error(&format!("The other device is running Flying Carpet version {}, which is not compatible with this version ({}). Please update both devices to the latest version at https://flyingcarpet.spiegl.dev.", peer_version, MAJOR_VERSION))?;
         }
     } // otherwise, versions match, implicitly compatible
     Ok(())
