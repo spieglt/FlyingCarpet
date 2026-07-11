@@ -1,8 +1,10 @@
 # Shared Network Mode: Cryptographic Design
 
-Status: **Phase 1 (Rust core) implemented and verified against the official Noise vectors;
-Android and Apple ports pending.** Audience: an engineer implementing this across the Rust
-core, the Swift (iOS/macOS) app, and the Kotlin (Android) app.
+Status: **Implemented on all three platforms** (Rust core, Android/Kotlin, Apple/Swift),
+each verified byte-for-byte against the official Noise (cacophony) vector and shared app
+KATs; Windows↔Android confirmed on real hardware. Remaining: the rest of the live
+cross-platform matrix (§11 Phase 4). Audience: an engineer working across the Rust core, the
+Swift (iOS/macOS) app, and the Kotlin (Android) app.
 
 This document explains *why* the design is shaped the way it is, not just what to build,
 so that the person writing the code understands which properties are load-bearing and
@@ -567,17 +569,32 @@ the per-chunk AES is removed from `Send.kt`/`Receive.kt` (raw chunks). Live Andr
 verification is still pending real devices, but the shared cacophony/app KATs are the
 interop guarantee.
 
-### Phase 3 — Apple (hand-rolled on CryptoKit)
-1. Implement the `NNpsk0` handshake + transport from `Curve25519.KeyAgreement`,
-   `HKDF<SHA256>`, `ChaChaPoly`, and `HMAC<SHA256>`, following the Noise spec's
-   `MixHash`/`MixKey`/`Split` symmetric-state schedule and the `psk` token. No third-party
-   library (Apple-standard-crypto constraint). Same structure: plaintext preamble → Noise
-   (both modes) → raw chunks (remove the per-chunk AES).
-2. Port the cacophony vector into an XCTest and make it pass **before** any live transfer
-   — this is the highest-risk step and the vector is the guard.
-3. Same PSK derivation via CommonCrypto PBKDF2 (identical salt/iters).
-4. Wrap the `NWConnection` I/O (`TCPConnectionWrapper` / `TCPServer`) in the Noise transport.
-5. Verify macOS↔Android and iOS↔Windows both directions.
+### Phase 3 — Apple (hand-rolled on CryptoKit) — **done**
+In the FlyingCarpetApple repo (`shared/Noise.swift`), the same shape as the other two:
+1. Hand-rolled `NNpsk0` symmetric state + handshake using **CryptoKit** — X25519
+   (`Curve25519.KeyAgreement`), ChaCha20-Poly1305 (`ChaChaPoly`), SHA-256, HMAC — and
+   **CommonCrypto** PBKDF2 for the PSK (UTF-8 password, identical salt/iters). No
+   third-party crypto, honoring the Apple-standard-only constraint.
+2. `NoiseConnection` conforms to the existing `TCPConnectionProtocol` (`write` /
+   `receiveNBytes`), so after the handshake the transfer code runs unchanged over it; the
+   per-chunk AES is removed from `Send.swift`/`Receive.swift` (raw chunks).
+3. Wiring (`Transfer.sendAndReceive`): plaintext version/mode preamble → `noiseHandshake`
+   for both modes → replace `self.tcp` with the `NoiseConnection`. Role: shared-network
+   sender = initiator / receiver = responder; hotspot = initiator (Apple always joins a
+   hotspot, never hosts).
+4. `NoiseTests` (macOS test target) reproduces the official cacophony vector **and** the §9
+   app KATs byte-for-byte, plus a multi-record round-trip and a wrong-password rejection —
+   the same vectors Rust and Android assert. Compiles/runs on the developer's Mac (not
+   buildable on the Windows dev host); `shared/Noise.swift` must be added to the iOS and
+   macOS app targets in Xcode (created outside the IDE).
+
+### Phase 4 — cross-matrix + cleanup (remaining)
+All three platforms now implement the same modern `NNpsk0` and pass the shared cacophony +
+app KATs, so they interoperate by construction. **Confirmed on real hardware so far:
+Windows↔Android over both hotspot and shared network.** Still to do: the rest of the live
+matrix (add macOS / iOS × sender / receiver, and Linux), a per-file size larger than one
+record end-to-end, and the wrong-password / version-mismatch user-facing paths. The old
+cleartext per-chunk AES is already removed on all three platforms.
 
 ### Phase 4 — cross-matrix + cleanup
 Full matrix (Win / Linux / macOS / iOS / Android × sender / receiver), wrong-password and
