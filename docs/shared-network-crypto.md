@@ -2,9 +2,11 @@
 
 Status: **Implemented on all three platforms** (Rust core, Android/Kotlin, Apple/Swift),
 each verified byte-for-byte against the official Noise (cacophony) vector and shared app
-KATs; Windows↔Android confirmed on real hardware. Remaining: the rest of the live
-cross-platform matrix (§11 Phase 4). Audience: an engineer working across the Rust core, the
-Swift (iOS/macOS) app, and the Kotlin (Android) app.
+KATs, including the preamble→prologue binding and tamper-negative tests (§11 post-review
+hardening). Windows↔Android confirmed on real hardware pre-binding; first post-binding
+live transfer re-confirms. Remaining: the rest of the live cross-platform matrix (§11
+Phase 4). Audience: an engineer working across the Rust core, the Swift (iOS/macOS) app,
+and the Kotlin (Android) app.
 
 This document explains *why* the design is shaped the way it is, not just what to build,
 so that the person writing the code understands which properties are load-bearing and
@@ -60,9 +62,11 @@ on the password (§7). A real PAKE would deny even that; CryptoKit can't give us
 **Explicitly out of scope:** traffic *volume* and *timing*. The length prefix of each
 encrypted record is in the clear (you must know how many bytes to read), so an observer
 still sees the approximate total transferred and the record cadence. Hiding that needs
-padding/cover traffic, which we do not do. Also out of scope: the **plaintext preamble**
-(protocol version and send/receive direction) that precedes the handshake — these are not
-secret, and tampering with them only causes the transfer to abort (§7).
+padding/cover traffic, which we do not do. The **plaintext preamble** (protocol version
+and send/receive direction) that precedes the handshake is visible to an eavesdropper —
+these values are not secret — but it is not tamperable in any useful way: every preamble
+byte is bound into the Noise **prologue**, so modifying it in flight fails the handshake
+(§7).
 
 ---
 
@@ -204,8 +208,10 @@ connection; check the password and that you trust this network," not "wrong pass
 > negotiated in a **plaintext preamble** on the raw TCP socket *before* the Noise
 > handshake; everything after the handshake — file count, all metadata, and all file data
 > — is inside Noise. This holds for **both** hotspot and shared network mode: they are
-> identical past the preamble. See §10 for why the preamble is plaintext and §7 for the
-> (minor) security implication.
+> identical past the preamble. Every preamble byte, sent and received, is recorded and
+> bound into the Noise **prologue** (§9), so the preamble is readable in the clear but not
+> silently modifiable: tampering makes the two sides' prologues differ, which fails the
+> handshake. See §10 for why the preamble is plaintext and §7 for the security discussion.
 
 The important architectural point: **we do not rewrite the send/receive protocol.** The
 existing logic — send file count, send filename length, send filename, send size, send
@@ -319,14 +325,16 @@ the case for a PAKE returns:
 
 **Caveats that remain regardless.** An active attacker can still *disrupt* a transfer —
 intercept-and-abort is a denial of service available to anyone in-path, unrelated to the
-crypto and not fixable by it. The **plaintext preamble** (§6) is one instance of this: an
-attacker who flips a bit in the version or mode exchange makes the two sides disagree and
-abort — a DoS, nothing more. The preamble carries no secret, cannot force a crypto
-downgrade (v10 only ever speaks v10), and cannot flip a sender into a receiver (each side
-decided its own role locally; the exchange only *verifies* they're opposite). Optional
-future hardening if the preamble ever carries negotiated crypto parameters: feed the
-preamble bytes into the Noise **prologue**, so any tampering changes the handshake hash and
-fails the handshake. Not needed for version/mode alone.
+crypto and not fixable by it. The **plaintext preamble** (§6) is *bound into the Noise
+prologue* (§9): an attacker who flips a bit in the version or mode exchange makes the two
+sides compute different prologues, and the handshake fails — tampering is detected, never
+silently accepted. For v10↔v10 alone this only converts one DoS into another (the preamble
+carries no secret, and each side decided its own send/receive role locally; the exchange
+only *verifies* they're opposite), but the binding is load-bearing for the future: when a
+later version changes anything crypto-relevant, an in-path attacker must not be able to
+rewrite the version exchange and silently pin both peers to v10 semantics. Prologue
+binding only closes that downgrade window if it exists from the *first* Noise version —
+which is why it ships in v10 rather than being retrofitted.
 
 ---
 
@@ -387,8 +395,24 @@ Because the handshake is standard Noise (§8), most byte-level details are fixed
 Noise spec and the protocol name. What each platform must still pin identically:
 
 - **Protocol name:** `Noise_NNpsk0_25519_ChaChaPoly_SHA256` (exact string).
-- **Prologue:** **empty** (no `.prologue()` call). All platforms must use an empty
-  prologue, or the handshake hashes diverge and nothing interoperates.
+- **Prologue: the preamble transcript, canonically framed.** Each side records every byte
+  it sends and receives during the plaintext preamble (the whole version exchange,
+  including the 8-byte compatibility confirmation when versions differ, then the whole
+  mode exchange) and builds
+
+  ```
+  prologue = u64_be(len(T_i)) || T_i || u64_be(len(T_r)) || T_r
+  ```
+
+  where `T_i` is every byte the **Noise initiator sent** and `T_r` every byte the
+  **responder sent**. The initiator computes this as (my sent, my received), the responder
+  as (my received, my sent); untampered, both get identical bytes. The length prefixes make
+  the encoding unambiguous (no boundary-shifting between the two transcripts). Implemented
+  as `build_prologue` / `buildPrologue` next to each Noise implementation, with the
+  transcript captured by a recording wrapper at the stream boundary so no branch of the
+  negotiation can leak a byte out of the transcript. Per the Noise spec the prologue enters
+  only `h` (it gates the handshake MACs, not the derived keys) — that is exactly the
+  desired property: mismatch ⇒ handshake abort.
 - **PSK derivation:** `PBKDF2-HMAC-SHA256(password_utf8, salt, iters) → 32 bytes`, with
   `salt = b"Flying Carpet v10 shared network PSK"` and `iters = 600000`.
 - **Record framing:** each Noise message is prefixed by its length as a **2-byte
@@ -409,12 +433,12 @@ asserts the handshake message ciphertexts, the handshake hash
 (`f4d03dc3…be208eaf`), and the first transport record match byte-for-byte. This is what
 guarantees the Swift/Kotlin ports (which follow the same spec) interoperate; **each port
 should run the same cacophony vector against its own Noise implementation.** The
-app-specific KAT vectors below (empty prologue, PBKDF2-derived PSK) are a *separate*
+app-specific KAT vectors below (PBKDF2-derived PSK, app-style prologue) are a *separate*
 determinism check for our exact parameters, not a spec check.
 
 **Cross-platform known-answer test vectors.** These are emitted and asserted by the Rust
-reference (`core/src/noise.rs`, tests `psk_known_answer` and `handshake_known_answer`);
-Swift and Kotlin must reproduce them exactly. `snow`'s
+reference (`core/src/noise.rs`, tests `psk_known_answer`, `handshake_known_answer`, and
+`prologue_known_answer`); Swift and Kotlin must reproduce them exactly. `snow`'s
 `fixed_ephemeral_key_for_testing_only` fixes the ephemerals so the whole handshake is
 deterministic.
 
@@ -422,7 +446,7 @@ deterministic.
   `a3d8b7f17f2252e4c2847a365ab2f392beaa996b7e51dd6fa19ff1ad08938619`
 
 With fixed PSK = `2a`×32, initiator ephemeral private = `01`×32, responder ephemeral
-private = `02`×32:
+private = `02`×32, **empty prologue**:
 
 - Handshake msg 1 (initiator → responder), 48 bytes:
   `a4e09292b651c278b9772c569f5fa9bb13d906b46ab68c9df9dc2b4409f8a209a3e9c18456aba2185de800ffaca55b22`
@@ -431,11 +455,28 @@ private = `02`×32:
 - First transport record from the initiator, plaintext `"hello flying carpet"`:
   `124a00c03b4544f746828bbf9ae2d8d595a9ac1fea988f43f7206c3880180b954f9147`
 
-(The transport-record vector is the raw Noise message; on the wire it is preceded by its
-2-byte length prefix `0023`.) This is the vector that guarantees a macOS sender can talk to
-an Android receiver; port it into an XCTest / `DiscoveryUnitTest`-style test on each
-platform before wiring live transfers, since it catches label and endianness mismatches
-that otherwise surface as "handshake fails, no idea why."
+**Prologue-bound KAT** (same PSK/ephemerals, with the app-style preamble transcript
+`T_i` = `000000000000000a` `0000000000000001` (version 10, mode send) and
+`T_r` = `000000000000000a` `0000000000000000` (version 10, mode receive)):
+
+- `build_prologue(T_i, T_r)`, 48 bytes:
+  `0000000000000010` `000000000000000a0000000000000001` `0000000000000010` `000000000000000a0000000000000000`
+- Handshake msg 1: `a4e09292b651c278b9772c569f5fa9bb13d906b46ab68c9df9dc2b4409f8a2093ae03dc8524f79ac9696d6c155df9a3c`
+- Handshake msg 2: `ce8d3ad1ccb633ec7b70c17814a5c76ecd029685050d344745ba05870e587d59d2668070263116ce557500fbe3fd3ba4`
+- First transport record (`"hello flying carpet"`):
+  `124a00c03b4544f746828bbf9ae2d8d595a9ac1fea988f43f7206c3880180b954f9147` — **identical to
+  the empty-prologue record by design**: the prologue enters only `h`, never the chaining
+  key, so it changes the handshake message MACs (see msg 1/2 differing after the 32-byte
+  ephemeral) but not the transport keys. Asserted anyway so a port that wrongly mixes the
+  prologue into `ck` fails the KAT.
+
+(The transport-record vectors are raw Noise messages; on the wire each is preceded by its
+2-byte length prefix `0023`.) These are the vectors that guarantee a macOS sender can talk
+to an Android receiver; each platform asserts them in its unit tests (Rust
+`core/src/noise.rs`, Kotlin `NoiseUnitTest`, Swift `NoiseTests`) since they catch label and
+endianness mismatches that otherwise surface as "handshake fails, no idea why." Each
+platform also asserts the *negative* cases: a tampered transport record, a tampered
+handshake message, a mismatched password, and a mismatched prologue must all fail.
 
 ---
 
@@ -454,9 +495,12 @@ that otherwise surface as "handshake fails, no idea why."
   **removed** — Noise is the sole encryption layer; chunks are raw bytes inside it. The
   `aes-gcm` dependency is gone. `SHA256(password)` survives only for the SSID and the
   discovery HMAC.
-- **Plaintext version/mode preamble.** Version confirmation and send/receive negotiation
-  happen on the raw socket before the handshake (§6, §7), for clean version-mismatch
-  reporting.
+- **Plaintext version/mode preamble, bound into the prologue.** Version confirmation and
+  send/receive negotiation happen on the raw socket before the handshake (§6, §7), for
+  clean version-mismatch reporting — and the full transcript is bound into the Noise
+  prologue (§9), so the preamble is readable but not silently modifiable. The binding
+  ships in v10 (the first Noise version) because that is the only point at which it can
+  close the future downgrade window (§7).
 - **No v9 compatibility.** v10 is a clean break; a v9 peer is rejected with a clear message.
 - **Discovery unchanged for now — but note it's a fast password oracle.** Still
   `HMAC(SHA256(password), announcement)`. The packet reveals only presence/IP, but because
@@ -588,18 +632,30 @@ In the FlyingCarpetApple repo (`shared/Noise.swift`), the same shape as the othe
    buildable on the Windows dev host); `shared/Noise.swift` must be added to the iOS and
    macOS app targets in Xcode (created outside the IDE).
 
+### Post-review hardening — **done** (all three platforms)
+From the code review of Phases 1–3:
+1. **Preamble → prologue binding** (§6, §7, §9): every preamble byte, sent and received,
+   is recorded by a stream-boundary wrapper (`RecordingStream` /
+   `RecordingInputStream`+`RecordingOutputStream` / `RecordingTCPConnection`) and bound
+   into the handshake via `build_prologue`/`buildPrologue`. New cross-platform
+   `prologue_known_answer` KAT plus a prologue-mismatch negative test on each platform.
+   The handshake-failure message now mentions tampering as well as password mismatch.
+   **Wire-breaking within the unreleased v10** — all three platforms landed together.
+2. **Real tamper tests**: each platform now asserts that a bit-flipped transport record
+   and a bit-flipped handshake message fail authentication (the old Rust
+   `tampering_is_detected` only exercised the happy path).
+3. **Rust: hotspot stored in state before the preamble** (`start_transfer`), so
+   `clean_up_transfer` tears the Windows hotspot down even when the version check, mode
+   check, or handshake fails (previously those paths left it running until app exit).
+
 ### Phase 4 — cross-matrix + cleanup (remaining)
 All three platforms now implement the same modern `NNpsk0` and pass the shared cacophony +
 app KATs, so they interoperate by construction. **Confirmed on real hardware so far:
-Windows↔Android over both hotspot and shared network.** Still to do: the rest of the live
+Windows↔Android over both hotspot and shared network — before the prologue binding; the
+first post-binding live transfer re-confirms it.** Still to do: the rest of the live
 matrix (add macOS / iOS × sender / receiver, and Linux), a per-file size larger than one
 record end-to-end, and the wrong-password / version-mismatch user-facing paths. The old
 cleartext per-chunk AES is already removed on all three platforms.
-
-### Phase 4 — cross-matrix + cleanup
-Full matrix (Win / Linux / macOS / iOS / Android × sender / receiver), wrong-password and
-version-mismatch paths, and a per-file size larger than one record. Remove the old cleartext
-shared-network transport.
 
 ### Open items — resolved
 - **PBKDF2 salt** → **fixed domain string** `b"Flying Carpet v10 shared network PSK"`. The

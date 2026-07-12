@@ -314,38 +314,57 @@ pub async fn start_transfer<T: UI>(
         }
     };
 
+    // The confirm functions only need to know whether we joined the peer's network (guest
+    // sends first) or are hosting; capture that before peer_resource moves into the state.
+    let is_wifi_client = matches!(peer_resource, PeerResource::WifiClient(..));
+
+    // Store the hotspot in tauri's state NOW, before anything below can fail, so that
+    // clean_up_transfer tears it down even when the preamble or handshake errors out
+    // (on Windows, stop_hotspot is a no-op unless the PeerResource is in this state).
+    // Has to be in its own block or tokio complains that this "mutex guard" is held across an await.
+    {
+        let mut hotspot_value = hotspot.lock().expect("Couldn't lock hotspot mutex");
+        *hotspot_value = Some(peer_resource);
+    }
+
     // Plaintext preamble on the raw TCP stream: version, then send/receive mode. These are
-    // not secret and only cause an abort if tampered with (a DoS already available to any
-    // in-path attacker); keeping them outside Noise gives clean version-mismatch reporting.
-    let mut stream = TransferStream::Plain(tcp);
+    // not secret (an eavesdropper can already see a transfer is happening) and keeping them
+    // outside Noise gives clean version-mismatch reporting — but every preamble byte, sent
+    // and received, is recorded and bound into the Noise prologue below, so tampering with
+    // them fails the handshake instead of going unnoticed.
+    let mut preamble = noise::RecordingStream::new(tcp);
 
     // make sure the versions are compatible
-    match confirm_version(&peer_resource, &mut stream).await {
+    match confirm_version(is_wifi_client, &mut preamble).await {
         Ok(()) => (),
         Err(e) => {
             ui.output(&format!("Error confirming version: {}", e));
-            return Some(stream);
+            let (tcp, _, _) = preamble.into_parts();
+            return Some(TransferStream::Plain(tcp));
         }
     };
 
     // confirm that one end is sending and the other is receiving
-    match confirm_mode(mode.clone(), &peer_resource, &mut stream, connection_mode).await {
+    match confirm_mode(mode.clone(), is_wifi_client, &mut preamble, connection_mode).await {
         Ok(()) => (),
         Err(e) => {
             ui.output(&format!("Error confirming mode: {}", e));
-            return Some(stream);
+            let (tcp, _, _) = preamble.into_parts();
+            return Some(TransferStream::Plain(tcp));
         }
     };
 
-    // Now establish the Noise encrypted transport over the same connection, for both modes.
-    // Everything after this — file count, metadata, and file data — is confidential and
-    // tamper-evident. A wrong password fails the handshake with a clear message.
-    let tcp = match stream {
-        TransferStream::Plain(tcp) => tcp,
-        TransferStream::Encrypted(_) => unreachable!("stream is Plain until the handshake"),
+    // Now establish the Noise encrypted transport over the same connection, for both modes,
+    // with the preamble transcript bound in as the prologue. Everything after this — file
+    // count, metadata, and file data — is confidential and tamper-evident. A wrong password
+    // (or a tampered preamble) fails the handshake with a clear message.
+    let (tcp, sent, received) = preamble.into_parts();
+    let prologue = match noise_role {
+        noise::Role::Initiator => noise::build_prologue(&sent, &received),
+        noise::Role::Responder => noise::build_prologue(&received, &sent),
     };
     ui.output("Establishing encrypted connection...");
-    let mut stream = match noise::handshake(tcp, noise_role, &password).await {
+    let mut stream = match noise::handshake(tcp, noise_role, &password, &prologue).await {
         Ok(enc) => {
             ui.output("Encrypted connection established.");
             TransferStream::Encrypted(Box::new(enc))
@@ -355,13 +374,6 @@ pub async fn start_transfer<T: UI>(
             return None;
         }
     };
-
-    // store the hotspot in tauri's state
-    // has to be in its own block here or tokio complains that this "mutex guard" is held across an await... who knows
-    {
-        let mut hotspot_value = hotspot.lock().expect("Couldn't lock hotspot mutex");
-        *hotspot_value = Some(peer_resource);
-    }
 
     match mode {
         Mode::Send(files) => {
@@ -608,7 +620,7 @@ async fn start_shared_network_transfer<T: UI>(
 
 async fn confirm_mode<S: AsyncRead + AsyncWrite + Unpin>(
     mode: Mode,
-    peer_resource: &PeerResource,
+    is_wifi_client: bool,
     stream: &mut S,
     connection_mode: ConnectionMode,
 ) -> Result<(), FCError> {
@@ -633,34 +645,31 @@ async fn confirm_mode<S: AsyncRead + AsyncWrite + Unpin>(
         }
         ConnectionMode::Hotspot => {
             // Asymmetric approach for backward compatibility with hotspot mode
-            match peer_resource {
-                PeerResource::WifiClient(..) => {
-                    // tell host what mode we selected and wait for confirmation that they don't match
-                    stream.write_u64(our_mode).await?;
-                    // wait to ensure host responds that mode selection was correct
-                    if stream.read_u64().await? != 1 {
-                        let message = format!(
-                            "Both ends of the transfer selected {}",
-                            if our_mode == 0 { "receive" } else { "send" }
-                        );
-                        fc_error(&message)?
-                    }
+            if is_wifi_client {
+                // tell host what mode we selected and wait for confirmation that they don't match
+                stream.write_u64(our_mode).await?;
+                // wait to ensure host responds that mode selection was correct
+                if stream.read_u64().await? != 1 {
+                    let message = format!(
+                        "Both ends of the transfer selected {}",
+                        if our_mode == 0 { "receive" } else { "send" }
+                    );
+                    fc_error(&message)?
                 }
-                PeerResource::WindowsHotspot(_) | PeerResource::LinuxHotspot => {
-                    // wait for guest to say what mode they selected, compare to our own, and report back
-                    let peer_mode = stream.read_u64().await?;
-                    if peer_mode == our_mode {
-                        let msg = format!(
-                            "Both ends of the transfer selected {}",
-                            if our_mode == 0 { "receive" } else { "send" }
-                        );
-                        // write failure to guest
-                        stream.write_u64(0).await?;
-                        fc_error(&msg)?
-                    } else {
-                        // write success to guest
-                        stream.write_u64(1).await?;
-                    }
+            } else {
+                // hosting: wait for guest to say what mode they selected, compare to our own, and report back
+                let peer_mode = stream.read_u64().await?;
+                if peer_mode == our_mode {
+                    let msg = format!(
+                        "Both ends of the transfer selected {}",
+                        if our_mode == 0 { "receive" } else { "send" }
+                    );
+                    // write failure to guest
+                    stream.write_u64(0).await?;
+                    fc_error(&msg)?
+                } else {
+                    // write success to guest
+                    stream.write_u64(1).await?;
                 }
             }
         }
@@ -669,24 +678,22 @@ async fn confirm_mode<S: AsyncRead + AsyncWrite + Unpin>(
 }
 
 async fn confirm_version<S: AsyncRead + AsyncWrite + Unpin>(
-    peer_resource: &PeerResource,
+    is_wifi_client: bool,
     stream: &mut S,
 ) -> Result<(), FCError> {
     // only really have to worry about version 6 as that's the only one online and in app store. it will do mode confirmation first,
     // and obey hotspot host/guest rule, and it will write 0 or 1 for mode, so we shouldn't deadlock with both ends waiting.
-    let peer_version = match peer_resource {
-        PeerResource::WifiClient(..) => {
-            // send version to hotspot host
-            stream.write_u64(MAJOR_VERSION).await?;
-            // receive version of host
-            stream.read_u64().await?
-        }
-        _ => {
-            // wait for guest to say what version they're using, then send our version
-            let _peer_version = stream.read_u64().await?;
-            stream.write_u64(MAJOR_VERSION).await?;
-            _peer_version
-        }
+    let peer_version = if is_wifi_client {
+        // send version to hotspot host. in shared network mode both sides are wifi
+        // clients, so both send first — symmetric, works via TCP buffering.
+        stream.write_u64(MAJOR_VERSION).await?;
+        // receive version of host
+        stream.read_u64().await?
+    } else {
+        // wait for guest to say what version they're using, then send our version
+        let _peer_version = stream.read_u64().await?;
+        stream.write_u64(MAJOR_VERSION).await?;
+        _peer_version
     };
 
     if peer_version < MAJOR_VERSION {
@@ -771,6 +778,12 @@ mod transfer_tests {
         std::fs::write(&src, &data).unwrap();
 
         let password = "correct horse battery staple";
+        // both sides bind the same preamble transcript, as the real flow does
+        let prologue = noise::build_prologue(
+            &[0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 1],
+            &[0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0],
+        );
+        let prologue2 = prologue.clone();
 
         let (a, b) = tokio::io::duplex(64 * 1024);
         let src2 = src.clone();
@@ -778,7 +791,9 @@ mod transfer_tests {
         let recv_dir2 = recv_dir.clone();
 
         let sender = tokio::spawn(async move {
-            let mut enc = handshake(a, Role::Initiator, password).await.unwrap();
+            let mut enc = handshake(a, Role::Initiator, password, &prologue)
+                .await
+                .unwrap();
             enc.write_u64(1).await.unwrap(); // file count, as the orchestrator does
             sending::send_file(&src2, &send_dir2, &mut enc, &TestUi)
                 .await
@@ -786,7 +801,9 @@ mod transfer_tests {
             enc.flush().await.unwrap();
         });
         let receiver = tokio::spawn(async move {
-            let mut enc = handshake(b, Role::Responder, password).await.unwrap();
+            let mut enc = handshake(b, Role::Responder, password, &prologue2)
+                .await
+                .unwrap();
             let count = enc.read_u64().await.unwrap();
             assert_eq!(count, 1);
             receiving::receive_file(&recv_dir2, &mut enc, &TestUi, true)

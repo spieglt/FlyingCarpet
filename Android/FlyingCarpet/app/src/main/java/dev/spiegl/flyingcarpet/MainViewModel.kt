@@ -134,21 +134,35 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     suspend fun startTransfer() {
         outputText("\nStarting Transfer")
         startTCP()
-        // Plaintext preamble on the raw socket: version, then send/receive mode.
+        // Plaintext preamble on the raw socket: version, then send/receive mode. Every
+        // preamble byte, sent and received, is recorded and bound into the Noise prologue
+        // below, so tampering with the preamble fails the handshake.
+        val recordingIn = RecordingInputStream(inputStream)
+        val recordingOut = RecordingOutputStream(outputStream)
+        inputStream = recordingIn
+        outputStream = recordingOut
         confirmVersion()
         confirmMode()
-        // Establish the Noise encrypted transport over the same connection, for both modes.
-        // The Noise initiator is the TCP client, the responder is the TCP server. Everything
-        // after this — file count, metadata, and file data — is confidential and
-        // tamper-evident. A wrong password fails the handshake with a clear message.
+        inputStream = recordingIn.inner
+        outputStream = recordingOut.inner
+        // Establish the Noise encrypted transport over the same connection, for both modes,
+        // with the preamble transcript bound in as the prologue. The Noise initiator is the
+        // TCP client, the responder is the TCP server. Everything after this — file count,
+        // metadata, and file data — is confidential and tamper-evident. A wrong password
+        // (or a tampered preamble) fails the handshake with a clear message.
         val role = if (connectionMode == ConnectionMode.SharedNetwork) {
             if (mode == Mode.Sending) NoiseRole.INITIATOR else NoiseRole.RESPONDER
         } else {
             if (isHosting()) NoiseRole.RESPONDER else NoiseRole.INITIATOR
         }
+        val prologue = if (role == NoiseRole.INITIATOR) {
+            buildPrologue(recordingOut.transcript(), recordingIn.transcript())
+        } else {
+            buildPrologue(recordingIn.transcript(), recordingOut.transcript())
+        }
         outputText("Establishing encrypted connection...")
         withContext(Dispatchers.IO) {
-            val transport = noiseHandshake(inputStream, outputStream, role, password)
+            val transport = noiseHandshake(inputStream, outputStream, role, password, prologue)
             inputStream = transport.input
             outputStream = transport.output
         }

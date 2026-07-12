@@ -155,4 +155,111 @@ class NoiseUnitTest {
             // expected: bad tag / decryption failure
         }
     }
+
+    // Corrupting any single byte of a transport record must make the receiver's decrypt
+    // fail (the Poly1305 tag no longer verifies).
+    @Test
+    fun tamperingIsDetected() {
+        val (initSend, respRecv) = handshakeInMemory("shared secret")
+
+        // first record, untampered: decrypts fine (sanity-checks the setup)
+        val ok = initSend.encryptWithAd(ByteArray(0), "authentic payload".toByteArray())
+        assertArrayEquals(
+            "authentic payload".toByteArray(),
+            respRecv.decryptWithAd(ByteArray(0), ok),
+        )
+
+        // second record with one bit flipped in the ciphertext: must fail to authenticate
+        val record = initSend.encryptWithAd(ByteArray(0), "authentic payload".toByteArray())
+        record[record.size / 2] = (record[record.size / 2].toInt() xor 0x01).toByte()
+        try {
+            respRecv.decryptWithAd(ByteArray(0), record)
+            fail("tampered record should have failed authentication")
+        } catch (e: Exception) {
+            // expected: AEADBadTagException
+        }
+    }
+
+    // Same guarantee for a corrupted handshake message: the responder must reject it.
+    @Test
+    fun tamperedHandshakeIsDetected() {
+        val psk = derivePsk("shared secret")
+        val init = NoiseHandshakeState(NoiseRole.INITIATOR, psk)
+        val resp = NoiseHandshakeState(NoiseRole.RESPONDER, psk)
+        val msg1 = init.writeMessage()
+        // corrupt the encrypted payload section (past the 32-byte ephemeral)
+        msg1[msg1.size - 1] = (msg1[msg1.size - 1].toInt() xor 0x01).toByte()
+        try {
+            resp.readMessage(msg1)
+            fail("tampered handshake message should have failed authentication")
+        } catch (e: Exception) {
+            // expected: bad tag / decryption failure
+        }
+    }
+
+    // Cross-platform known-answer for the prologue-bound handshake, matching the Rust
+    // reference's prologue_known_answer (docs §9): the app-style preamble transcript
+    // (version 10 + mode, 8-byte big-endian each) framed by buildPrologue, with fixed
+    // PSK/ephemerals. The transport record intentionally matches appHandshakeKnownAnswer's:
+    // per the Noise spec the prologue only enters h (gating the handshake MACs), never the
+    // chaining key — asserted anyway so a port that wrongly mixes it into ck fails here.
+    @Test
+    fun prologueKnownAnswer() {
+        val initTranscript = hex("000000000000000a0000000000000001")
+        val respTranscript = hex("000000000000000a0000000000000000")
+        val prologue = buildPrologue(initTranscript, respTranscript)
+        assertEquals(
+            "0000000000000010000000000000000a00000000000000010000000000000010000000000000000a0000000000000000",
+            toHex(prologue),
+        )
+
+        val psk = ByteArray(32) { 0x2a }
+        val init = NoiseHandshakeState(NoiseRole.INITIATOR, psk, prologue, ByteArray(32) { 0x01 })
+        val resp = NoiseHandshakeState(NoiseRole.RESPONDER, psk, prologue, ByteArray(32) { 0x02 })
+
+        val msg1 = init.writeMessage()
+        assertEquals(
+            "a4e09292b651c278b9772c569f5fa9bb13d906b46ab68c9df9dc2b4409f8a2093ae03dc8524f79ac9696d6c155df9a3c",
+            toHex(msg1),
+        )
+        resp.readMessage(msg1)
+
+        val msg2 = resp.writeMessage()
+        assertEquals(
+            "ce8d3ad1ccb633ec7b70c17814a5c76ecd029685050d344745ba05870e587d59d2668070263116ce557500fbe3fd3ba4",
+            toHex(msg2),
+        )
+        init.readMessage(msg2)
+
+        val (initSend, _) = init.split()
+        val record = initSend.encryptWithAd(ByteArray(0), "hello flying carpet".toByteArray())
+        assertEquals(
+            "124a00c03b4544f746828bbf9ae2d8d595a9ac1fea988f43f7206c3880180b954f9147",
+            toHex(record),
+        )
+    }
+
+    // The prologue binds the plaintext preamble: if the two sides saw different preamble
+    // bytes (an in-path attacker rewrote the version or mode exchange), the handshake must
+    // fail even though the passwords match.
+    @Test
+    fun prologueMismatchFailsHandshake() {
+        val psk = derivePsk("same password")
+        val good = buildPrologue(
+            hex("000000000000000a0000000000000001"),
+            hex("000000000000000a0000000000000000"),
+        )
+        val tamperedResp = hex("000000000000000a0000000000000000")
+        tamperedResp[15] = (tamperedResp[15].toInt() xor 0x01).toByte()
+        val tampered = buildPrologue(hex("000000000000000a0000000000000001"), tamperedResp)
+
+        val init = NoiseHandshakeState(NoiseRole.INITIATOR, psk, good)
+        val resp = NoiseHandshakeState(NoiseRole.RESPONDER, psk, tampered)
+        try {
+            resp.readMessage(init.writeMessage())
+            fail("responder should have rejected the message under a mismatched prologue")
+        } catch (e: Exception) {
+            // expected: bad tag / decryption failure
+        }
+    }
 }

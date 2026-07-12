@@ -65,6 +65,67 @@ private fun x25519(privateKey: ByteArray, peerPublic: ByteArray?): ByteArray {
     return out
 }
 
+// Builds the canonical Noise prologue from the plaintext preamble transcript.
+// initiatorTranscript is every byte the Noise initiator sent during the preamble (version +
+// mode exchange) and responderTranscript every byte the responder sent; each is
+// length-prefixed (u64 big-endian, matching the app's length idiom) so the encoding is
+// unambiguous. Each side computes this from its own sent/received bytes — the initiator as
+// (sent, received), the responder as (received, sent) — so any in-flight tampering with the
+// preamble makes the prologues differ, which fails the handshake. Must be byte-identical
+// across Rust, Swift, and Kotlin (see core/src/noise.rs build_prologue).
+fun buildPrologue(initiatorTranscript: ByteArray, responderTranscript: ByteArray): ByteArray {
+    fun be64(n: Long): ByteArray {
+        val b = ByteArray(8)
+        for (i in 0 until 8) b[i] = ((n ushr (8 * (7 - i))) and 0xff).toByte()
+        return b
+    }
+    return be64(initiatorTranscript.size.toLong()) + initiatorTranscript +
+        be64(responderTranscript.size.toLong()) + responderTranscript
+}
+
+// Wrap the raw socket streams during the plaintext preamble, recording every byte sent and
+// received so the transcript can be bound into the Noise prologue (see buildPrologue).
+// Recording at the stream boundary — rather than inside the preamble functions — means no
+// exchanged byte can be missed, whatever branch the version/mode negotiation takes.
+class RecordingInputStream(val inner: InputStream) : InputStream() {
+    private val recorded = ByteArrayOutputStream()
+
+    fun transcript(): ByteArray = recorded.toByteArray()
+
+    override fun read(): Int {
+        val b = inner.read()
+        if (b >= 0) recorded.write(b)
+        return b
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        val n = inner.read(b, off, len)
+        if (n > 0) recorded.write(b, off, n)
+        return n
+    }
+
+    override fun close() = inner.close()
+}
+
+class RecordingOutputStream(val inner: OutputStream) : OutputStream() {
+    private val recorded = ByteArrayOutputStream()
+
+    fun transcript(): ByteArray = recorded.toByteArray()
+
+    override fun write(b: Int) {
+        inner.write(b)
+        recorded.write(b)
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        inner.write(b, off, len)
+        recorded.write(b, off, len)
+    }
+
+    override fun flush() = inner.flush()
+    override fun close() = inner.close()
+}
+
 // Derives the 32-byte Noise pre-shared key from the transfer password with
 // PBKDF2-HMAC-SHA256 over the UTF-8 password bytes. Implemented on JCE's HMAC (rather than
 // PBKDF2WithHmacSHA256 / PBEKeySpec) so the encoding is unambiguously UTF-8 and matches the
@@ -243,14 +304,17 @@ class NoiseHandshakeState(
 class NoiseTransport(val input: NoiseInputStream, val output: NoiseOutputStream)
 
 // Runs the handshake over the raw socket streams and returns encrypting/decrypting stream
-// wrappers. The initiator (TCP client) sends the first message.
+// wrappers. The initiator (TCP client) sends the first message. `prologue` binds the
+// plaintext preamble transcript (see buildPrologue): if either the password or the
+// preamble bytes differ between the peers, the handshake fails.
 fun noiseHandshake(
     rawIn: InputStream,
     rawOut: OutputStream,
     role: NoiseRole,
     password: String,
+    prologue: ByteArray,
 ): NoiseTransport {
-    val hs = NoiseHandshakeState(role, derivePsk(password))
+    val hs = NoiseHandshakeState(role, derivePsk(password), prologue)
     try {
         if (role == NoiseRole.INITIATOR) {
             writeFrame(rawOut, hs.writeMessage())
@@ -263,7 +327,7 @@ fun noiseHandshake(
         }
     } catch (e: javax.crypto.AEADBadTagException) {
         throw Exception(
-            "Could not establish a secure connection. Check that the password matches on both devices."
+            "Could not establish a secure connection. Check that the password matches on both devices. (This can also mean the connection was tampered with.)"
         )
     }
     val (send, recv) = hs.split()

@@ -49,13 +49,32 @@ pub fn derive_psk(password: &str) -> [u8; 32] {
     psk
 }
 
+/// Builds the canonical Noise prologue from the plaintext preamble transcript.
+/// `initiator_transcript` is every byte the Noise initiator sent during the preamble
+/// (version + mode exchange) and `responder_transcript` every byte the responder sent;
+/// each is length-prefixed (u64 big-endian, matching the app's length idiom) so the
+/// encoding is unambiguous. Each side computes this from its own sent/received bytes —
+/// the initiator as (sent, received), the responder as (received, sent) — so any
+/// in-flight tampering with the preamble makes the prologues differ, which fails the
+/// handshake. Must be byte-identical across Rust, Swift, and Kotlin.
+pub fn build_prologue(initiator_transcript: &[u8], responder_transcript: &[u8]) -> Vec<u8> {
+    let mut p = Vec::with_capacity(16 + initiator_transcript.len() + responder_transcript.len());
+    p.extend_from_slice(&(initiator_transcript.len() as u64).to_be_bytes());
+    p.extend_from_slice(initiator_transcript);
+    p.extend_from_slice(&(responder_transcript.len() as u64).to_be_bytes());
+    p.extend_from_slice(responder_transcript);
+    p
+}
+
 /// Runs the Noise NNpsk0 handshake over `inner` and returns an EncryptedStream on success.
-/// A wrong password makes the peers derive different keys, so the handshake fails when the
-/// first authenticated message doesn't decrypt — surfaced as a clear, user-facing error.
+/// `prologue` binds the plaintext preamble transcript (see build_prologue): if either the
+/// password or the preamble bytes differ between the peers, the first authenticated
+/// message fails to decrypt — surfaced as a clear, user-facing error.
 pub async fn handshake<S>(
     mut inner: S,
     role: Role,
     password: &str,
+    prologue: &[u8],
 ) -> Result<EncryptedStream<S>, FCError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -65,6 +84,10 @@ where
         message: format!("Invalid Noise parameters: {}", e),
     })?;
     let builder = snow::Builder::new(params)
+        .prologue(prologue)
+        .map_err(|e| FCError {
+            message: format!("Noise builder error: {}", e),
+        })?
         .psk(0, &psk)
         .map_err(|e| FCError {
             message: format!("Noise builder error: {}", e),
@@ -88,14 +111,14 @@ where
             // <- e, ee
             let msg = read_frame(&mut inner).await?;
             hs.read_message(&msg, &mut buf).map_err(|_| FCError {
-                message: "Could not establish a secure connection. Check that the password matches on both devices.".to_string(),
+                message: "Could not establish a secure connection. Check that the password matches on both devices. (This can also mean the connection was tampered with.)".to_string(),
             })?;
         }
         Role::Responder => {
             // -> psk, e
             let msg = read_frame(&mut inner).await?;
             hs.read_message(&msg, &mut buf).map_err(|_| FCError {
-                message: "Could not establish a secure connection. Check that the password matches on both devices.".to_string(),
+                message: "Could not establish a secure connection. Check that the password matches on both devices. (This can also mean the connection was tampered with.)".to_string(),
             })?;
             // <- e, ee
             let n = hs.write_message(&[], &mut buf).map_err(|e| FCError {
@@ -129,6 +152,70 @@ async fn read_frame<S: AsyncRead + Unpin>(inner: &mut S) -> Result<Vec<u8>, FCEr
     let mut msg = vec![0u8; len];
     inner.read_exact(&mut msg).await?;
     Ok(msg)
+}
+
+/// Wraps the raw stream during the plaintext preamble, recording every byte sent and
+/// received so the transcript can be bound into the Noise prologue (see build_prologue).
+/// Recording at the stream boundary — rather than inside the preamble functions — means
+/// no exchanged byte can be missed, whatever branch the version/mode negotiation takes.
+pub struct RecordingStream<S> {
+    inner: S,
+    sent: Vec<u8>,
+    received: Vec<u8>,
+}
+
+impl<S> RecordingStream<S> {
+    pub fn new(inner: S) -> Self {
+        RecordingStream {
+            inner,
+            sent: Vec::new(),
+            received: Vec::new(),
+        }
+    }
+
+    /// Returns the inner stream and the (sent, received) transcripts.
+    pub fn into_parts(self) -> (S, Vec<u8>, Vec<u8>) {
+        (self.inner, self.sent, self.received)
+    }
+}
+
+impl<S: AsyncRead + Unpin> AsyncRead for RecordingStream<S> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+        let before = buf.filled().len();
+        let res = Pin::new(&mut this.inner).poll_read(cx, buf);
+        if let Poll::Ready(Ok(())) = &res {
+            this.received.extend_from_slice(&buf.filled()[before..]);
+        }
+        res
+    }
+}
+
+impl<S: AsyncWrite + Unpin> AsyncWrite for RecordingStream<S> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+        let res = Pin::new(&mut this.inner).poll_write(cx, buf);
+        if let Poll::Ready(Ok(n)) = &res {
+            this.sent.extend_from_slice(&buf[..*n]);
+        }
+        res
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.get_mut().inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.get_mut().inner).poll_shutdown(cx)
+    }
 }
 
 enum ReadState {
@@ -479,6 +566,13 @@ mod tests {
         assert_eq!(&out[..n], b"hello flying carpet");
     }
 
+    // A realistic preamble transcript, as used by the app: version + mode, 8-byte BE each.
+    fn test_prologue() -> Vec<u8> {
+        let init_transcript = hex("000000000000000a0000000000000001"); // version 10, mode send
+        let resp_transcript = hex("000000000000000a0000000000000000"); // version 10, mode receive
+        build_prologue(&init_transcript, &resp_transcript)
+    }
+
     async fn connect_pair(
         password_a: &str,
         password_b: &str,
@@ -489,8 +583,10 @@ mod tests {
         let (a, b) = tokio::io::duplex(64 * 1024);
         let pa = password_a.to_string();
         let pb = password_b.to_string();
-        let ta = tokio::spawn(async move { handshake(a, Role::Initiator, &pa).await });
-        let tb = tokio::spawn(async move { handshake(b, Role::Responder, &pb).await });
+        let ta =
+            tokio::spawn(async move { handshake(a, Role::Initiator, &pa, &test_prologue()).await });
+        let tb =
+            tokio::spawn(async move { handshake(b, Role::Responder, &pb, &test_prologue()).await });
         (ta.await.unwrap(), tb.await.unwrap())
     }
 
@@ -530,23 +626,140 @@ mod tests {
         assert!(ea.is_err() || eb.is_err());
     }
 
-    #[tokio::test]
-    async fn tampering_is_detected() {
-        // Wrap a raw duplex so we can corrupt a byte between the two EncryptedStreams.
-        let (a, b) = tokio::io::duplex(64 * 1024);
-        let ta = tokio::spawn(async move { handshake(a, Role::Initiator, "shared secret").await });
-        let tb = tokio::spawn(async move { handshake(b, Role::Responder, "shared secret").await });
-        let mut sender = ta.await.unwrap().unwrap();
-        let mut receiver = tb.await.unwrap().unwrap();
+    // Corrupting any single byte of a transport record must make the receiver's decrypt
+    // fail (the Poly1305 tag no longer verifies). Drives the snow transport states
+    // directly so the tampering happens on the actual record bytes.
+    #[test]
+    fn tampering_is_detected() {
+        let psk = derive_psk("shared secret");
+        let params: snow::params::NoiseParams = NOISE_PARAMS.parse().unwrap();
+        let mut initiator = snow::Builder::new(params.clone())
+            .psk(0, &psk)
+            .unwrap()
+            .build_initiator()
+            .unwrap();
+        let mut responder = snow::Builder::new(params)
+            .psk(0, &psk)
+            .unwrap()
+            .build_responder()
+            .unwrap();
+        let mut buf = vec![0u8; MAX_NOISE_MESSAGE];
+        let mut tmp = vec![0u8; MAX_NOISE_MESSAGE];
+        let n = initiator.write_message(&[], &mut buf).unwrap();
+        responder.read_message(&buf[..n], &mut tmp).unwrap();
+        let n = responder.write_message(&[], &mut buf).unwrap();
+        initiator.read_message(&buf[..n], &mut tmp).unwrap();
+        let mut it = initiator.into_transport_mode().unwrap();
+        let mut rt = responder.into_transport_mode().unwrap();
 
-        sender.write_all(b"authentic payload").await.unwrap();
-        sender.flush().await.unwrap();
-        // Corrupt the ciphertext in flight would require intercepting the duplex; instead
-        // verify that a decrypt of altered bytes fails at the Noise layer directly.
-        let mut buf = [0u8; 17];
-        // Un-corrupted read succeeds:
-        receiver.read_exact(&mut buf).await.unwrap();
-        assert_eq!(&buf, b"authentic payload");
+        // first record, untampered: decrypts fine (sanity-checks the setup)
+        let n = it.write_message(b"authentic payload", &mut buf).unwrap();
+        let m = rt.read_message(&buf[..n], &mut tmp).unwrap();
+        assert_eq!(&tmp[..m], b"authentic payload");
+
+        // second record with one bit flipped in the ciphertext: must fail to authenticate
+        let n = it.write_message(b"authentic payload", &mut buf).unwrap();
+        buf[n / 2] ^= 0x01;
+        assert!(
+            rt.read_message(&buf[..n], &mut tmp).is_err(),
+            "tampered record must fail authentication"
+        );
+    }
+
+    // Same guarantee for a corrupted handshake message: the responder must reject it.
+    #[test]
+    fn tampered_handshake_is_detected() {
+        let psk = derive_psk("shared secret");
+        let params: snow::params::NoiseParams = NOISE_PARAMS.parse().unwrap();
+        let mut initiator = snow::Builder::new(params.clone())
+            .psk(0, &psk)
+            .unwrap()
+            .build_initiator()
+            .unwrap();
+        let mut responder = snow::Builder::new(params)
+            .psk(0, &psk)
+            .unwrap()
+            .build_responder()
+            .unwrap();
+        let mut buf = vec![0u8; MAX_NOISE_MESSAGE];
+        let mut tmp = vec![0u8; MAX_NOISE_MESSAGE];
+        let n = initiator.write_message(&[], &mut buf).unwrap();
+        // corrupt the encrypted payload section (past the 32-byte ephemeral)
+        buf[n - 1] ^= 0x01;
+        assert!(
+            responder.read_message(&buf[..n], &mut tmp).is_err(),
+            "tampered handshake message must fail authentication"
+        );
+    }
+
+    // The prologue binds the plaintext preamble: if the two sides saw different preamble
+    // bytes (an in-path attacker rewrote the version or mode exchange), the handshake
+    // must fail even though the passwords match.
+    #[tokio::test]
+    async fn prologue_mismatch_fails_handshake() {
+        let (a, b) = tokio::io::duplex(64 * 1024);
+        let good = test_prologue();
+        // attacker flipped the mode bit the responder saw
+        let mut tampered_resp_transcript = hex("000000000000000a0000000000000000");
+        tampered_resp_transcript[15] ^= 0x01;
+        let tampered = build_prologue(
+            &hex("000000000000000a0000000000000001"),
+            &tampered_resp_transcript,
+        );
+        let ta = tokio::spawn(async move { handshake(a, Role::Initiator, "pw", &good).await });
+        let tb = tokio::spawn(async move { handshake(b, Role::Responder, "pw", &tampered).await });
+        let (ea, eb) = (ta.await.unwrap(), tb.await.unwrap());
+        assert!(ea.is_err() || eb.is_err());
+    }
+
+    // Cross-platform known-answer for the prologue-bound handshake (docs §9): the exact
+    // wire bytes any platform must produce for the fixed app-style preamble transcript,
+    // PSK, and ephemerals. Also pins build_prologue's framing (u64-BE length prefixes).
+    #[test]
+    fn prologue_known_answer() {
+        let init_transcript = hex("000000000000000a0000000000000001");
+        let resp_transcript = hex("000000000000000a0000000000000000");
+        let prologue = build_prologue(&init_transcript, &resp_transcript);
+        assert_eq!(to_hex(&prologue), PROLOGUE_KAT_HEX);
+
+        let psk = [0x2au8; 32];
+        let init_eph = [0x01u8; 32];
+        let resp_eph = [0x02u8; 32];
+        let params: snow::params::NoiseParams = NOISE_PARAMS.parse().unwrap();
+        let mut initiator = snow::Builder::new(params.clone())
+            .fixed_ephemeral_key_for_testing_only(&init_eph)
+            .prologue(&prologue)
+            .unwrap()
+            .psk(0, &psk)
+            .unwrap()
+            .build_initiator()
+            .unwrap();
+        let mut responder = snow::Builder::new(params)
+            .fixed_ephemeral_key_for_testing_only(&resp_eph)
+            .prologue(&prologue)
+            .unwrap()
+            .psk(0, &psk)
+            .unwrap()
+            .build_responder()
+            .unwrap();
+
+        let mut buf = vec![0u8; MAX_NOISE_MESSAGE];
+        let mut tmp = vec![0u8; MAX_NOISE_MESSAGE];
+
+        let n1 = initiator.write_message(&[], &mut buf).unwrap();
+        assert_eq!(to_hex(&buf[..n1]), PROLOGUE_MSG1_HEX);
+        responder.read_message(&buf[..n1], &mut tmp).unwrap();
+
+        let n2 = responder.write_message(&[], &mut buf).unwrap();
+        assert_eq!(to_hex(&buf[..n2]), PROLOGUE_MSG2_HEX);
+        initiator.read_message(&buf[..n2], &mut tmp).unwrap();
+
+        let mut it = initiator.into_transport_mode().unwrap();
+        let mut rt = responder.into_transport_mode().unwrap();
+        let n3 = it.write_message(b"hello flying carpet", &mut buf).unwrap();
+        assert_eq!(to_hex(&buf[..n3]), PROLOGUE_RECORD_HEX);
+        let n = rt.read_message(&buf[..n3], &mut tmp).unwrap();
+        assert_eq!(&tmp[..n], b"hello flying carpet");
     }
 }
 
@@ -561,4 +774,20 @@ const HANDSHAKE_MSG2_HEX: &str =
     "ce8d3ad1ccb633ec7b70c17814a5c76ecd029685050d344745ba05870e587d59d887595caf8a0b110dfab84e6b41eafc";
 #[cfg(test)]
 const TRANSPORT_RECORD_HEX: &str =
+    "124a00c03b4544f746828bbf9ae2d8d595a9ac1fea988f43f7206c3880180b954f9147";
+// Prologue-bound handshake KAT (v10 preamble transcript; see prologue_known_answer).
+#[cfg(test)]
+const PROLOGUE_KAT_HEX: &str = "0000000000000010000000000000000a00000000000000010000000000000010000000000000000a0000000000000000";
+#[cfg(test)]
+const PROLOGUE_MSG1_HEX: &str =
+    "a4e09292b651c278b9772c569f5fa9bb13d906b46ab68c9df9dc2b4409f8a2093ae03dc8524f79ac9696d6c155df9a3c";
+#[cfg(test)]
+const PROLOGUE_MSG2_HEX: &str =
+    "ce8d3ad1ccb633ec7b70c17814a5c76ecd029685050d344745ba05870e587d59d2668070263116ce557500fbe3fd3ba4";
+// Identical to TRANSPORT_RECORD_HEX by design: the prologue only enters `h` (so it gates
+// the handshake message MACs — see PROLOGUE_MSG1/2 differing from HANDSHAKE_MSG1/2), never
+// the chaining key, so Split() derives the same transport keys. Asserted anyway so a port
+// that wrongly mixes the prologue into ck fails here.
+#[cfg(test)]
+const PROLOGUE_RECORD_HEX: &str =
     "124a00c03b4544f746828bbf9ae2d8d595a9ac1fea988f43f7206c3880180b954f9147";
