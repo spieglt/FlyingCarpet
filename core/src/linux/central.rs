@@ -60,40 +60,41 @@ pub async fn find_characteristics(device: &Device) -> Result<HashMap<&str, Chara
             // })?
         }
 
-        // bond?
-        // sleep(Duration::from_secs(2)).await;
-        // if !device.is_paired().await? {
-        //     println!("    Pairing...");
-        //     let mut retries = 2;
-        //     loop {
-        //         match device.pair().await {
-        //             Ok(()) => break,
-        //             Err(err) if retries > 0 => {
-        //                 println!("    Pair error: {}", &err);
-        //                 retries -= 1;
-        //             }
-        //             Err(err) => return Err(err),
-        //         }
-        //     }
-        //     println!("    Paired");
-        // } else {
-        //     println!("    Already paired");
-        // }
+        // Bond BEFORE enumerating services. macOS as peripheral will not let a central
+        // enumerate its GATT services if pairing is deferred until the first encrypted
+        // characteristic read (this is the documented macOS<->Linux failure). Pairing
+        // explicitly here — answered by the agent registered in negotiate_bluetooth — makes
+        // the encrypted link first, so service discovery then succeeds. set_trusted persists
+        // the bond so macOS's cached key keeps matching on later transfers (the fix for the
+        // reverse-direction "Peer removed pairing information" / CBError 14 failure).
+        //
+        // TODO(verify): confirm this does NOT regress Linux-central -> Windows/Android
+        // peripherals, which previously read the characteristics without an explicit bond.
+        // If it does, gate the explicit pair on the peer being Apple — but the peer OS isn't
+        // known until after enumeration, so that would need a connect-time heuristic
+        // (e.g. try enumerate first, fall back to pair()+retry on ServicesUnresolved).
+        if !device.is_paired().await? {
+            println!("    Pairing...");
+            let mut retries = 2;
+            loop {
+                match device.pair().await {
+                    Ok(()) => break,
+                    Err(err) if retries > 0 => {
+                        println!("    Pair error: {}", &err);
+                        retries -= 1;
+                        sleep(Duration::from_secs(1)).await;
+                    }
+                    Err(err) => return Err(err),
+                }
+            }
+            println!("    Paired");
+        } else {
+            println!("    Already paired");
+        }
+        if let Err(e) = device.set_trusted(true).await {
+            println!("    Could not set device trusted: {}", e);
+        }
 
-        // sleep(Duration::from_secs(2)).await;
-        // println!("    Enumerating services...");
-        // if !device.is_services_resolved().await? {
-        //     println!("Not resolved...");
-        //     sleep(Duration::from_secs(2)).await;
-        // } else {
-        //     println!("Services are resolved: {:?}", device.services().await?);
-        //     let data = device.service_data().await?;
-        //     println!("Data: {:?}", data);
-        // }
-        // let mut events = device.events().await.unwrap();
-        // while let Some(ev) = events.next().await {
-        //     println!("Received event {:?}", ev);
-        // }
         for service in device.services().await? {
             let uuid = service.uuid().await?;
             println!("    Service UUID: {}", &uuid);

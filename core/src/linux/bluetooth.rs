@@ -1,7 +1,10 @@
 mod central;
 mod peripheral;
 
-use bluer::{Adapter, Address, Session};
+use bluer::{
+    agent::{Agent, AgentHandle, RequestConfirmation},
+    Adapter, Address, Session,
+};
 use central::{exchange_info, find_characteristics};
 use std::{mem::discriminant, time::Duration};
 use tokio::{spawn, sync::mpsc, time::sleep};
@@ -28,6 +31,51 @@ pub(crate) const SSID_CHARACTERISTIC_UUID: &str = "0D820768-A329-4ED4-8F53-BDF36
 pub(crate) const PASSWORD_CHARACTERISTIC_UUID: &str = "E1FA8F66-CF88-4572-9527-D5125A2E0762";
 // const NO_SSID: &str = "NONE";
 
+/// Registers a Bluetooth pairing agent for as long as the returned handle is held.
+///
+/// Why this exists: Flying Carpet's BLE characteristics require an encrypted (bonded)
+/// link, so reading them triggers pairing. With no app-registered agent, that pairing can
+/// only be completed by the desktop's *system* agent — i.e. the manual System-Settings
+/// pairing that macOS<->Linux transfers currently require. Registering our own agent lets
+/// pairing complete automatically during a transfer, in both directions.
+///
+/// `request_confirmation` gives us the DisplayYesNo capability (Numeric Comparison — the
+/// 6-digit compare). That association model is what preserves MITM protection, which the
+/// whole security model depends on (the Noise NNpsk0 PSK is the transfer password, shared
+/// over this BLE channel; if pairing degrades to "Just Works" there is no MITM protection).
+///
+/// TODO(UI, security-critical): the closure below auto-accepts the pairing. That completes
+/// bonding but silently degrades to Just Works — NO MITM protection. Before shipping,
+/// surface `req.passkey` in the Flying Carpet UI and only return `Ok(())` after the user
+/// confirms it matches the 6-digit number shown on the other device. Plumb this through the
+/// existing `ui`/`BluetoothMessage` channel: add a `PairConfirm(u32)` message the agent
+/// sends out, plus a response channel it awaits before returning. (The agent closures are
+/// `'static + Send + Sync`, so they can't borrow `ui` directly — pass a cloned
+/// `mpsc::Sender` and a oneshot for the answer.)
+///
+/// TODO(verify): confirm the `bluer` 0.17.4 agent API — the `Agent` field names, the
+/// closure signatures (`Fn(RequestConfirmation) -> Pin<Box<dyn Future<Output=ReqResult<()>>
+/// + Send>>`), and `Session::register_agent` — against `bluer::agent` before relying on this.
+async fn register_pairing_agent(session: &Session) -> bluer::Result<AgentHandle> {
+    let agent = Agent {
+        request_default: true,
+        request_confirmation: Some(Box::new(|req: RequestConfirmation| {
+            Box::pin(async move {
+                // TODO(security): replace this println + auto-accept with a real user
+                // confirmation surfaced in the UI (see register_pairing_agent doc comment).
+                println!(
+                    "BLE pairing passkey with {} (confirm it matches the other device): {:06}",
+                    req.device, req.passkey
+                );
+                Ok(())
+            })
+        })),
+        request_authorization: Some(Box::new(|_req| Box::pin(async move { Ok(()) }))),
+        ..Default::default()
+    };
+    session.register_agent(agent).await
+}
+
 pub async fn check_support() -> Result<(), FCError> {
     let session = Session::new().await?;
     let adapter = session.default_adapter().await?;
@@ -53,6 +101,14 @@ pub async fn negotiate_bluetooth<T: UI>(
     let session = Session::new().await?;
     let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
+
+    // Register our pairing agent for the whole transfer so pairing can complete without a
+    // manual system-menu pairing. Held via _agent_handle until this function returns.
+    // NOTE: peripheral::advertise() opens its *own* bluer Session; BlueZ agents are global
+    // to bluetoothd, so this one still handles pairing during advertising as long as this
+    // handle (and its session) outlive the pairing. TODO(verify): confirm that holds in
+    // practice, or register the agent on the advertise session too / consolidate sessions.
+    let _agent_handle = register_pairing_agent(&session).await?;
 
     struct ConnectedPeripheral {
         adapter: Adapter,

@@ -184,6 +184,20 @@ pub(crate) async fn advertise(
     let session = bluer::Session::new().await?;
     let adapter = session.default_adapter().await?;
     adapter.set_powered(true).await?;
+    // Accept incoming pairing so a central (e.g. macOS) can bond to read our encrypted
+    // characteristics. Combined with the agent registered in negotiate_bluetooth, this lets
+    // pairing complete during the transfer instead of requiring a manual system pairing.
+    adapter.set_pairable(true).await?;
+
+    // TODO(direction A — macOS central -> Linux peripheral): after the central bonds, mark
+    // that device trusted so BlueZ persists the bond and resolves macOS's rotating (RPA)
+    // address on future transfers via the stored IRK — this is what stops the recurring
+    // CBError 14 "Peer removed pairing information" on the macOS side. We don't yet know the
+    // peer's address here; watch `adapter.events()` for the connecting device (DeviceAdded /
+    // property change to Connected) in a spawned task and call `device.set_trusted(true)`,
+    // then drop the task when advertising stops. Also confirm bonding uses LE Secure
+    // Connections (needed for IRK exchange / RPA resolution); it should by default on modern
+    // adapters. Do NOT remove_device this peer on cleanup.
 
     println!(
         "Advertising on Bluetooth adapter {} with address {}",
