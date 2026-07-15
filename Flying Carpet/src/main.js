@@ -34,7 +34,6 @@ window.onunload = () => {
     selectedFolder: selectedFolder,
     output: outputBox.innerText,
     transferRunning: startButton.style.display === 'none',
-    passwordBoxValue: passwordBox.value,
     progressBarValue: progressBar.value,
     progressBarVisible: progressBar.style.display !== 'none',
     connectionMode: connectionMode,
@@ -177,7 +176,6 @@ window.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('hotspotButton').checked = true;
     }
     applyBluetoothAvailability();
-    passwordBox.value = uiState.passwordBoxValue;
     selectedFiles = uiState.selectedFiles;
     selectedFolder = uiState.selectedFolder;
     outputBox.innerText = uiState.output;
@@ -283,17 +281,9 @@ function makeQRCode(str) {
 
 async function startTransfer(filesSelected) {
 
-  // in hotspot mode, joiners must enter the host's password before starting. shared network
-  // senders are prompted after choosing files instead, so that file selection isn't blocked
-  // on the receiver having started yet.
+  // the password is collected after files are chosen (below), so file selection isn't
+  // gated on the other device having started and displayed its password yet.
   let password = null;
-  if (await needPassword() && connectionMode !== 'shared_network') {
-    password = document.getElementById('passwordBox').value;
-    if (password.length < 8) {
-      output('Must enter password from the other device.');
-      return;
-    }
-  }
 
   // make sure we have a usable interface and prompt for which if more than one.
   // hotspot mode needs a wifi interface; shared network mode works over wired
@@ -388,6 +378,25 @@ async function startTransfer(filesSelected) {
         break;
       }
       promptMessage = 'Password must be at least 8 characters. Enter the password displayed on the receiving device:';
+    }
+  }
+
+  // hotspot joiner: files are chosen, now get the password shown on the hosting device.
+  // matches the shared-network prompt above so file selection is never gated on the
+  // password (previously read from a box before the file dialog opened).
+  if (await needPassword() && connectionMode !== 'shared_network') {
+    let promptMessage = 'Enter the password displayed on the other device:';
+    while (true) {
+      password = await showPrompt(promptMessage);
+      if (password === null) {
+        output('Transfer cancelled.');
+        return;
+      }
+      password = password.trim();
+      if (password.length >= 8) {
+        break;
+      }
+      promptMessage = 'Password must be at least 8 characters. Enter the password displayed on the other device:';
     }
   }
 
@@ -495,7 +504,6 @@ let applyBluetoothAvailability = () => {
 }
 
 let checkStatus = () => {
-  showPassword();
   if (connectionMode === 'shared_network' || usingBluetooth) {
     // Shared network: peer OS not needed (discovery handles it)
     // Bluetooth: peer OS not needed (exchanged over BLE)
@@ -535,17 +543,6 @@ let needPassword = async () => {
   return showPassword;
 }
 
-let showPassword = async () => {
-  // the password box is hotspot-only: shared network senders are prompted for the
-  // password after choosing files instead
-  let showPassword = await needPassword() && connectionMode !== 'shared_network';
-  if (showPassword) {
-    document.getElementById('passwordBox').style.display = '';
-  } else {
-    document.getElementById('passwordBox').style.display = 'none';
-  }
-}
-
 let enableUi = async () => {
   // show start button
   startButton.style.display = '';
@@ -560,8 +557,6 @@ let enableUi = async () => {
   for (let i in radioButtons) {
     document.getElementById(radioButtons[i]).disabled = false;
   }
-  // enable password box
-  document.getElementById('passwordBox').disabled = false;
   // replace logo
   document.getElementById('qrcode').innerHTML = '<img src="assets/icon1024.png" style="width: 150px; height: 150px;">'
 }
@@ -580,8 +575,6 @@ let disableUi = async () => {
   for (let i in radioButtons) {
     document.getElementById(radioButtons[i]).disabled = true;
   }
-  // disable password box
-  document.getElementById('passwordBox').disabled = true;
 }
 
 window.startTransfer = startTransfer;
