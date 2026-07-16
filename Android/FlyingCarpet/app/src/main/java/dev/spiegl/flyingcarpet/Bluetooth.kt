@@ -5,8 +5,11 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothDevice.BOND_BONDED
+import android.bluetooth.BluetoothDevice.BOND_BONDING
+import android.bluetooth.BluetoothDevice.BOND_NONE
 import android.bluetooth.BluetoothDevice.EXTRA_BOND_STATE
 import android.bluetooth.BluetoothDevice.EXTRA_DEVICE
+import android.bluetooth.BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
@@ -400,6 +403,13 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 status: Int
             ) {
                 super.onCharacteristicRead(gatt, characteristic, value, status)
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    // without this, a failed read (e.g. after declined pairing) stalls the
+                    // transfer, or propagates an empty value as the peer's OS/SSID/password
+                    outputText("Failed to read Bluetooth characteristic (status $status).")
+                    bluetoothFailed()
+                    return
+                }
                 val stringRepresentation = value.toString(Charsets.UTF_8)
                 Log.i("Bluetooth", "Read characteristic: $stringRepresentation")
                 when (characteristic.uuid) {
@@ -433,6 +443,11 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 status: Int
             ) {
                 super.onCharacteristicWrite(gatt, characteristic, status)
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    outputText("Failed to write Bluetooth characteristic (status $status).")
+                    bluetoothFailed()
+                    return
+                }
                 when (characteristic?.uuid) {
                     OS_CHARACTERISTIC_UUID -> {
                         outputText("Wrote OS to peer")
@@ -524,7 +539,19 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             }
             val bondState = intent?.getIntExtra(EXTRA_BOND_STATE, -1)
             if (bondState != BOND_BONDED) {
-                Log.i("Bluetooth", "Not bonded")
+                // BONDING -> NONE means pairing failed or the user declined the system
+                // pairing dialog. Without this, the transfer waits forever for
+                // characteristic reads that will never happen. This receiver is registered
+                // for the whole activity, so only react to our peer's bond events.
+                val previousBondState = intent?.getIntExtra(EXTRA_PREVIOUS_BOND_STATE, -1)
+                if (bondState == BOND_NONE && previousBondState == BOND_BONDING
+                    && peerDevice != null && peerDevice?.address == result?.device?.address
+                ) {
+                    outputText("Bluetooth pairing failed or was declined.")
+                    bluetoothFailed()
+                } else {
+                    Log.i("Bluetooth", "Not bonded")
+                }
                 return
             }
             // outputText("Device: $peerDevice")
