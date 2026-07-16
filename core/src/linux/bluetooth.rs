@@ -2,12 +2,16 @@ mod central;
 mod peripheral;
 
 use bluer::{
-    agent::{Agent, AgentHandle, RequestConfirmation},
+    agent::{Agent, AgentHandle, ReqError, RequestConfirmation},
     Adapter, Address, Session,
 };
 use central::{exchange_info, find_characteristics};
-use std::{mem::discriminant, time::Duration};
-use tokio::{spawn, sync::mpsc, time::sleep};
+use std::{
+    mem::discriminant,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+use tokio::{spawn, sync::mpsc, sync::Mutex as TokioMutex, time::sleep};
 
 use crate::{
     error::{fc_error, FCError},
@@ -44,30 +48,48 @@ pub(crate) const PASSWORD_CHARACTERISTIC_UUID: &str = "E1FA8F66-CF88-4572-9527-D
 /// whole security model depends on (the Noise NNpsk0 PSK is the transfer password, shared
 /// over this BLE channel; if pairing degrades to "Just Works" there is no MITM protection).
 ///
-/// TODO(UI, security-critical): the closure below auto-accepts the pairing. That completes
-/// bonding but silently degrades to Just Works — NO MITM protection. Before shipping,
-/// surface `req.passkey` in the Flying Carpet UI and only return `Ok(())` after the user
-/// confirms it matches the 6-digit number shown on the other device. Plumb this through the
-/// existing `ui`/`BluetoothMessage` channel: add a `PairConfirm(u32)` message the agent
-/// sends out, plus a response channel it awaits before returning. (The agent closures are
-/// `'static + Send + Sync`, so they can't borrow `ui` directly — pass a cloned
-/// `mpsc::Sender` and a oneshot for the answer.)
-///
-/// TODO(verify): confirm the `bluer` 0.17.4 agent API — the `Agent` field names, the
-/// closure signatures (`Fn(RequestConfirmation) -> Pin<Box<dyn Future<Output=ReqResult<()>>
-/// + Send>>`), and `Session::register_agent` — against `bluer::agent` before relying on this.
-async fn register_pairing_agent(session: &Session) -> bluer::Result<AgentHandle> {
+/// The passkey is surfaced through the same UI flow Windows uses: `ui.show_pin` emits the
+/// `showPin` event, the frontend asks the user whether the code matches the peer's, and the
+/// answer comes back over `ble_ui_rx`. Rejecting fails the pairing (ReqError::Rejected).
+async fn register_pairing_agent<T: UI>(
+    session: &Session,
+    ui: &T,
+    ble_ui_rx: mpsc::Receiver<bool>,
+    bt_tx: mpsc::Sender<BluetoothMessage>,
+) -> bluer::Result<AgentHandle> {
+    // The agent closures must be Sync; UI is only Clone + Send, and the receiver needs
+    // exclusive access — so both go behind mutexes.
+    let ui = Arc::new(Mutex::new(ui.clone()));
+    let ble_ui_rx = Arc::new(TokioMutex::new(ble_ui_rx));
     let agent = Agent {
         request_default: true,
-        request_confirmation: Some(Box::new(|req: RequestConfirmation| {
+        request_confirmation: Some(Box::new(move |req: RequestConfirmation| {
+            let ui = ui.clone();
+            let ble_ui_rx = ble_ui_rx.clone();
+            let bt_tx = bt_tx.clone();
             Box::pin(async move {
-                // TODO(security): replace this println + auto-accept with a real user
-                // confirmation surfaced in the UI (see register_pairing_agent doc comment).
                 println!(
                     "BLE pairing passkey with {} (confirm it matches the other device): {:06}",
                     req.device, req.passkey
                 );
-                Ok(())
+                let mut rx = ble_ui_rx.lock().await;
+                // discard any stale answer from an earlier request the user answered too late
+                while rx.try_recv().is_ok() {}
+                {
+                    let ui = ui.lock().expect("Could not lock UI mutex");
+                    ui.show_pin(&format!("{:06}", req.passkey));
+                }
+                let approved = rx.recv().await.unwrap_or(false);
+                if approved {
+                    Ok(())
+                } else {
+                    println!("User rejected Bluetooth pairing");
+                    // Unblock a peripheral-mode transfer, which sits waiting on this channel
+                    // for GATT activity that will now never come. (Central mode never reads
+                    // the channel; it errors through the bonding socket instead.)
+                    let _ = bt_tx.try_send(BluetoothMessage::UserCanceled);
+                    Err(ReqError::Rejected)
+                }
             })
         })),
         request_authorization: Some(Box::new(|_req| Box::pin(async move { Ok(()) }))),
@@ -94,7 +116,7 @@ pub async fn get_adapter() -> Result<Adapter, FCError> {
 
 pub async fn negotiate_bluetooth<T: UI>(
     mode: &Mode,
-    _ble_ui_rx: mpsc::Receiver<bool>, // only used on windows
+    ble_ui_rx: mpsc::Receiver<bool>,
     ui: &T,
 ) -> Result<(String, String, String), FCError> {
     // TODO: dedup with check_support(), but can't return adapter from it because windows doesn't, unless we stub which is annoying to pass it back into this.
@@ -108,20 +130,26 @@ pub async fn negotiate_bluetooth<T: UI>(
     // to bluetoothd, so this one still handles pairing during advertising as long as this
     // handle (and its session) outlive the pairing. TODO(verify): confirm that holds in
     // practice, or register the agent on the advertise session too / consolidate sessions.
-    let _agent_handle = register_pairing_agent(&session).await?;
+    // Bluetooth event channel: the GATT characteristic callbacks (peripheral mode) and the
+    // pairing agent's rejection path both send into it.
+    let (bt_tx, bt_rx) = mpsc::channel(1);
+    let _agent_handle = register_pairing_agent(&session, ui, ble_ui_rx, bt_tx.clone()).await?;
 
     struct ConnectedPeripheral {
         adapter: Adapter,
         address: Address,
-        is_macos: bool,
+        keep_bond: bool,
     }
 
     impl Drop for ConnectedPeripheral {
         fn drop(&mut self) {
-            // don't want to unpair from the peripheral if it's macOS. macOS won't allow linux to enumerate services if linux as central initiates the connection,
-            // so users must pair from the macOS system menu manually if they want to send to linux with bluetooth. if we unpair here, they'd have to manually pair
-            // for each transfer.
-            if self.is_macos {
+            // keep_bond starts true and is only cleared after a successful exchange with a
+            // non-macOS peer (Windows/Android re-pair per transfer, so removing is safe).
+            // macOS bonds must be kept: CoreBluetooth caches its half persistently and can't
+            // unpair programmatically, so removing ours creates the one-sided stale bond
+            // behind CBError 14 "Peer removed pairing information". Failed runs also keep
+            // the bond for the same reason — the peer may have completed its half.
+            if self.keep_bond {
                 return;
             }
             let adapter = self.adapter.clone();
@@ -140,7 +168,8 @@ pub async fn negotiate_bluetooth<T: UI>(
 
     if let Mode::Send(_) = mode {
         // acting as peripheral
-        let (tx, mut rx) = mpsc::channel(1);
+        let tx = bt_tx;
+        let mut rx = bt_rx;
         let mut password = generate_password();
         let (_, mut ssid) = get_key_and_ssid(&password);
         let (app_handle, adv_handle) = peripheral::advertise(tx, &ssid, &password).await?;
@@ -212,27 +241,41 @@ pub async fn negotiate_bluetooth<T: UI>(
     } else {
         // acting as central
         ui.output("Started Bluetooth scan, waiting for sending device...");
-        let device = central::scan(&adapter).await?;
-        ui.output("Found device");
+        let mut retried = false;
+        let (device, characteristics) = loop {
+            let device = central::scan(&adapter).await?;
+            ui.output("Found device");
+            match find_characteristics(&device).await {
+                Ok(c) => break (device, c),
+                Err(e) if !retried => {
+                    // A poisoned bond (classic-only or dual-transport, e.g. left over from a
+                    // pairing that went over BR/EDR) makes BlueZ keep connecting the wrong
+                    // bearer. Remove the device — bond included — and retry once; the fresh
+                    // attempt bonds over LE, the state Flying Carpet needs.
+                    retried = true;
+                    println!("    Device failed: {}. Removing device and retrying...", e);
+                    ui.output("Bluetooth connection failed; retrying with a fresh pairing...");
+                    if let Err(remove_error) = adapter.remove_device(device.address()).await {
+                        println!("    Could not remove device: {}", remove_error);
+                    }
+                }
+                Err(e) => {
+                    println!("    Device failed: {}", e);
+                    Err(e)?
+                }
+            }
+        };
 
         let mut connected_peripheral = ConnectedPeripheral {
             adapter,
             address: device.address(),
-            is_macos: false,
-        };
-
-        let characteristics = match find_characteristics(&device).await {
-            Ok(c) => c,
-            Err(e) => {
-                println!("    Device failed: {}", e);
-                Err(e)?
-            }
+            keep_bond: true,
         };
         let info = match exchange_info(characteristics, mode).await {
             Ok(i) => i,
             Err(e) => Err(e)?,
         };
-        connected_peripheral.is_macos = info.0 == "mac".to_string();
+        connected_peripheral.keep_bond = info.0 == "mac";
         Ok(info)
     }
 }
