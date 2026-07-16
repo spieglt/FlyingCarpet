@@ -16,7 +16,7 @@ Or search the App Store for "Flying Carpet File Transfer".
 
 # Flying Carpet
 
-Send and receive files between Android, iOS, Linux, macOS, and Windows over ad hoc WiFi. No shared network or cell connection required, just two devices with WiFi (and optionally Bluetooth) chips in close range.
+Send and receive files between Android, iOS, Linux, macOS, and Windows — either over ad hoc WiFi with a hotspot the devices form themselves, or over a WiFi network both devices already share. No internet or cell connection required, just two devices with WiFi (and optionally Bluetooth) chips in close range.
 
 Don't have a flash drive? Don't have access to a wireless network? Need to move a file larger than 2GB between different filesystems but don't want to set up a network share? Try it out!
 
@@ -49,11 +49,11 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 
 ## Restrictions:
 
-+ Apple devices can only transfer to/from Android, Linux, and Windows as they can no longer programmatically run hotspots. Use AirDrop instead for Apple-to-Apple transfers.
++ Apple devices cannot programmatically run hotspots, so Apple-to-Apple transfers require a shared network: join both devices to the same WiFi network and use shared network mode. That network can itself be a hotspot made manually before running the transfer — for example, start a Personal Hotspot on one phone (or a hotspot on a laptop), join it from the other device, then run Flying Carpet on both.
 
-+ To use Bluetooth to send from macOS to Linux, the devices must be manually paired first, with the connection initiated by macOS[^1]. The "Use Bluetooth" switch can be turned off on both sides of the transfer when sending from macOS to Linux, to enter the WiFi information manually instead.
++ Earlier versions could not use Bluetooth to send from macOS to Linux unless the devices had been manually paired first, with the pairing initiated from the macOS side. This has been fixed[^1].
 
-+ Disables your wireless internet connection while in use. (Does not apply to Windows or Android when hosting the hotspot.)
++ Disables your wireless internet connection while in use. (Does not apply in shared network mode, or to Windows or Android when hosting the hotspot.)
 
 + macOS sometimes switches back to a wireless network with internet connectivity during particularly long transfers.
 
@@ -73,9 +73,9 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 
 + **Wasn't this a Go repo?** Yes, carcinization has come for the gopher. There were several issues I didn't know how to solve in the Go/Qt paradigm, especially with Windows: not being able to make a single-file executable, needing to Run as Administrator, and having to write the WiFi Direct DLL to a temp folder and link to it at runtime because Go doesn't work with MSVC. Plus it was fun to use `tokio`/`async` and `windows-rs`, with which the Windows networking portions are written. The GUI framework is now Tauri which gives a native experience on all platforms with a very small footprint. The Android version is written in Kotlin and the code is in this repository. The iOS and macOS versions are written in Swift and that codebase is not public.
 
-+ **You're using SHA-256 to derive the key from a password. Isn't that bad? Shouldn't you be using a Password-Based Key Derivation Function like Scrypt or Argon2?** I was doing this before, but it wasn't strictly necessary because these keys are only used during the file transfer. For an attacker to intercept the data in transit, they'd need to be on the hotspot network, which is protected by WPA2, so they'd need to shoulder-surf the password or QR code. The change to SHA-256 was made because I couldn't find a good Scrypt or Argon2 implementation on all platforms when I added the mobile versions.
++ **You're using SHA-256 to derive the key from a password. Isn't that bad? Shouldn't you be using a Password-Based Key Derivation Function like Scrypt or Argon2?** This used to be the case, but transfers are now protected by a [Noise protocol](https://noiseprotocol.org/) `NNpsk0` handshake (X25519, ChaCha20-Poly1305, SHA-256) whose pre-shared key is derived from the transfer password with PBKDF2-HMAC-SHA256 at 600,000 iterations. PBKDF2 rather than Scrypt/Argon2 because the limiting platform is Apple: no third-party crypto is used on iOS/macOS, and CryptoKit has no memory-hard KDF. More importantly, the handshake's ephemeral Diffie-Hellman means a recording of the traffic can't be used to test password guesses offline at all — an attacker has to actively interfere with a live handshake, one guess per attempt — and each transfer gets fresh keys (forward secrecy). SHA-256 of the password is still used, but only to derive the hotspot SSID and to authenticate peer discovery announcements on the local network, not to encrypt anything. See `docs/shared-network-crypto.md` for the full design.
 
-+ **Why are you using AES-GCM at all if there's already WPA2 then?** When I started working on this project in 2017, I was trying to allow for IBSS WiFi networks on macOS that didn't use authentication. I was using the wrong encryption (and incorrectly) then, and later I added AES-GCM because it's the only good and official-ish AEAD implementation I could find in all of Go, Swift, Kotlin, and now Rust. If any cryptographers read this and find that I'm still being dumb, please let me know.
++ **Why encrypt at all if the hotspot is already protected by WPA2?** Because transfers can now also run over a shared network — a café AP, an office LAN — where an in-path attacker is the expected case rather than the exception. The Noise layer protects file contents *and* metadata (file names, sizes, hashes) end to end on any network, and the plaintext preamble that precedes the handshake is bound into it (as the Noise prologue), so tampering with the preamble aborts the transfer. Earlier versions encrypted only file contents with AES-GCM under `SHA256(password)`; that scheme was replaced because it permitted offline password cracking, had no forward secrecy, and left metadata in the clear.
 
 ## Complaints at Apple
 
@@ -83,6 +83,8 @@ sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pan
 
 + There should be a way to programmatically start hotspots, or at least read the current hotspot configuration with the user's permission.
 
++ `CBPeripheralManager` advertisements on macOS always use the public Bluetooth address and always declare BR/EDR support, with no API to set the "BR/EDR Not Supported" flag or use a random address. This is what made Linux connect to Macs over classic Bluetooth instead of BLE[^1].
+
 If you've used Flying Carpet, please send feedback to theron@spiegl.dev. Thanks for your interest! Please also check out https://github.com/spieglt/cloaker, https://cloaker.mobi, and https://github.com/spieglt/whatfiles.
 
-[^1]: Flying Carpet has the sending end of the transfer act as the Bluetooth LE peripheral (GATT server). MacOS, when acting as peripheral, does not seem to like the pairing process to be initiated before the BLE central device tries to read an encrypted characteristic, and when this happens, the central device cannot enumerate its GATT services. This can be worked around with the Windows and Android Bluetooth libraries by connecting without pairing, but the Linux library does not seem to be able to do this. The iOS version works with Linux when acting as a peripheral, and uses the same CoreBluetooth code. If you know more information about this problem, please let me know.
+[^1]: Root cause: when macOS acts as the Bluetooth LE peripheral (Flying Carpet's sending side), it advertises with its public Bluetooth address and with advertisement flags declaring simultaneous LE and BR/EDR (classic Bluetooth) support — CoreBluetooth provides no way to change either. BlueZ, the Linux Bluetooth stack, counts every such advertisement as a sighting of *both* bearers, and when connecting to an unbonded dual-mode device it breaks the "most recently seen bearer" tie in favor of classic. So Linux always connected to the Mac over classic Bluetooth — which carries none of the app's GATT services — rather than BLE, and the transfer failed to find the Flying Carpet characteristics. (iOS never hit this because it advertises with a random address, which BlueZ always connects over LE; the same was true of Windows and Android peripherals.) Manually pairing from the macOS side only "worked" by leaving behind bond state that happened to steer BlueZ to LE. The fix: when connecting to an unpaired peer that advertises with a public address, the Linux version now creates the bond itself over LE — it opens an LE L2CAP socket requiring high security, which makes the kernel run numeric-comparison pairing (with a confirmation code shown on both devices) on the LE link — and from then on BlueZ prefers the solely-bonded LE bearer.
