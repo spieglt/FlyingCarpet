@@ -1,4 +1,4 @@
-## Version 9 adds Bluetooth for transfer negotiation
+## Version 10 adds a Shared Network mode, for when you want to use a preexisting WiFi or wired network rather than create a hotspot.
 
 ### Download for Android:
 

@@ -33,9 +33,9 @@ class About : DialogFragment() {
 
 const val AboutMessage = """
     https://flyingcarpet.spiegl.dev
-    Version 9.0.8
+    Version 10.0.0
     theron@spiegl.dev
-    Copyright 2025, Theron Spiegl, all rights reserved.
+    Copyright 2026, Theron Spiegl, all rights reserved.
 
     Flying Carpet transfers files between two Android, iOS, Linux, macOS, and Windows devices over ad hoc WiFi. In Hotspot mode, no access point or shared network is required, just two WiFi cards in close range. Hotspot mode does not work from one Apple device (macOS or iOS) to another, because Apple no longer allows hotspots to be started programmatically: use Shared Network mode for those transfers.
 

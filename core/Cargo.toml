@@ -1,6 +1,6 @@
 [package]
 name = "flying-carpet-core"
-version = "9.0.10"
+version = "10.0.0"
 edition = "2021"
 license = "GPL-3.0-only"
 

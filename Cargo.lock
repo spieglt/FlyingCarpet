@@ -1082,7 +1082,7 @@ dependencies = [
 
 [[package]]
 name = "flying-carpet"
-version = "9.0.10"
+version = "10.0.0"
 dependencies = [
  "flying-carpet-core",
  "serde",
@@ -1096,7 +1096,7 @@ dependencies = [
 
 [[package]]
 name = "flying-carpet-core"
-version = "9.0.10"
+version = "10.0.0"
 dependencies = [
  "bluer",
  "futures",
