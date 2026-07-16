@@ -189,7 +189,9 @@ class DiscoveryManager(
     // Mirrors the Rust and Apple implementations: a single socket bound to DISCOVERY_PORT
     // receives both multicast and unicast announcements, while a multicast sender and a
     // unicast subnet scan run in parallel (so a network that blocks multicast still works).
-    // Announcements are HMAC-signed with the password-derived key. In the sender role,
+    // Announcements are HMAC-signed with a key derived from the PBKDF2-stretched PSK
+    // (deriveDiscoveryKey in Noise.kt), so a captured announcement is not a fast offline
+    // password-cracking oracle. In the sender role,
     // the first valid announcement from the opposite role wins. In the receiver role this
     // never returns a peer: it announces our presence and surfaces diagnostics until
     // cancelled, because the receiver's real completion signal is the sender's TCP

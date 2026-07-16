@@ -25,6 +25,9 @@ pub const NOISE_PARAMS: &str = "Noise_NNpsk0_25519_ChaChaPoly_SHA256";
 // binds the ephemeral transcript, so the salt's only job is domain separation.
 pub const PSK_SALT: &[u8] = b"Flying Carpet v10 shared network PSK";
 pub const PBKDF2_ITERS: u32 = 600_000;
+// Domain-separation label for the discovery announcement HMAC key (derived from the PSK
+// below, never from a fast hash of the password — see derive_discovery_key).
+pub const DISCOVERY_INFO: &[u8] = b"Flying Carpet v10 discovery";
 
 // Noise transport messages are capped at 65535 bytes including the 16-byte AEAD tag.
 const NOISE_TAG_LEN: usize = 16;
@@ -47,6 +50,17 @@ pub fn derive_psk(password: &str) -> [u8; 32] {
     let mut psk = [0u8; 32];
     pbkdf2_hmac::<Sha256>(password.as_bytes(), PSK_SALT, PBKDF2_ITERS, &mut psk);
     psk
+}
+
+/// Derives the discovery announcement HMAC key from the PBKDF2-stretched PSK, with a
+/// fixed label for domain separation (the Noise PSK itself is never used outside the
+/// handshake). Keying discovery from the stretched PSK — instead of the old
+/// SHA256(password) — means a captured announcement costs an offline attacker 600k
+/// PBKDF2 iterations per password guess, the same as the handshake, so the password
+/// can't be cracked while it's still live. Must be byte-identical across Rust, Swift,
+/// and Kotlin.
+pub fn derive_discovery_key(psk: &[u8; 32]) -> [u8; 32] {
+    crate::utils::compute_hmac(psk, DISCOVERY_INFO)
 }
 
 /// Builds the canonical Noise prologue from the plaintext preamble transcript.
@@ -73,13 +87,12 @@ pub fn build_prologue(initiator_transcript: &[u8], responder_transcript: &[u8]) 
 pub async fn handshake<S>(
     mut inner: S,
     role: Role,
-    password: &str,
+    psk: &[u8; 32],
     prologue: &[u8],
 ) -> Result<EncryptedStream<S>, FCError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let psk = derive_psk(password);
     let params = NOISE_PARAMS.parse().map_err(|e| FCError {
         message: format!("Invalid Noise parameters: {}", e),
     })?;
@@ -88,7 +101,7 @@ where
         .map_err(|e| FCError {
             message: format!("Noise builder error: {}", e),
         })?
-        .psk(0, &psk)
+        .psk(0, psk)
         .map_err(|e| FCError {
             message: format!("Noise builder error: {}", e),
         })?;
@@ -517,6 +530,15 @@ mod tests {
         assert_eq!(hex, PSK_KAT_HEX);
     }
 
+    // Cross-platform known-answer test for the discovery HMAC key: HMAC-SHA256 keyed by
+    // the PSK over the fixed DISCOVERY_INFO label. Swift and Kotlin must produce this
+    // exact value for password "flyingcarpet" (see docs §9).
+    #[test]
+    fn discovery_key_known_answer() {
+        let key = derive_discovery_key(&derive_psk("flyingcarpet"));
+        assert_eq!(to_hex(&key), DISCOVERY_KEY_KAT_HEX);
+    }
+
     // A full NNpsk0 handshake + a transport message, with fixed ephemerals and a fixed PSK,
     // so any platform can reproduce the exact wire bytes (see docs §9).
     #[test]
@@ -581,8 +603,8 @@ mod tests {
         Result<EncryptedStream<tokio::io::DuplexStream>, FCError>,
     ) {
         let (a, b) = tokio::io::duplex(64 * 1024);
-        let pa = password_a.to_string();
-        let pb = password_b.to_string();
+        let pa = derive_psk(password_a);
+        let pb = derive_psk(password_b);
         let ta =
             tokio::spawn(async move { handshake(a, Role::Initiator, &pa, &test_prologue()).await });
         let tb =
@@ -706,8 +728,9 @@ mod tests {
             &hex("000000000000000a0000000000000001"),
             &tampered_resp_transcript,
         );
-        let ta = tokio::spawn(async move { handshake(a, Role::Initiator, "pw", &good).await });
-        let tb = tokio::spawn(async move { handshake(b, Role::Responder, "pw", &tampered).await });
+        let psk = derive_psk("pw");
+        let ta = tokio::spawn(async move { handshake(a, Role::Initiator, &psk, &good).await });
+        let tb = tokio::spawn(async move { handshake(b, Role::Responder, &psk, &tampered).await });
         let (ea, eb) = (ta.await.unwrap(), tb.await.unwrap());
         assert!(ea.is_err() || eb.is_err());
     }
@@ -766,6 +789,9 @@ mod tests {
 // Filled in from the test output (see docs §9). Reproduced by every platform.
 #[cfg(test)]
 const PSK_KAT_HEX: &str = "a3d8b7f17f2252e4c2847a365ab2f392beaa996b7e51dd6fa19ff1ad08938619";
+#[cfg(test)]
+const DISCOVERY_KEY_KAT_HEX: &str =
+    "45e49b632788b21069bf48720d6af230ecbd936b3cb16c898a8e1eac51944112";
 #[cfg(test)]
 const HANDSHAKE_MSG1_HEX: &str =
     "a4e09292b651c278b9772c569f5fa9bb13d906b46ab68c9df9dc2b4409f8a209a3e9c18456aba2185de800ffaca55b22";

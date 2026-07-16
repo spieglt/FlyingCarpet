@@ -26,6 +26,9 @@ const val NOISE_PROTOCOL_NAME = "Noise_NNpsk0_25519_ChaChaPoly_SHA256"
 // Must be byte-identical across Rust, Swift, and Kotlin.
 val PSK_SALT: ByteArray = "Flying Carpet v10 shared network PSK".toByteArray(Charsets.UTF_8)
 const val PBKDF2_ITERS = 600_000
+// Domain-separation label for the discovery announcement HMAC key (derived from the PSK,
+// never from a fast hash of the password — see deriveDiscoveryKey).
+val DISCOVERY_INFO: ByteArray = "Flying Carpet v10 discovery".toByteArray(Charsets.UTF_8)
 
 private const val DHLEN = 32
 private const val TAGLEN = 16
@@ -143,6 +146,14 @@ fun derivePsk(password: String): ByteArray {
     }
     return t
 }
+
+// Derives the discovery announcement HMAC key from the PBKDF2-stretched PSK, with a fixed
+// label for domain separation (the Noise PSK itself is never used outside the handshake).
+// Keying discovery from the stretched PSK — instead of the old SHA256(password) — means a
+// captured announcement costs an offline attacker 600k PBKDF2 iterations per password
+// guess, the same as the handshake, so the password can't be cracked while it's still
+// live. Must be byte-identical across Rust, Swift, and Kotlin.
+fun deriveDiscoveryKey(psk: ByteArray): ByteArray = hmacSha256(psk, DISCOVERY_INFO)
 
 // ---- transport cipher (ChaCha20-Poly1305 with the Noise nonce) ----
 
@@ -311,10 +322,10 @@ fun noiseHandshake(
     rawIn: InputStream,
     rawOut: OutputStream,
     role: NoiseRole,
-    password: String,
+    psk: ByteArray,
     prologue: ByteArray,
 ): NoiseTransport {
-    val hs = NoiseHandshakeState(role, derivePsk(password), prologue)
+    val hs = NoiseHandshakeState(role, psk, prologue)
     try {
         if (role == NoiseRole.INITIATOR) {
             writeFrame(rawOut, hs.writeMessage())

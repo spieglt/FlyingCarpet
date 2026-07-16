@@ -29,7 +29,6 @@ import java.net.Socket
 import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.nio.ByteBuffer
-import java.security.MessageDigest
 import java.security.SecureRandom
 
 const val PORT = 3290
@@ -67,7 +66,9 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     var peerIP: Inet4Address? = null
     var ssid: String = ""
     var password: String = ""
-    lateinit var key: ByteArray
+    // PBKDF2-stretched Noise PSK, derived once per transfer off the main thread (600k
+    // iterations); also the source of the discovery HMAC key (deriveDiscoveryKey).
+    private lateinit var psk: ByteArray
     var connectionMode: ConnectionMode = ConnectionMode.Hotspot
     var files: MutableList<DocumentFile> = mutableListOf()
     var fileStreams: MutableList<InputStream> = mutableListOf()
@@ -162,7 +163,12 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         }
         outputText("Establishing encrypted connection...")
         withContext(Dispatchers.IO) {
-            val transport = noiseHandshake(inputStream, outputStream, role, password, prologue)
+            // In shared network mode the PSK was already derived (before discovery, which
+            // keys its announcement HMAC from it); in hotspot mode this is the first use.
+            if (connectionMode == ConnectionMode.Hotspot) {
+                psk = derivePsk(password)
+            }
+            val transport = noiseHandshake(inputStream, outputStream, role, psk, prologue)
             inputStream = transport.input
             outputStream = transport.output
         }
@@ -257,8 +263,6 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             // both devices are already connected to.
             if (mode == Mode.Receiving) {
                 password = generatePassword()
-                val (_, key) = getSsidAndKey(password)
-                this.key = key
                 outputText("Password: $password")
                 outputText("Enter this password on the sending device, or scan the QR code with it.")
                 displaySharedNetworkPassword(password)
@@ -300,14 +304,16 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     // called with the password the user typed or scanned when sending in shared network mode
     fun gotSharedNetworkPassword(entered: String) {
         password = entered
-        val (_, key) = getSsidAndKey(entered)
-        this.key = key
         launchSharedNetworkTransfer()
     }
 
     private fun launchSharedNetworkTransfer() {
         transferCoroutine = GlobalScope.launch {
             try {
+                // Derive the PSK before discovery starts: the discovery announcement HMAC
+                // key comes from it. In the coroutine (not the main thread) because PBKDF2
+                // at 600k iterations takes a noticeable fraction of a second.
+                psk = derivePsk(password)
                 findPeerOnSharedNetwork()
                 startTransfer()
             } catch (e: Exception) {
@@ -344,7 +350,8 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         }
 
         val role = if (mode == Mode.Sending) DiscoveryRole.SENDER else DiscoveryRole.RECEIVER
-        val discovery = DiscoveryManager(getApplication(), key, role, localIp, ::outputText)
+        val discovery =
+            DiscoveryManager(getApplication(), deriveDiscoveryKey(psk), role, localIp, ::outputText)
         discoveryManager = discovery
         if (mode == Mode.Receiving) {
             // The sender discovers us and connects, and it stops announcing as soon as it
@@ -466,11 +473,6 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             // ensure no quotes around the ssid, not sure why this is necessary
             ssid = ssid.replace("\"", "")
 
-            // set key
-            val hasher = MessageDigest.getInstance("SHA-256")
-            hasher.update(password.encodeToByteArray())
-            key = hasher.digest()
-
             if (bluetooth.active) {
                 if (mode == Mode.Sending) {
                     // we're peripheral, and hosting, so just need to wait for the central to read from our
@@ -575,11 +577,10 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
     override fun gotPassword(password: String) {
         this.password = password
-        val (ssid, key) = getSsidAndKey(password)
         if (this.ssid == "") {
+            val (ssid, _) = getSsidAndKey(password)
             this.ssid = ssid
         }
-        this.key = key
         joinHotspot()
     }
 

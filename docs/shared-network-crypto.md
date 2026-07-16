@@ -5,8 +5,9 @@ each verified byte-for-byte against the official Noise (cacophony) vector and sh
 KATs, including the preamble→prologue binding and tamper-negative tests (§11 post-review
 hardening). Windows↔Android confirmed on real hardware pre-binding; first post-binding
 live transfer re-confirms. Remaining: the rest of the live cross-platform matrix (§11
-Phase 4). Audience: an engineer working across the Rust core, the Swift (iOS/macOS) app,
-and the Kotlin (Android) app.
+Phase 4), and porting the PSK-derived discovery HMAC key (§7, §9) to the Apple repo —
+Rust and Android already have it. Audience: an engineer working across the Rust core, the
+Swift (iOS/macOS) app, and the Kotlin (Android) app.
 
 This document explains *why* the design is shaped the way it is, not just what to build,
 so that the person writing the code understands which properties are load-bearing and
@@ -51,7 +52,10 @@ everything about what is being transferred.
 
 **Attacker A — passive eavesdropper.** Sees every byte on the wire (same Wi-Fi, span
 port, malicious operator) but does not inject or modify traffic. This is the common,
-realistic threat on an untrusted network. **We defeat this attacker completely.**
+realistic threat on an untrusted network. **We defeat this attacker:** they read nothing,
+and their only recourse is a PBKDF2-hardened offline password crack (§7) that cannot
+plausibly finish within the single-use password's lifetime — and that, thanks to forward
+secrecy, decrypts nothing even if it someday does.
 
 **Attacker B — active in-path attacker.** Can inject, modify, and MITM the TCP connection,
 e.g. via ARP spoofing on the LAN, and can impersonate the peer's IP to win the connection.
@@ -186,10 +190,12 @@ kc_recv    = HKDF-Expand(prk, "FC-v10 receiver confirm", 32)
 - **`pw_material`:** at minimum the raw UTF-8 password bytes. **Recommended:**
   `pw_material = PBKDF2-HMAC-SHA256(password, salt = transcript, iterations = 600_000)`.
   PBKDF2 is available on Apple via CommonCrypto (a system library) and in RustCrypto / JCA.
-  Note carefully *what this does and does not buy* (§7): it only slows the **active**
-  attacker's offline crack; the **passive** attacker already has no oracle regardless of
-  KDF, because they can't compute `dh`. So PBKDF2 here is defense-in-depth for the one
-  residual case, not the primary defense. Using the transcript as the PBKDF2 salt is fine —
+  Note carefully *what this buys*: in **this §4–§6 construction**, the passive attacker
+  has no oracle regardless of KDF (the first password-dependent value on the wire is keyed
+  under `dh`, which they can't compute), so PBKDF2 only slows the **active** attacker's
+  offline crack. **The implemented `NNpsk0` design does not share that property** — its
+  first handshake message is checkable by a passive observer (§7), which makes PBKDF2 the
+  primary defense there, not defense-in-depth. Using the transcript as the PBKDF2 salt is fine —
   a salt need not be secret, only unique per session, which the ephemeral transcript
   guarantees (and it prevents any precomputation).
 
@@ -257,33 +263,61 @@ on the wire:  [ 2-byte big-endian length ] [ ciphertext || 16-byte AEAD tag ]
 | Confidentiality of **metadata** (names, sizes, count, hashes) | ✅ record layer |
 | Integrity / tamper-evidence | ✅ AEAD tags + key confirmation |
 | Forward secrecy (past transfers safe if password later leaks) | ✅ ephemeral X25519 |
-| Offline password crack by **passive** eavesdropper (Attacker A), *from the Noise channel* | ✅ **impossible** |
-| Offline password crack by **passive** eavesdropper, *from the discovery announcement* | ⚠️ possible (fast HMAC), but **yields nothing of value** — see note below |
+| Offline password crack by **passive** eavesdropper (Attacker A), *from the Noise channel* | ⚠️ **PBKDF2-hardened** — the first handshake message's AEAD tag is an offline oracle (see below) |
+| Offline password crack by **passive** eavesdropper, *from the discovery announcement* | ⚠️ **PBKDF2-hardened** (same 600k-iteration cost) — see note below |
 | Active MITM goes undetected | ✅ **prevented** (key confirmation) |
-| Offline password crack by **active** attacker (Attacker B) | ⚠️ possible, but **yields nothing of value** — see below |
+| Offline password crack by **active** attacker (Attacker B) | ⚠️ possible at the same PBKDF2 cost, and **yields nothing of value** — see below |
 
-**Discovery is a residual fast oracle (shared network only).** The above rows about the
-Noise channel are correct, but they are **not the whole wire**: the UDP discovery
-announcement (§0 of the flow, still `HMAC(SHA256(password), …)` — a *fast* hash) lets a
-passive eavesdropper who captures a single announcement mount an offline dictionary attack
-and recover the password. So the honest statement is: a passive attacker *can* recover the
-password (from discovery), just not usefully. Two things defang it, the same two that defang
-the active-attacker gap: **(1) forward secrecy** — the Noise session key comes from the
-ephemeral X25519 DH, not the password, so knowing the password does **not** let a passive
-attacker decrypt any transfer; and **(2) single-use passwords** — the recovered value is
-dead before the (slow-ish) crack even finishes and is never reused. Net: the discovery
-oracle leaks a password that decrypts nothing and authorizes nothing. It is nonetheless a
-real imperfection versus the clean "passive learns nothing" ideal; see §10 for the fix.
+**Discovery is keyed from the stretched PSK (shared network only).** The Noise channel
+rows above are not the whole wire: the UDP discovery announcement is also HMAC-signed with
+a password-derived key. It used to be `HMAC(SHA256(password), …)` — a *fast* hash, which
+gave a **passive** eavesdropper who captured a single announcement an offline dictionary
+attack cheap enough (~hours on one GPU, minutes on a rig, over the ~2⁴⁸ space) to
+plausibly finish **while the password was still live** (receiver waiting, or mid-transfer
+of something large). A live recovered password defeats everything: the attacker knows the
+PSK and can run a fully valid MITM that passes key confirmation. This was the one scenario
+that broke the "effectively as strong as a PAKE" argument below. Fixed: the discovery HMAC
+key is now `derive_discovery_key(psk) = HMAC-SHA256(psk, "Flying Carpet v10 discovery")`
+(§9), where `psk` is the PBKDF2-stretched key — so a captured announcement costs an
+offline attacker 600k PBKDF2 iterations per guess, identical to the handshake-message
+oracle below: centuries per GPU, not hours. The label gives domain separation (the
+Noise PSK itself is never used outside the handshake). No fast hash of the password goes
+on the air; `SHA256(password)` survives only in the hotspot SSID's 2-byte tag, which is
+not part of shared network mode.
 
-**The abstract residual gap.** An active attacker (Attacker B) who *terminates* one side's
-connection and runs the DH with the victim themselves receives that victim's
-key-confirmation HMAC, keyed under a DH secret the attacker knows. They can then test
-passwords *offline* against it. This is inherent to any password-authenticated exchange
-that is **not** a PAKE: someone must send their confirmation first, and the recipient of
-that first message gets an offline oracle. In a system with **long-term or reused**
-passwords this would matter — crack once, impersonate forever — and a formally-proven PAKE
-(SPAKE2, CPace) is what removes it, by limiting an active attacker to one *online* guess
-per connection. A PAKE is precisely what the CryptoKit-only constraint excludes.
+*Why not drop discovery authentication entirely?* Considered and rejected. It would not
+remove the passive oracle — `NNpsk0` message 1 carries the same PSK-keyed tag in every
+recorded transfer regardless (below); it would only shrink the *live* oracle window from
+minutes (announcements start once the receiver has the password) to milliseconds (message
+1 immediately precedes handshake completion). Nor does the HMAC gate online guessing: the
+receiver's TCP port accepts direct connections from anyone, and Noise limits any connector
+to one online guess either way. What the HMAC actually buys is **peer selection**:
+the sender connects only to the machine that provably holds the password, so concurrent
+transfers on one LAN can't cross-connect and mutually fail, and an in-LAN mischief-maker
+can't answer discovery first to make every transfer die at the handshake. That reliability
+is worth a PBKDF2-hardened oracle window measured in minutes against a crack measured in
+GPU-years.
+
+**The residual gap: the wire carries PBKDF2-hardened password oracles.** The §4–§6
+conceptual design had the property that a *passive* observer gets no oracle at all — the
+first password-dependent value there is keyed under `dh`, which they can't compute. The
+implemented `NNpsk0` pattern does **not** have that property. Per the Noise spec (§9.1),
+in `psk` handshake patterns the `e` token additionally calls `MixKey(e.public_key)`, so
+the initiator's first message — 32-byte ephemeral plus a 16-byte AEAD tag over an empty
+payload — is keyed by a function of (protocol name, prologue, PSK, e.pub): everything
+public except the PSK. A passive eavesdropper who records message 1 can test passwords
+offline: PBKDF2(guess) → run the key schedule → check the tag. The discovery announcement
+gives the same oracle even earlier (above). And an active attacker (Attacker B) who
+*terminates* one side's connection gets the equivalent oracle from the victim's handshake
+message — this last one is inherent to any password-authenticated exchange that is **not**
+a PAKE: someone must send a password-dependent message first, and its recipient gets an
+offline oracle. Every one of these oracles costs the same — one 600k-iteration PBKDF2 per
+guess, ~centuries of GPU time over the ~2⁴⁷ space. In a system with **long-term or
+reused** passwords the oracle would still matter — crack once (however slowly),
+impersonate forever — and a formally-proven PAKE (SPAKE2, CPace) is what removes it, by
+limiting even an active attacker to one *online* guess per connection with nothing
+crackable ever hitting the wire. A PAKE is precisely what the CryptoKit-only constraint
+excludes.
 
 **Why it has no operational payoff in Flying Carpet.** Two properties of this specific
 design neutralize the gap:
@@ -296,16 +330,17 @@ design neutralize the gap:
    predicts nothing (CSPRNG output doesn't leak future outputs). The "crack once,
    impersonate later" payoff requires the reuse this design doesn't have.
 
-2. **Oracle and ciphertext are mutually exclusive for a given transfer.** To obtain the
-   offline oracle, the attacker must **terminate** the victim's connection and do their own
-   DH — which means the transfer aborts at key confirmation, *before any file data or even
-   any metadata record is sent.* They get one MAC and nothing else — no file, no filenames,
-   no sizes. To obtain the actual ciphertext of a *completed* transfer, the attacker must
-   instead **transparently relay** the two real endpoints' messages — but then the session
-   key comes from the genuine endpoint-to-endpoint DH secret, which they cannot compute
-   (the same CDH wall the passive attacker hits), so there is no crackable oracle. Getting
-   the oracle costs them the data; getting the data costs them the oracle. For
-   confidentiality, the active attacker is no better off than the passive one.
+2. **A cracked password never decrypts recorded traffic.** A recorded session *does*
+   contain the oracle — message 1's tag rides in every taped transfer — so an attacker
+   can, in principle, spend the GPU-centuries and recover the password of a transfer they
+   recorded. It buys nothing retroactive: the transport keys also depend on the ephemeral
+   `ee` DH secret, which no amount of password knowledge reveals (the same CDH wall the
+   passive attacker hits — this is forward secrecy doing its job). A recovered password is
+   only useful *prospectively*: impersonating an endpoint of, or MITMing, a handshake that
+   hasn't happened yet. So the crack would have to finish inside the password's live
+   window — from first discovery broadcast to handshake completion, seconds to minutes —
+   against a cost of years-to-centuries of GPU time. Outside that window, the single-use
+   password authenticates nothing, decrypts nothing, and predicts nothing.
 
 **Net.** Against every attacker this design actually faces — passive eavesdropper, and
 active LAN attacker who intercepts a live transfer — cracking the recovered password yields
@@ -347,9 +382,12 @@ implemented way. The `NNpsk0` pattern (both sides ephemeral-only, a PSK folded i
 start) is essentially §4–§6 of this document, formalized. Feed `pw_material` in as the
 Noise PSK.
 
-Why this matters: Noise's security profile with a low-entropy PSK is **the same** as our
-hand-rolled construction — passive-safe, active-attacker offline-crackable (a PSK-Noise
-pattern is not a PAKE) — so we lose nothing on security, but we gain a specified,
+Why this matters: Noise's security profile with a low-entropy PSK is **nearly the same** as
+our hand-rolled construction — not a PAKE, so the password is offline-crackable at PBKDF2
+cost. The one difference: `NNpsk0` exposes that oracle to a *passive* observer via the
+first message's AEAD tag, where the §4–§6 construction keyed everything checkable under
+`dh` (§7) — a difference with no operational impact given the crack economics. In exchange
+we gain a specified,
 peer-reviewed recipe for the mechanics that are easy to get subtly wrong (transcript
 binding, nonce counters, key separation).
 
@@ -415,6 +453,12 @@ Noise spec and the protocol name. What each platform must still pin identically:
   desired property: mismatch ⇒ handshake abort.
 - **PSK derivation:** `PBKDF2-HMAC-SHA256(password_utf8, salt, iters) → 32 bytes`, with
   `salt = b"Flying Carpet v10 shared network PSK"` and `iters = 600000`.
+- **Discovery HMAC key:** `discovery_key = HMAC-SHA256(key = psk, data = b"Flying Carpet
+  v10 discovery")` — derived from the stretched PSK (never from a fast hash of the
+  password; §7, §10), with a fixed label for domain separation so the Noise PSK itself is
+  never used outside the handshake. The PSK is derived once, when the password becomes
+  known and *before discovery starts*, and reused for the handshake. Implemented as
+  `derive_discovery_key` / `deriveDiscoveryKey` next to each PSK derivation.
 - **Record framing:** each Noise message is prefixed by its length as a **2-byte
   big-endian** integer (`u16`), tag appended (not prepended). 2 bytes, not 4, because
   Noise caps messages at 65535 bytes; the same framing is used for the two handshake
@@ -444,6 +488,8 @@ deterministic.
 
 - PSK for password `"flyingcarpet"`:
   `a3d8b7f17f2252e4c2847a365ab2f392beaa996b7e51dd6fa19ff1ad08938619`
+- Discovery HMAC key for that PSK:
+  `45e49b632788b21069bf48720d6af230ecbd936b3cb16c898a8e1eac51944112`
 
 With fixed PSK = `2a`×32, initiator ephemeral private = `01`×32, responder ephemeral
 private = `02`×32, **empty prologue**:
@@ -502,17 +548,20 @@ handshake message, a mismatched password, and a mismatched prologue must all fai
   ships in v10 (the first Noise version) because that is the only point at which it can
   close the future downgrade window (§7).
 - **No v9 compatibility.** v10 is a clean break; a v9 peer is rejected with a clear message.
-- **Discovery unchanged for now — but note it's a fast password oracle.** Still
-  `HMAC(SHA256(password), announcement)`. The packet reveals only presence/IP, but because
-  it's a *fast* HMAC over the password, a passive eavesdropper can offline-crack the
-  password from a single captured announcement (§7). That recovered password is defanged by
-  forward secrecy (it can't decrypt any Noise transfer) and single-use (it's dead before the
-  crack finishes), so data security is intact — but the clean "passive learns nothing" claim
-  needs this asterisk. Now that Noise is the real authenticator, the discovery HMAC is
-  essentially just a coarse rendezvous filter; the proper fix (future work) is to stop
-  leaking a fast oracle — either derive the discovery HMAC key with PBKDF2 too, or drop
-  discovery authentication entirely and let the Noise handshake be the sole gate (a wrong
-  password already fails the handshake). Out of scope for the port work.
+- **Discovery HMAC keyed from the stretched PSK** (originally shipped as
+  `HMAC(SHA256(password), announcement)`, fixed within v10 before release). The fast-hash
+  key made a single captured announcement a cheap offline oracle — crackable within the
+  password's live window by a resourced attacker, enabling a real MITM (§7). The
+  announcement is now signed with `derive_discovery_key(psk)` (§9), so every oracle
+  anywhere in the protocol costs 600k PBKDF2 iterations per guess. Wire-format unchanged
+  (same 93 bytes); old and new builds simply never discover each other, which is fine
+  within the unreleased v10. `SHA256(password)` now survives *only* for the hotspot SSID.
+  **Discovery stays authenticated** — dropping the HMAC (no oracle from announcements) was
+  considered and rejected: the handshake's message-1 oracle remains regardless, and the
+  HMAC is what gives correct peer selection on a shared LAN (§7). Random per-device names
+  as the selection mechanism, with the password as a separate secret, were likewise
+  rejected: unauthenticated names are spoofable, so they'd need either the same
+  password-derived MAC or a manual verify-the-name step.
 
 **Version bump — already implemented** (the only code landed ahead of the Noise work):
 
@@ -655,7 +704,11 @@ Windows↔Android over both hotspot and shared network — before the prologue b
 first post-binding live transfer re-confirms it.** Still to do: the rest of the live
 matrix (add macOS / iOS × sender / receiver, and Linux), a per-file size larger than one
 record end-to-end, and the wrong-password / version-mismatch user-facing paths. The old
-cleartext per-chunk AES is already removed on all three platforms.
+cleartext per-chunk AES is already removed on all three platforms. The PSK-derived
+discovery key (§9) is implemented in Rust and Android (with the shared KAT); the Apple
+repo must mirror it — `deriveDiscoveryKey` via CryptoKit `HMAC<SHA256>`, PSK derived once
+at password time (off the main thread) and fed to both discovery and the handshake —
+before any v10 release, since the key change is a silent discovery-compat break.
 
 ### Open items — resolved
 - **PBKDF2 salt** → **fixed domain string** `b"Flying Carpet v10 shared network PSK"`. The
@@ -681,7 +734,8 @@ cleartext per-chunk AES is already removed on all three platforms.
    CryptoKit hand-roll → full matrix.
 6. Version is already bumped to a clean-break v10 with mismatch messaging (§10); ship Noise
    *within* v10 (or bump to v11 if v10 releases first).
-7. Know exactly what you're shipping (§7): passive eavesdroppers fully defeated; the active
-   attacker's offline oracle is neutralized by single-use passwords, so this is effectively
-   as strong as a PAKE would be *for this design* — provided passwords stay single-use and
-   CSPRNG-generated.
+7. Know exactly what you're shipping (§7): eavesdroppers read nothing, but both passive and
+   active attackers hold a PBKDF2-hardened offline password oracle (discovery announcement
+   and first handshake message). It is neutralized by crack cost ≫ single-use password
+   lifetime plus forward secrecy, so this is effectively as strong as a PAKE would be *for
+   this design* — provided passwords stay single-use and CSPRNG-generated.

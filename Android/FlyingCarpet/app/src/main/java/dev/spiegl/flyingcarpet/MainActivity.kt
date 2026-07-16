@@ -190,13 +190,10 @@ class MainActivity : AppCompatActivity() {
                 if (ssidAndPassword.count() > 1) {
                     viewModel.ssid = ssidAndPassword[0]
                     viewModel.password = ssidAndPassword[1]
-                    val (_, key) = getSsidAndKey(viewModel.password)
-                    viewModel.key = key
                 } else {
                     viewModel.password = ssidAndPassword[0]
-                    val (ssid, key) = getSsidAndKey(viewModel.password)
+                    val (ssid, _) = getSsidAndKey(viewModel.password)
                     viewModel.ssid = ssid
-                    viewModel.key = key
                 }
                 // join hotspot
                 viewModel.joinHotspot()

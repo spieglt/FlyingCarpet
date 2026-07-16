@@ -72,6 +72,16 @@ class NoiseUnitTest {
         )
     }
 
+    // Cross-platform known-answer for the discovery HMAC key (must match Rust's
+    // derive_discovery_key): HMAC-SHA256 keyed by the PSK over the DISCOVERY_INFO label.
+    @Test
+    fun discoveryKeyKnownAnswer() {
+        assertEquals(
+            "45e49b632788b21069bf48720d6af230ecbd936b3cb16c898a8e1eac51944112",
+            toHex(deriveDiscoveryKey(derivePsk("flyingcarpet"))),
+        )
+    }
+
     // App-parameter known-answer (empty prologue, fixed PSK/ephemerals) matching the Rust
     // reference's handshake_known_answer (docs §9): confirms our exact usage produces
     // identical bytes across implementations.

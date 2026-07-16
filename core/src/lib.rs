@@ -230,7 +230,13 @@ pub async fn start_transfer<T: UI>(
             return None;
         }
     };
-    let (key, ssid) = get_key_and_ssid(&password);
+    let (_, ssid) = get_key_and_ssid(&password);
+
+    // Derive the Noise PSK once, up front: the handshake needs it, and in shared network
+    // mode the discovery HMAC key is derived from it too (see noise::derive_discovery_key)
+    // so that no fast hash of the password ever goes on the air. Same PBKDF2 cost as
+    // before — it previously ran inside the handshake — just moved before discovery.
+    let psk = noise::derive_psk(&password);
 
     {
         let mut _state_ssid = state_ssid.lock().expect("Couldn't lock state_ssid");
@@ -246,7 +252,14 @@ pub async fn start_transfer<T: UI>(
             // Shared Network Mode: Use discovery to find peer on existing network. Both
             // sides are labeled WifiClient, so the role comes from send/receive: the sender
             // is the TCP client (initiator), the receiver is the TCP server (responder).
-            match start_shared_network_transfer(&mode, &key, &interface, ui).await {
+            match start_shared_network_transfer(
+                &mode,
+                &noise::derive_discovery_key(&psk),
+                &interface,
+                ui,
+            )
+            .await
+            {
                 Ok((resource, tcp)) => {
                     let role = if matches!(mode, Mode::Send(_)) {
                         noise::Role::Initiator
@@ -274,13 +287,13 @@ pub async fn start_transfer<T: UI>(
                 }
             };
 
-            // start hotspot or connect to peer's. Clone the password: it's still needed for
-            // the Noise handshake after connecting.
+            // start hotspot or connect to peer's (the Noise handshake below uses the
+            // already-derived PSK, not the password itself)
             let peer_resource = match network::connect_to_peer(
                 peer,
                 mode.clone(),
                 ssid,
-                password.clone(),
+                password,
                 interface,
                 ui,
             )
@@ -364,7 +377,7 @@ pub async fn start_transfer<T: UI>(
         noise::Role::Responder => noise::build_prologue(&received, &sent),
     };
     ui.output("Establishing encrypted connection...");
-    let mut stream = match noise::handshake(tcp, noise_role, &password, &prologue).await {
+    let mut stream = match noise::handshake(tcp, noise_role, &psk, &prologue).await {
         Ok(enc) => {
             ui.output("Encrypted connection established.");
             TransferStream::Encrypted(Box::new(enc))
@@ -520,7 +533,7 @@ async fn start_tcp<T: UI>(peer_resource: &PeerResource, ui: &T) -> Result<TcpStr
 
 async fn start_shared_network_transfer<T: UI>(
     mode: &Mode,
-    key: &[u8; 32],
+    discovery_key: &[u8; 32],
     interface: &WiFiInterface,
     ui: &T,
 ) -> Result<(PeerResource, TcpStream), FCError> {
@@ -554,7 +567,7 @@ async fn start_shared_network_transfer<T: UI>(
     };
 
     // Create discovery service
-    let discovery = DiscoveryService::new(*key, mode, local_ip, prefix_len);
+    let discovery = DiscoveryService::new(*discovery_key, mode, local_ip, prefix_len);
 
     let (peer_ip, stream) = match role {
         DiscoveryRole::Receiver => {
@@ -777,7 +790,7 @@ mod transfer_tests {
         let data: Vec<u8> = (0..200_000u32).map(|i| (i % 253) as u8).collect();
         std::fs::write(&src, &data).unwrap();
 
-        let password = "correct horse battery staple";
+        let psk = noise::derive_psk("correct horse battery staple");
         // both sides bind the same preamble transcript, as the real flow does
         let prologue = noise::build_prologue(
             &[0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 1],
@@ -791,7 +804,7 @@ mod transfer_tests {
         let recv_dir2 = recv_dir.clone();
 
         let sender = tokio::spawn(async move {
-            let mut enc = handshake(a, Role::Initiator, password, &prologue)
+            let mut enc = handshake(a, Role::Initiator, &psk, &prologue)
                 .await
                 .unwrap();
             enc.write_u64(1).await.unwrap(); // file count, as the orchestrator does
@@ -801,7 +814,7 @@ mod transfer_tests {
             enc.flush().await.unwrap();
         });
         let receiver = tokio::spawn(async move {
-            let mut enc = handshake(b, Role::Responder, password, &prologue2)
+            let mut enc = handshake(b, Role::Responder, &psk, &prologue2)
                 .await
                 .unwrap();
             let count = enc.read_u64().await.unwrap();
