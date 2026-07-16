@@ -1,3 +1,31 @@
+//! Bluetooth central (receiving) side of the transfer negotiation.
+//!
+//! # History: the macOS -> Linux Bluetooth failure
+//!
+//! Sending from macOS to Linux used to require manually pairing the two machines from the
+//! macOS side first. The root cause: when macOS acts as the BLE peripheral (Flying
+//! Carpet's sending side), it advertises with its public Bluetooth address and with
+//! advertisement flags declaring simultaneous LE and BR/EDR (classic Bluetooth) support —
+//! CoreBluetooth provides no way to change either. BlueZ counts every such advertisement
+//! as a sighting of *both* bearers (adapter.c update_found_devices), and when connecting
+//! to an unbonded dual-mode device, Device1.Connect() breaks the "most recently seen
+//! bearer" tie in favor of classic (device.c select_conn_bearer, verified in 5.72). So
+//! Linux always connected to the Mac over classic Bluetooth — which serves none of the
+//! app's GATT services — and the transfer failed to find the Flying Carpet
+//! characteristics. Explicit Device1.Pair() selects its bearer the same way, so pairing
+//! through BlueZ's API couldn't fix it (and a classic pairing makes it worse: SSP + CTKD
+//! leave a dual-transport bond, which still loses the tiebreak). iOS, Windows, and
+//! Android peripherals never hit any of this because they advertise with random
+//! addresses, which BlueZ only ever connects over LE. Manually pairing from the macOS
+//! side only "worked" by leaving behind bond state that happened to steer BlueZ to LE.
+//!
+//! The one rule that overrides the tiebreak: BlueZ prefers the bonded bearer when exactly
+//! one bearer is bonded. So the fix (in find_characteristics below) is to create an
+//! LE-only bond ourselves before ever calling Connect(): open an LE L2CAP socket that
+//! requires high security, which makes the kernel run numeric-comparison SMP pairing
+//! (confirmation code on both devices, answered on ours by the agent registered in
+//! bluetooth.rs) on the LE link. Every later Connect() then dials LE.
+
 use bluer::{
     gatt::{
         remote::{Characteristic, CharacteristicWriteRequest},
