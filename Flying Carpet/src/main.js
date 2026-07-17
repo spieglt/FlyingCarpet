@@ -374,10 +374,10 @@ async function startTransfer(filesSelected) {
         return;
       }
       password = password.trim();
-      if (password.length >= 8) {
+      if (password.length >= 10) {
         break;
       }
-      promptMessage = 'Password must be at least 8 characters. Enter the password displayed on the receiving device:';
+      promptMessage = 'Password must be at least 10 characters. Enter the password displayed on the receiving device:';
     }
   }
 

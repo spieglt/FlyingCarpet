@@ -312,7 +312,11 @@ gives the same oracle even earlier (above). And an active attacker (Attacker B) 
 message — this last one is inherent to any password-authenticated exchange that is **not**
 a PAKE: someone must send a password-dependent message first, and its recipient gets an
 offline oracle. Every one of these oracles costs the same — one 600k-iteration PBKDF2 per
-guess, ~centuries of GPU time over the ~2⁴⁷ space. In a system with **long-term or
+guess, over a ~2⁵⁸ space (10 CSPRNG chars from a 57-symbol set): hundreds of thousands of
+GPU-years. The length also forecloses the one shortcut the fixed PBKDF2 salt (§9) leaves
+open in principle — a one-time precomputed table over the whole password space, reusable
+against every transfer — which at 2⁵⁸ is infeasible in both compute and storage (~exabytes).
+In a system with **long-term or
 reused** passwords the oracle would still matter — crack once (however slowly),
 impersonate forever — and a formally-proven PAKE (SPAKE2, CPace) is what removes it, by
 limiting even an active attacker to one *online* guess per connection with nothing

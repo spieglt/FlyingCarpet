@@ -399,8 +399,8 @@ class MainActivity : AppCompatActivity() {
             .setView(input)
             .setPositiveButton(getString(R.string.ok)) { _, _ ->
                 val entered = input.text.toString().trim()
-                if (entered.length < 8) {
-                    viewModel.outputText("Password must be at least 8 characters. Please start the transfer again.")
+                if (entered.length < 10) {
+                    viewModel.outputText("Password must be at least 10 characters. Please start the transfer again.")
                     viewModel.cleanUpTransfer()
                 } else {
                     viewModel.gotSharedNetworkPassword(entered)

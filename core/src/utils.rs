@@ -100,7 +100,10 @@ pub fn generate_password() -> String {
     let chars: Vec<char> = "23456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
         .chars()
         .collect();
-    const PASSWORD_LENGTH: usize = 8;
+    // 10 chars over the 57-symbol set ≈ 2^58: makes a precomputed PBKDF2 table over the
+    // whole password space (possible because the PSK salt is a fixed domain string)
+    // infeasible in both compute and storage. Must match Android and Apple.
+    const PASSWORD_LENGTH: usize = 10;
     let mut password: Vec<char> = vec!['\0'; PASSWORD_LENGTH];
     for i in 0..PASSWORD_LENGTH {
         let current_char_index = rng.gen_range(0..chars.len());

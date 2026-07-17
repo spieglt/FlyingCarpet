@@ -395,11 +395,13 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         return wired
     }
 
-    // same charset as the desktop version's generate_password()
+    // same charset and length as the desktop version's generate_password():
+    // 10 chars ≈ 2^58, so a precomputed PBKDF2 table over the whole password space
+    // (possible because the PSK salt is a fixed domain string) is infeasible.
     private fun generatePassword(): String {
         val chars = "23456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
         val random = SecureRandom()
-        return (1..8).map { chars[random.nextInt(chars.length)] }.joinToString("")
+        return (1..10).map { chars[random.nextInt(chars.length)] }.joinToString("")
     }
 
     // Retries for up to 30 seconds (matches the desktop and Apple implementations): the
