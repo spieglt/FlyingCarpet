@@ -51,6 +51,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bluetoothSwitch: SwitchCompat
     private lateinit var bluetoothIcon: ImageView
     private var bluetoothAvailable = false
+    // true when Bluetooth initialization failed only because runtime permissions are
+    // missing — recoverable by granting them, unlike missing hardware support. keeps the
+    // switch usable so tapping it can re-request permissions (#101)
+    private var bluetoothPermissionsMissing = false
     // remembers the bluetooth switch state while in shared network mode, which forces
     // it off; restored when the user returns to hotspot mode (mirrors the desktop UI)
     private var bluetoothCheckedBeforeShared: Boolean? = null
@@ -378,7 +382,9 @@ class MainActivity : AppCompatActivity() {
             peerGroup.isVisible = false
             peerInstruction.isVisible = false
         } else {
-            bluetoothSwitch.isEnabled = bluetoothAvailable
+            // usable if initialized, or if only permissions are missing (tapping the
+            // switch then re-requests them, #101)
+            bluetoothSwitch.isEnabled = bluetoothAvailable || bluetoothPermissionsMissing
             bluetoothCheckedBeforeShared?.let {
                 bluetoothSwitch.isChecked = bluetoothAvailable && it
                 bluetoothCheckedBeforeShared = null
@@ -491,7 +497,8 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<TextView>(id.aboutButton).isClickable = enabled
         findViewById<SwitchCompat>(id.bluetoothSwitch).isEnabled =
-            enabled && bluetoothAvailable && viewModel.connectionMode == ConnectionMode.Hotspot
+            enabled && (bluetoothAvailable || bluetoothPermissionsMissing) &&
+            viewModel.connectionMode == ConnectionMode.Hotspot
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -611,7 +618,8 @@ class MainActivity : AppCompatActivity() {
                 viewModel.outputText("Bluetooth permissions granted")
                 initializeBluetooth()
             } else {
-//                viewModel.outputText("To use Flying Carpet, either grant Bluetooth permissions to the app, or turn off the Use Bluetooth switch.")
+                // leave the switch enabled: tapping it re-requests permissions (#101)
+                viewModel.outputText("Bluetooth permissions denied. Tap the Bluetooth switch to grant them (or grant them in system Settings), or continue without Bluetooth.")
                 Log.e("Bluetooth", "To use Flying Carpet, either grant Bluetooth permissions to the app, or turn off the Use Bluetooth switch.")
                 bluetoothSwitch.isChecked = false
             }
@@ -623,6 +631,14 @@ class MainActivity : AppCompatActivity() {
         }
         bluetoothSwitch = findViewById(id.bluetoothSwitch)
         bluetoothSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked && !bluetoothAvailable) {
+                // user is turning Bluetooth on after a permission denial: retry
+                // initialization, which re-requests permissions if still missing (#101).
+                // uncheck first; initializeBluetooth() checks it on success.
+                bluetoothSwitch.isChecked = false
+                initializeBluetooth()
+                return@setOnCheckedChangeListener
+            }
             bluetoothIcon.isVisible = isChecked
             peerGroup.isVisible = !isChecked
             peerInstruction.isVisible = !isChecked
@@ -635,6 +651,10 @@ class MainActivity : AppCompatActivity() {
 
         if (initializeBluetooth()) {
             viewModel.outputText("Bluetooth initialized")
+        } else if (bluetoothPermissionsMissing) {
+            // a permission request is in flight; its callback re-runs
+            // initializeBluetooth() if granted. keep the switch enabled so the user
+            // can re-trigger the request by tapping it after a denial (#101).
         } else {
             viewModel.outputText("Device can't use Bluetooth")
             bluetoothSwitch.isChecked = false
@@ -642,12 +662,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // permissions may have been granted in system Settings while the app was in the
+        // background: recover the Bluetooth switch without requiring a restart (#101)
+        if (!bluetoothAvailable && bluetoothPermissionsMissing && checkForBluetoothPermissions()) {
+            initializeBluetooth()
+        }
+    }
+
     private fun initializeBluetooth(): Boolean {
         if (!checkForBluetoothPermissions()) {
             Log.e("Bluetooth", "Missing permissions")
+            bluetoothPermissionsMissing = true
+            bluetoothAvailable = false
+            viewModel.bluetooth.active = false
+            bluetoothSwitch.isChecked = false
+            applyConnectionModeUi()
             bluetoothRequestPermissionLauncher.launch(permissions)
             return false
         }
+        bluetoothPermissionsMissing = false
         var initialized = false
         try {
             val initializedPeripheral = viewModel.bluetooth.initializePeripheral(this)

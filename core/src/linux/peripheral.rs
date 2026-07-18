@@ -12,15 +12,45 @@ use bluer::{
         Application, ApplicationHandle, Characteristic, CharacteristicRead, CharacteristicWrite,
         CharacteristicWriteMethod, ReqError, Service,
     },
-    Uuid,
+    Adapter, Address, Uuid,
 };
 use futures::FutureExt;
 use tokio::sync::mpsc;
 
-fn get_os_characteristic(tx: mpsc::Sender<BluetoothMessage>) -> Characteristic {
+// Direction A (macOS central -> Linux peripheral): after the central bonds, mark it
+// trusted so BlueZ keeps the bond and can resolve macOS's rotating (RPA) address on
+// future transfers via the stored IRK — this is what stops the recurring CBError 14
+// "Peer removed pairing information" on the macOS side. The GATT request callbacks are
+// the precise place to do it: our characteristics require an encrypted link, so by the
+// time a request arrives the peer has bonded, and only our actual peer (never some
+// bystander device) touches the characteristics. Do NOT remove_device this peer on
+// cleanup.
+async fn trust_peer(adapter: &Adapter, address: Address) {
+    let device = match adapter.device(address) {
+        Ok(device) => device,
+        Err(e) => {
+            println!("Could not get device {} to mark it trusted: {}", address, e);
+            return;
+        }
+    };
+    if device.is_trusted().await.unwrap_or(false) {
+        return;
+    }
+    match device.set_trusted(true).await {
+        Ok(()) => println!(
+            "Marked {} trusted so BlueZ keeps the bond for future transfers",
+            address
+        ),
+        Err(e) => println!("Could not mark {} trusted: {}", address, e),
+    }
+}
+
+fn get_os_characteristic(adapter: Adapter, tx: mpsc::Sender<BluetoothMessage>) -> Characteristic {
     // when the OS characteristic is read, return the constant
     // when it's written to, return that to calling thread, so we need tx
     let write_tx = tx.clone();
+    let read_adapter = adapter.clone();
+    let write_adapter = adapter;
     Characteristic {
         uuid: Uuid::parse_str(OS_CHARACTERISTIC_UUID).unwrap(),
         read: Some(CharacteristicRead {
@@ -29,9 +59,11 @@ fn get_os_characteristic(tx: mpsc::Sender<BluetoothMessage>) -> Characteristic {
             // so this is a pub type CharacteristicReadFun = Box<dyn Fn(CharacteristicReadRequest) -> Pin<Box<dyn Future<Output = ReqResult<Vec<u8>>> + Send>> + Send + Sync>;
             // a box containing function, that takes a characteristicreadrequest, and returns a pin box containing an async future, that returns a byte vec
             fun: Box::new(move |req| {
+                let adapter = read_adapter.clone();
                 async move {
                     let value = OS.as_bytes().to_vec();
                     println!("Read request {:?} with value {:x?}", &req, &value);
+                    trust_peer(&adapter, req.device_address).await;
                     Ok(value)
                 }
                 .boxed()
@@ -45,8 +77,10 @@ fn get_os_characteristic(tx: mpsc::Sender<BluetoothMessage>) -> Characteristic {
             method: CharacteristicWriteMethod::Fun(Box::new(move |new_value, req| {
                 // let value = value_write.clone();
                 let thread_tx = write_tx.clone();
+                let adapter = write_adapter.clone();
                 async move {
                     println!("Write request {:?} with value {:x?}", &req, &new_value);
+                    trust_peer(&adapter, req.device_address).await;
                     let peer_os = String::from_utf8(new_value).expect("Peer OS was not UTF-8");
                     if thread_tx
                         .send(BluetoothMessage::PeerOS(peer_os))
@@ -175,29 +209,21 @@ fn get_password_characteristic(
     }
 }
 
+// Takes the adapter from negotiate_bluetooth's session (rather than opening its own)
+// so that the pairing agent registered there is on the same D-Bus connection that
+// serves this GATT application — the agent's lifetime then necessarily covers any
+// pairing triggered while advertising.
 pub(crate) async fn advertise(
+    adapter: &Adapter,
     tx: mpsc::Sender<BluetoothMessage>,
     ssid: &str,
     password: &str,
 ) -> bluer::Result<(ApplicationHandle, AdvertisementHandle)> {
     let service_uuid = Uuid::parse_str(SERVICE_UUID).unwrap();
-    let session = bluer::Session::new().await?;
-    let adapter = session.default_adapter().await?;
-    adapter.set_powered(true).await?;
     // Accept incoming pairing so a central (e.g. macOS) can bond to read our encrypted
     // characteristics. Combined with the agent registered in negotiate_bluetooth, this lets
     // pairing complete during the transfer instead of requiring a manual system pairing.
     adapter.set_pairable(true).await?;
-
-    // TODO(direction A — macOS central -> Linux peripheral): after the central bonds, mark
-    // that device trusted so BlueZ persists the bond and resolves macOS's rotating (RPA)
-    // address on future transfers via the stored IRK — this is what stops the recurring
-    // CBError 14 "Peer removed pairing information" on the macOS side. We don't yet know the
-    // peer's address here; watch `adapter.events()` for the connecting device (DeviceAdded /
-    // property change to Connected) in a spawned task and call `device.set_trusted(true)`,
-    // then drop the task when advertising stops. Also confirm bonding uses LE Secure
-    // Connections (needed for IRK exchange / RPA resolution); it should by default on modern
-    // adapters. Do NOT remove_device this peer on cleanup.
 
     println!(
         "Advertising on Bluetooth adapter {} with address {}",
@@ -218,7 +244,7 @@ pub(crate) async fn advertise(
     );
 
     let characteristics = vec![
-        get_os_characteristic(tx.clone()),
+        get_os_characteristic(adapter.clone(), tx.clone()),
         get_ssid_characteristic(tx.clone(), ssid.to_string()),
         get_password_characteristic(tx, password.to_string()),
     ];

@@ -20,7 +20,6 @@ use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     pin::Pin,
-    str::FromStr,
     sync::{Arc, Mutex},
     task::{Context, Poll},
 };
@@ -185,18 +184,28 @@ pub async fn start_transfer<T: UI>(
     connection_mode: ConnectionMode,
 ) -> Option<TransferStream> {
     // get files or receive directory
+    // don't panic on bad input: a panic here kills the transfer task without running
+    // cleanup, which is how the UI used to get stuck in its in-progress state (#118)
     let mode = if mode == "send" {
-        let paths = file_list
-            .expect("Send mode selected but no files present.")
-            .iter()
-            .map(|p| PathBuf::from_str(p).expect("Bad filename string."))
-            .collect();
+        let paths = match file_list {
+            Some(files) => files.into_iter().map(PathBuf::from).collect(),
+            None => {
+                ui.output("Error: send mode selected but no files were chosen.");
+                return None;
+            }
+        };
         Mode::Send(paths)
     } else if mode == "receive" {
-        let folder = receive_dir.expect("Receive mode selected but no folder present.");
-        Mode::Receive(PathBuf::from_str(&folder).expect("Bad folder string"))
+        match receive_dir {
+            Some(folder) => Mode::Receive(PathBuf::from(folder)),
+            None => {
+                ui.output("Error: receive mode selected but no destination folder was chosen.");
+                return None;
+            }
+        }
     } else {
-        panic!("Bad mode: {}", mode);
+        ui.output(&format!("Error: bad mode: {}", mode));
+        return None;
     };
 
     // if bluetooth, make that connection here first

@@ -126,10 +126,9 @@ pub async fn negotiate_bluetooth<T: UI>(
 
     // Register our pairing agent for the whole transfer so pairing can complete without a
     // manual system-menu pairing. Held via _agent_handle until this function returns.
-    // NOTE: peripheral::advertise() opens its *own* bluer Session; BlueZ agents are global
-    // to bluetoothd, so this one still handles pairing during advertising as long as this
-    // handle (and its session) outlive the pairing. TODO(verify): confirm that holds in
-    // practice, or register the agent on the advertise session too / consolidate sessions.
+    // peripheral::advertise() is handed this session's adapter, so the agent lives on the
+    // same D-Bus connection that serves the GATT application and is guaranteed to handle
+    // any pairing triggered while advertising.
     // Bluetooth event channel: the GATT characteristic callbacks (peripheral mode) and the
     // pairing agent's rejection path both send into it.
     let (bt_tx, bt_rx) = mpsc::channel(1);
@@ -172,7 +171,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         let mut rx = bt_rx;
         let mut password = generate_password();
         let (_, mut ssid) = get_key_and_ssid(&password);
-        let (app_handle, adv_handle) = peripheral::advertise(tx, &ssid, &password).await?;
+        let (app_handle, adv_handle) = peripheral::advertise(&adapter, tx, &ssid, &password).await?;
         ui.output("Started Bluetooth advertisement, waiting for receiving device...");
         let peer_os =
             match process_bluetooth_message(BluetoothMessage::PeerOS("".to_string()), &mut rx, ui)

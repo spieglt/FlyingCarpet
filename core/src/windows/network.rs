@@ -121,6 +121,10 @@ unsafe fn first_usable_ipv4(
     None
 }
 
+// shown when the adapter/driver can't host a hotspot (#115): point the user at the
+// fallback that doesn't require one
+const WIFI_DIRECT_FAILURE_HINT: &str = "This usually means your Wi-Fi adapter or its driver doesn't support hosting a hotspot. Try Shared Network mode instead: connect both devices to the same network and select \"Shared Network\" on each.";
+
 fn start_wifi_direct<T: UI>(ssid: &str, password: &str, ui: &T) -> Result<WindowsHotspot, FCError> {
     // Make channels to receive messages from Windows Runtime
     let (message_tx, message_rx) = mpsc::channel::<String>();
@@ -130,7 +134,7 @@ fn start_wifi_direct<T: UI>(ssid: &str, password: &str, ui: &T) -> Result<Window
     {
         Ok(hn) => hn,
         Err(e) => Err(FCError {
-            message: e.to_string(),
+            message: format!("{} {}", e, WIFI_DIRECT_FAILURE_HINT),
         })?,
     };
 
@@ -156,7 +160,7 @@ fn start_wifi_direct<T: UI>(ssid: &str, password: &str, ui: &T) -> Result<Window
         })
     } else {
         Err(FCError {
-            message: "Failed to start WiFi Direct AP".to_string(),
+            message: format!("Failed to start WiFi Direct AP. {}", WIFI_DIRECT_FAILURE_HINT),
         })
     }
 }

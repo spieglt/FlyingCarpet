@@ -103,6 +103,40 @@ fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), FCEr
     Ok(())
 }
 
+// Deletes leftover flyingCarpet_* NetworkManager connections from previous runs that
+// crashed or were killed before stop_hotspot() could run (#51). Both hosting and
+// joining create a connection named after the SSID, which is always "flyingCarpet_"
+// plus 4 hex characters, so anything with that prefix is ours. Returns the names of
+// the connections deleted.
+pub fn cleanup_stale_connections() -> Result<Vec<String>, FCError> {
+    let output = run_command(
+        "nmcli",
+        Some(vec!["-t", "-f", "NAME,TYPE", "connection", "show"]),
+    )?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        fc_error(&format!(
+            "Could not list NetworkManager connections: {}",
+            stderr
+        ))?;
+    }
+    let mut deleted = vec![];
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        // terse format is NAME:TYPE; the name can't contain a colon (nmcli escapes
+        // them, and ours never do), so split on the last one
+        let Some((name, connection_type)) = line.rsplit_once(':') else {
+            continue;
+        };
+        if connection_type == "802-11-wireless" && name.starts_with("flyingCarpet_") {
+            let delete = run_command("nmcli", Some(vec!["connection", "delete", name]))?;
+            if delete.status.success() {
+                deleted.push(name.to_string());
+            }
+        }
+    }
+    Ok(deleted)
+}
+
 pub fn stop_hotspot(
     _peer_resource: Option<&PeerResource>,
     ssid: Option<&str>,

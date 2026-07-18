@@ -78,6 +78,25 @@ impl UI for GUI {
     }
 }
 
+// Re-enables the frontend when dropped, which happens whether the transfer task
+// completes, errors, panics, or is aborted by cancellation. Without this, a panic in
+// the transfer task would leave the UI locked in its in-progress state forever.
+struct EnableUiGuard {
+    gui: GUI,
+}
+
+impl Drop for EnableUiGuard {
+    fn drop(&mut self) {
+        // Don't panic inside drop (a double panic aborts the process): tolerate a
+        // poisoned mutex and ignore emit errors.
+        let window = match self.gui.window.lock() {
+            Ok(window) => window,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let _ = window.emit("enableUi", Progress { value: 0 });
+    }
+}
+
 #[tauri::command]
 fn cancel_transfer(window: Window, state: State<Transfer>) -> String {
     let mut message = String::new();
@@ -147,6 +166,7 @@ fn start_async(
     };
 
     let cancel_handle = tokio::spawn(async move {
+        let _enable_ui_guard = EnableUiGuard { gui: gui.clone() };
         let stream: Option<flying_carpet_core::TransferStream> = start_transfer(
             mode,
             using_bluetooth,
@@ -172,11 +192,44 @@ fn start_async(
 
 #[tokio::main]
 async fn main() {
+    // remove hotspot connections left in NetworkManager by previous runs that were
+    // killed before cleanup could run (#51)
+    #[cfg(target_os = "linux")]
+    match network::cleanup_stale_connections() {
+        Ok(deleted) => {
+            for name in deleted {
+                println!("Removed stale NetworkManager connection: {}", name);
+            }
+        }
+        Err(e) => println!("Could not clean up stale NetworkManager connections: {}", e),
+    }
+
     tauri::async_runtime::set(tokio::runtime::Handle::current());
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_os::init())
         .manage(Transfer::new())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // best-effort cleanup when the app is closed mid-transfer (#51):
+                // abort the transfer task and tear down the hotspot so its
+                // NetworkManager connection doesn't linger
+                use tauri::Manager;
+                let state: State<Transfer> = window.state();
+                if let Ok(mut cancel_handle) = state.cancel_handle.lock() {
+                    if let Some(handle) = cancel_handle.take() {
+                        handle.abort();
+                    }
+                }
+                let (hotspot, ssid) = (state.hotspot.clone(), state.ssid.clone());
+                if let (Ok(hotspot), Ok(ssid)) = (hotspot.lock(), ssid.lock()) {
+                    match network::stop_hotspot(hotspot.as_ref(), ssid.as_deref()) {
+                        Err(e) => println!("Error stopping hotspot: {}", e),
+                        Ok(msg) => println!("{}", msg),
+                    }
+                };
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             start_async,
             cancel_transfer,
