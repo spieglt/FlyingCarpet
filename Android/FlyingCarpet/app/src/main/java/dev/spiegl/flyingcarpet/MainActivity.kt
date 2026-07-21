@@ -279,6 +279,8 @@ class MainActivity : AppCompatActivity() {
             // register that the transfer is running. this is needed so that if the hotspot is kicked off, then the cancel button is hit,
             // the hotspot onStarted callback can bail out.
             viewModel.transferIsRunning = true
+            // clear any hotspot flag left over from a previous transfer so this one can start one
+            viewModel.hotspotRunning = false
 
             // disable UI elements while transfer is running
             toggleUI(false)

@@ -1,1 +1,8 @@
 Flying[[:space:]]Carpet/src/deps/*  linguist-vendored=false
+
+# The Tauri CLI re-serializes this manifest on every `tauri dev`/`build` (it syncs
+# the `tauri` dependency's features with tauri.conf.json) and always writes LF.
+# On Windows core.autocrlf=true checks it out as CRLF, so the file flips back to
+# LF seconds later and git reports it permanently modified with an empty diff.
+# Pinning it to LF keeps git and the Tauri CLI in agreement.
+Flying[[:space:]]Carpet/src-tauri/Cargo.toml  text eol=lf

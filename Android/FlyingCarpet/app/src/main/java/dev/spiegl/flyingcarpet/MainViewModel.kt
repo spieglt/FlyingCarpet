@@ -438,14 +438,19 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         override fun onStarted(res: WifiManager.LocalOnlyHotspotReservation?) {
             super.onStarted(res)
 
-            // set flag so we know not to start this twice
-            hotspotRunning = true
-
-            // check for cancellation
+            // check for cancellation. if the transfer finished or was cancelled before this
+            // callback arrived, tear the hotspot back down and leave hotspotRunning false so the
+            // next transfer can start one. this must come before setting hotspotRunning: a stray
+            // start (e.g. a leftover BT connection re-driving connectToPeer after a completed
+            // transfer) otherwise stuck the flag true and made the next real startHotspot() log
+            // "hotspot already running" and hang.
             if (!transferIsRunning) {
                 res?.close()
                 return
             }
+
+            // set flag so we know not to start this twice
+            hotspotRunning = true
 
             if (res != null) {
                 reservation = res

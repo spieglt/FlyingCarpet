@@ -78,20 +78,27 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             return
         }
         _status.postValue(false)
-        // central
+        // central: disconnect AND close the client connection. Nulling the reference alone
+        // left the underlying BluetoothGatt connected with its callback registered, so it
+        // would reconnect and re-run the whole OS exchange (connect -> discover -> write OS
+        // -> connectToPeer -> startHotspot) after the transfer had ended.
         if (this::bluetoothLeScanner.isInitialized) {
             bluetoothLeScanner.stopScan(leScanCallback)
         }
+        bluetoothReceiver.bluetoothGatt?.disconnect()
+        bluetoothReceiver.bluetoothGatt?.close()
         bluetoothReceiver.bluetoothGatt = null
         // peripheral
         if (this::bluetoothManager.isInitialized) {
             bluetoothManager.adapter.bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
         }
-        // this prevents android from sending twice? but disabling it leaves it advertising or offering services even after the stopAdvertising() above?
-        // need to clear services and replace between transfers?
-        // bluetoothGattServer.close()
+        // Close the GATT server, not just clearServices(): an open server stays connectable
+        // between transfers, so a peer (e.g. iOS starting its next transfer before this
+        // device does) can reconnect and drive the exchange again. Reopen a fresh server so
+        // the next transfer is ready with no client connections carried over. initializePeripheral
+        // closes the old server before opening the new one and re-adds the service.
         if (this::bluetoothGattServer.isInitialized) {
-            bluetoothGattServer.clearServices()
+            initializePeripheral(application)
         }
     }
 
@@ -105,6 +112,12 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         }
         if (bluetoothManager.adapter == null) {
             return false
+        }
+
+        // close any server from a previous transfer (or a previous onResume) before opening
+        // a new one, so servers and their attached client connections don't accumulate
+        if (this::bluetoothGattServer.isInitialized) {
+            bluetoothGattServer.close()
         }
 
         // open server, create service
