@@ -316,10 +316,16 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
                 psk = derivePsk(password)
                 findPeerOnSharedNetwork()
                 startTransfer()
+            } catch (e: CancellationException) {
+                // cancelling the transfer (e.g. the Cancel button) is not an error; don't
+                // report it. Rethrow so cancellation propagates instead of being swallowed.
+                throw e
             } catch (e: Exception) {
                 outputText("Transfer error: ${e.message}\n")
+            } finally {
+                // runs on success, error, and cancellation alike
+                finishTransfer()
             }
-            finishTransfer()
         }
     }
 
@@ -362,6 +368,11 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             discoveryJob = GlobalScope.launch(Dispatchers.IO) {
                 try {
                     discovery.discoverPeer()
+                } catch (e: CancellationException) {
+                    // expected: startTransfer() cancels this job once the sender's TCP
+                    // connection arrives (and cleanUpTransfer() cancels it on teardown).
+                    // Not an error, so don't surface it. Rethrow so cancellation propagates.
+                    throw e
                 } catch (e: Exception) {
                     outputText("Discovery error: ${e.message}")
                 }
@@ -499,10 +510,16 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             transferCoroutine = GlobalScope.launch {
                 try {
                     startTransfer()
+                } catch (e: CancellationException) {
+                    // cancelling the transfer is not an error; rethrow so cancellation
+                    // propagates instead of being swallowed and reported.
+                    throw e
                 } catch (e: Exception) {
                     outputText("Transfer error: ${e.message}\n")
+                } finally {
+                    // runs on success, error, and cancellation alike
+                    finishTransfer()
                 }
-                finishTransfer()
             }
 
         }
