@@ -17,7 +17,7 @@ use windows::{
             GattServiceProviderAdvertisingParameters, GattWriteRequestedEventArgs,
         },
     },
-    Foundation::TypedEventHandler,
+    Foundation::{EventRegistrationToken, TypedEventHandler},
     Storage::Streams::DataWriter,
 };
 
@@ -29,6 +29,8 @@ type CharacteristicWriteHandler =
 pub(crate) struct BluetoothPeripheral {
     tx: mpsc::Sender<BluetoothMessage>,
     service_provider: GattServiceProvider,
+    // token for the AdvertisementStatusChanged handler, so stop_advertising() can remove it
+    advertisement_status_token: Option<EventRegistrationToken>,
     // ssid and password fields are set by main thread if we're hosting, so peer can read these.
     // if we're joining and peer is writing wifi info to us, we'll write those details back to
     // the main thread with tx.
@@ -51,6 +53,7 @@ impl BluetoothPeripheral {
         Ok(BluetoothPeripheral {
             tx,
             service_provider,
+            advertisement_status_token: None,
             ssid: Arc::new(Mutex::new(None)),
             password: Arc::new(Mutex::new(None)),
         })
@@ -302,11 +305,26 @@ impl BluetoothPeripheral {
             }
             Ok(())
         });
-        // TODO: save event registration token here, only used to deregister event later?
-        self.service_provider
+        // Keep the registration token so stop_advertising() can unsubscribe this handler.
+        let token = self
+            .service_provider
             .AdvertisementStatusChanged(&advertisement_status_changed_callback)?;
+        self.advertisement_status_token = Some(token);
         self.service_provider
             .StartAdvertisingWithParameters(&adv_parameters)?;
+        Ok(())
+    }
+
+    // Stop advertising and unsubscribe the status handler. WinRT does not document that
+    // releasing the GattServiceProvider stops advertising, and the system holds a reference
+    // to it to deliver GATT read/write requests, so dropping our reference may not bring the
+    // refcount to zero. Stop explicitly rather than relying on that.
+    pub fn stop_advertising(&mut self) -> Result<()> {
+        self.service_provider.StopAdvertising()?;
+        if let Some(token) = self.advertisement_status_token.take() {
+            self.service_provider
+                .RemoveAdvertisementStatusChanged(token)?;
+        }
         Ok(())
     }
 }

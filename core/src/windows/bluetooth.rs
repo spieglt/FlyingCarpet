@@ -97,7 +97,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         }
 
         let peer = Peer::try_from(peer_os.as_str())?;
-        if is_hosting(&peer, mode) {
+        let result = if is_hosting(&peer, mode) {
             let password = generate_password();
             let (_, ssid) = get_key_and_ssid(&password);
             {
@@ -111,7 +111,7 @@ pub async fn negotiate_bluetooth<T: UI>(
             process_bluetooth_message(BluetoothMessage::PeerReadSsid, &mut rx, ui).await?;
             println!("waiting for password to be read...");
             process_bluetooth_message(BluetoothMessage::PeerReadPassword, &mut rx, ui).await?;
-            Ok((peer_os, ssid.clone(), password))
+            (peer_os, ssid.clone(), password)
         } else {
             // if joining, receive writes
             // receive ssid
@@ -139,8 +139,12 @@ pub async fn negotiate_bluetooth<T: UI>(
             }
             // keep everything in scope until peer has had a chance to read the password
             time::sleep(time::Duration::from_secs(1)).await;
-            Ok((peer_os, peer_ssid, peer_password))
-        }
+            (peer_os, peer_ssid, peer_password)
+        };
+        // Done exchanging OS/SSID/password. Stop advertising explicitly; the connected
+        // central keeps its link, so this only stops new devices from discovering us.
+        peripheral.stop_advertising()?;
+        Ok(result)
     } else {
         // acting as central
         // scan for device advertising flying carpet service
