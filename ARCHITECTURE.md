@@ -171,10 +171,14 @@ This is consistent with same-platform hotspot mode, where the receiver always ho
 
 Consistent with hotspot mode: the receiver is always the "anchor" role (host in hotspot, server + password generator in shared network).
 
-The password derives both the HMAC key for discovery authentication and the AES key for file encryption.
+The password is stretched with PBKDF2-HMAC-SHA256 into the Noise pre-shared key (PSK); the discovery HMAC key is derived from that PSK, and the same PSK authenticates the Noise handshake that encrypts the whole transfer with ChaCha20-Poly1305. There is no separate password-derived AES key — the v10 inner per-chunk AES was removed and Noise is the sole cipher. See `docs/shared-network-crypto.md`.
 
 ### Bluetooth + Shared Network Mode
 
 The current BLE protocol is tightly coupled to the hotspot flow — it exchanges peer OS, SSID, and password, and uses `is_hosting()` to determine BLE data flow direction. In shared network mode, peer OS and SSID are irrelevant, and `is_hosting()` doesn't apply.
 
-**Status: Not yet supported.** Adapting the BLE protocol for shared network mode (exchanging only the password, with a fixed data flow convention like sender-peripheral-provides / receiver-central-reads) is a future enhancement.
+**Decision: Bluetooth is hotspot-only. Shared network mode exchanges the password manually (receiver displays it; sender types it or scans a QR code). This is deliberate, not a missing feature — do not re-add BLE to shared network mode.**
+
+Rationale. The only reason to want BLE in shared mode is to spare users from typing the password, and the users who most need that are **Apple-to-Apple** pairs: Apple devices cannot host a hotspot (no public API), so they are *forced* into shared network mode and always type. But two Apple devices cannot complete the BLE exchange at all. Apple does not support Bluetooth pairing between an iPhone and a Mac — by design; Continuity/AirDrop use BLE only for discovery and move data over Wi-Fi/AWDL, never forming a classic bond — and Flying Carpet's GATT characteristics all require an encrypted, bonded link (`.readEncryptionRequired` / `.writeEncryptionRequired`). No bond is possible, so the encryption-required characteristics can never be read: the exchange fails for exactly the pairing that motivates it.
+
+Every *other* pairing that could do BLE (non-Apple↔non-Apple, or Apple↔non-Apple) can also almost always use **hotspot mode** instead, where BLE already works. So the residual benefit of shared-mode BLE is a thin slice of transfers, bought at the cost of a new GATT flow across three codebases (Rust core, Android, Apple) plus manual-entry fallbacks. The Apple repo (`FlyingCarpetApple`) actually implemented shared-mode BLE in commit `4a6b889` and then removed it in `b7e9b59` for these reasons; this note records that conclusion for the desktop/Android side so it isn't rediscovered. If reducing password typing ever becomes a priority, improve the out-of-band password UX (QR) that works on every platform pair — not BLE.
