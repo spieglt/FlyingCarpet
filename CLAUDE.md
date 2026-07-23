@@ -11,6 +11,12 @@ Flying Carpet is split across two repositories that **must stay wire-compatible*
 
 When touching the protocol (discovery bytes, version/mode preamble, Noise handshake, framing), update **all three implementations** (Rust, Kotlin, Swift) and their cross-platform known-answer tests together. The Rust core is the reference the other two are tested against.
 
+### Where code lives vs. where binaries ship (don't conflate these)
+
+- **Code in this repo builds for Windows and Linux only.** `core/src/` has just `windows/` and `linux/`; `lib.rs` cfg-selects `network`/`bluetooth` on those two `target_os` values, and there is no `target_os = "macos"` anywhere in `core/`. A Tauri/`wry`/`webkit2gtk` change here therefore affects **two** desktop platforms, not three.
+- **But macOS and iOS binaries are released from this repo's Releases page**, even though their source is in `FlyingCarpetApple`. So `README.md` documenting a macOS `.dmg` download is **correct, not stale** — don't "fix" it, and don't infer from it that the Rust code targets macOS.
+- `tauri.conf.json` still lists `icons/icon.icns` — genuinely stale, intentionally left alone. Not evidence of macOS support either.
+
 ## Layout
 
 - `core/` — Rust core crate `flying-carpet-core` (v10). Platform-split: `core/src/{windows,linux}/` for network/bluetooth/peripheral/central; the `bluetooth` module is `cfg`-selected per-OS in `lib.rs`. Key files: `lib.rs` (`start_transfer` entry point), `discovery.rs`, `noise.rs`, `sending.rs`/`receiving.rs`.

@@ -944,7 +944,14 @@ mod test {
         // }
     }
 
+    // Manual test: adds real Windows Firewall rules via an elevated `netsh` (so it also
+    // raises a UAC prompt) and never removes them. The rule is named after the *test
+    // binary*, whose filename carries a build hash, so every rebuild that changes the
+    // dependency graph leaves behind a fresh pair of TCP/UDP rules to clean up by hand.
+    // Excluded from normal runs; run deliberately with
+    // `cargo test check_for_firewall_rule -- --ignored`.
     #[test]
+    #[ignore]
     fn check_for_firewall_rule() {
         let path = std::env::current_exe().unwrap();
         let path_string = path.to_string_lossy().to_string();

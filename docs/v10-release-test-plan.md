@@ -39,24 +39,24 @@ shared network**. Ideally have two Android and/or two desktops available for sam
 Cheapest, and catches the biggest current risk: **the Apple lifecycle changes have never
 been compiled.**
 
-- [ ] Android: `./gradlew assembleDebug` (and `lintDebug` — only the pre-existing
+- [x] Android: `./gradlew assembleDebug` (and `lintDebug` — only the pre-existing
       `MainActivity:94` MissingPermission finding is expected)
-- [ ] Rust core: `cargo build` for Windows and Linux; `cargo clippy` clean
-- [ ] Tauri desktop app builds on Windows, Linux, macOS (`cargo tauri build`)
-- [ ] **iOS builds in Xcode** (FlyingCarpetApple)
-- [ ] **macOS builds in Xcode** (FlyingCarpetApple)
-- [ ] Android unit tests pass: `NoiseUnitTest`, `DiscoveryUnitTest`
-- [ ] Rust unit tests pass: `cargo test` (incl. `official_noise_test_vector`,
+- [x] Rust core: `cargo build` for Windows and Linux; `cargo clippy` clean
+- [x] Tauri desktop app builds on Windows and Linux (`cargo tauri build`)
+- [x] **iOS builds in Xcode** (FlyingCarpetApple)
+- [x] **macOS builds in Xcode** (FlyingCarpetApple)
+- [x] Android unit tests pass: `NoiseUnitTest`, `DiscoveryUnitTest`
+- [x] Rust unit tests pass: `cargo test` (incl. `official_noise_test_vector`,
       `wrong_password_fails_handshake`, `tampering_is_detected`, `round_trip_small_and_large`)
-- [ ] Apple unit tests pass (Noise KATs, incl. cacophony vector + app KATs)
-- [ ] Both repos report the **same protocol version constant** (wire-compat check)
+- [x] Apple unit tests pass (Noise KATs, incl. cacophony vector + app KATs)
+- [x] Both repos report the **same protocol version constant** (wire-compat check)
 
 ---
 
 ## Tier 1 — Smoke (prove the pipeline, 2 transfers)
 
-- [ ] Shared network: iOS → Android (small file)
-- [ ] Hotspot: iOS → Android (small file)
+- [x] Shared network: iOS → Android (small file)
+- [x] Hotspot: iOS → Android (small file)
 
 ---
 
@@ -67,10 +67,10 @@ cycle covers each platform as **both** sender and receiver without testing every
 W=Windows, L=Linux, M=macOS, I=iOS, A=Android.
 
 ### Shared network — core cycle (each platform sends once, receives once)
-- [ ] W → L
-- [ ] L → M
-- [ ] M → I
-- [ ] I → A
+- [x] W → L
+- [x] L → M
+- [x] M → I
+- [x] I → A
 - [ ] A → W
 - [ ] I → M  (Apple ↔ Apple, the case that *requires* shared network)
 - [ ] M → M  or  A → A  (same-OS sanity, if a second device is available)
@@ -154,8 +154,8 @@ Each row has a specific repro that previously failed — test the repro, not jus
 
 ## Tier 6 — Robustness / edge cases
 
-- [ ] Multi-file transfer (2+ files)
-- [ ] Whole-folder transfer (nested; common-folder placement matches other platforms)
+- [x] Multi-file transfer (2+ files)
+- [x] Whole-folder transfer (nested; common-folder placement matches other platforms)
 - [ ] Large single file (> 2 GB if feasible; sustained multi-record Noise streaming)
 - [ ] Empty / zero-byte file
 - [ ] Filename with Unicode / spaces / emoji
@@ -201,8 +201,8 @@ items are not new in v10 and should not block release.
 
 ## Release gate
 
-- [ ] Tier 0 fully green (**hard blocker**: Apple must build)
-- [ ] Tier 1 green
+- [x] Tier 0 fully green (**hard blocker**: Apple must build)
+- [x] Tier 1 green
 - [ ] Tier 2 core cycle + hotspot pairs green
 - [ ] Tier 3 green (wrong password + version mismatch are must-pass)
 - [ ] Tier 4 green (lifecycle regressions — highest-risk new code)
