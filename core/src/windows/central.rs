@@ -1,6 +1,9 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 use tokio::sync::mpsc;
 use windows::{
@@ -43,6 +46,9 @@ pub(crate) struct BluetoothCentral {
     characteristics: HashMap<String, Option<GattCharacteristic>>,
     scan_callback_token: Option<EventRegistrationToken>,
     pair_callback_token: Arc<Mutex<Option<EventRegistrationToken>>>,
+    // diagnostic: whether the peer already had a live connection to us when we found it
+    // (i.e. which branch produced AlreadyPaired); reported when enumeration fails
+    already_connected: Arc<AtomicBool>,
 }
 
 impl BluetoothCentral {
@@ -60,6 +66,7 @@ impl BluetoothCentral {
             characteristics,
             scan_callback_token: None,
             pair_callback_token: Arc::new(Mutex::new(None)),
+            already_connected: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -71,6 +78,7 @@ impl BluetoothCentral {
         // let thread_scan_callback_token = self.scan_callback_token.clone();
         let thread_custom_pairing = self.custom_pairing.clone();
         let thread_pair_callback_token = self.pair_callback_token.clone();
+        let thread_already_connected = self.already_connected.clone();
         let received_handler = ScanCallback::new(move |_watcher, received_event_args| {
             let received_event_args = received_event_args
                 .as_ref()
@@ -146,6 +154,7 @@ impl BluetoothCentral {
                     if connection_status == BluetoothConnectionStatus::Connected {
                         let secure_connection_used = device.WasSecureConnectionUsedForPairing()?;
                         if secure_connection_used {
+                            thread_already_connected.store(true, Ordering::Relaxed);
                             if thread_tx
                                 .blocking_send(BluetoothMessage::AlreadyPaired)
                                 .is_err()
@@ -354,6 +363,23 @@ impl BluetoothCentral {
         }
     }
 
+    // Used after dropping a stale bond: clear the old device object so the
+    // still-registered Received handler treats the next advertisement as a new find and
+    // pairs fresh. The handler stopped the watcher when it first found the peer, so the
+    // watcher is in the Stopped state and can be started again.
+    pub async fn rescan(&self) -> windows::core::Result<()> {
+        {
+            let mut peer_device = self.peer_device.lock().await;
+            *peer_device = None;
+        }
+        self.already_connected.store(false, Ordering::Relaxed);
+        self.watcher.Start()
+    }
+
+    pub fn was_already_connected(&self) -> bool {
+        self.already_connected.load(Ordering::Relaxed)
+    }
+
     pub async fn get_services_and_characteristics(&mut self) -> Result<(), FCError> {
         println!("locking device");
         // read service
@@ -396,15 +422,11 @@ impl BluetoothCentral {
             }
         }
         if !found_service {
-            let info = device.DeviceInformation()?;
-            unpair(info)?;
-            println!(
-                "Could not enumerate services, unpairing from device. Please restart transfer."
-            );
-            fc_error(
-                "Could not enumerate services, unpairing from device. Please restart transfer.",
-            )?;
-            // std::thread::sleep(std::time::Duration::from_secs(2));
+            // Don't unpair here: a missing or partial service list can be transient (the
+            // peer's GATT database changes between transfers, and Windows can report it
+            // mid-refresh), so the caller retries enumeration before deciding to unpair.
+            println!("Flying Carpet service not found in peer's service list");
+            fc_error("Flying Carpet service not found in peer's service list")?;
         }
         // we had exited this function without setting OS_CHARACTERISTIC_UUID and panicked later.
         // there was a problem where if we hit pair on iOS first, windows sees flying carpet service. but if windows pairs first, we don't: solved by adding service to peripheralManager when it's powered on on iOS?

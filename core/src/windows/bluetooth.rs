@@ -154,23 +154,94 @@ pub async fn negotiate_bluetooth<T: UI>(
         central.stop_watching()?;
         println!("stopped watching");
 
-        // if we're looking for Pin or PairSuccess, process_bluetooth_message() will bail when it sees AlreadyPaired
-        println!("waiting for callback...");
-        let msg =
-            process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui).await?;
+        // Windows sometimes can't enumerate GATT services of a device it's still bonded
+        // to from an earlier transfer (E_UNEXPECTED, 0x8000FFFF), especially when the BLE
+        // roles were reversed last time (we were the peripheral, so the bond predates the
+        // peer hosting our service). Recovery ladder, cheapest rung first (background and
+        // sources in docs/windows-ble-gatt-0x8000ffff.md):
+        // 1. retry enumeration a couple of times ~1s apart — Microsoft's guidance for
+        //    bonded LE-privacy peripherals, whose first connection can race the stack's
+        //    internal RPA/IRK resolution;
+        // 2. drop the bond, rescan, and pair fresh, the way a manual restart of the
+        //    transfer would. One unpair only.
+        // The attempt/timing/diagnostic output is deliberately chatty so field reports of
+        // this failure show which rung fixed it (and whether rung 2 is ever needed).
+        const ENUMERATION_ATTEMPTS: u32 = 3;
+        let mut retried_after_unpair = false;
+        'pairing: loop {
+            // if we're looking for Pin or PairSuccess, process_bluetooth_message() will bail when it sees AlreadyPaired
+            println!("waiting for callback...");
+            let msg =
+                process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui)
+                    .await?;
 
-        // wait to pair
-        if msg != BluetoothMessage::AlreadyPaired {
-            process_bluetooth_message(BluetoothMessage::PairSuccess, &mut rx, ui).await?;
-        }
-
-        println!("before get_services_and_characteristics");
-        // discover service and characteristics once paired
-        if let Err(e) = central.get_services_and_characteristics().await {
-            if let Err(unpair_error) = central.unpair().await {
-                println!("Error unpairing: {}", unpair_error);
+            // wait to pair
+            if msg != BluetoothMessage::AlreadyPaired {
+                process_bluetooth_message(BluetoothMessage::PairSuccess, &mut rx, ui).await?;
             }
-            Err(e)?
+
+            // discover service and characteristics once paired
+            let mut last_error = None;
+            for attempt in 1..=ENUMERATION_ATTEMPTS {
+                println!("before get_services_and_characteristics, attempt {}", attempt);
+                let start = time::Instant::now();
+                match central.get_services_and_characteristics().await {
+                    Ok(()) => {
+                        if attempt > 1 {
+                            ui.output(&format!(
+                                "Reading Bluetooth services succeeded on attempt {}",
+                                attempt
+                            ));
+                        }
+                        break 'pairing;
+                    }
+                    Err(e) => {
+                        ui.output(&format!(
+                            "Couldn't read Bluetooth services (attempt {}/{}, took {:.1}s): {}",
+                            attempt,
+                            ENUMERATION_ATTEMPTS,
+                            start.elapsed().as_secs_f32(),
+                            e
+                        ));
+                        if attempt == 1 {
+                            ui.output(&format!(
+                                "Diagnostic info: {} bond; peer {} connected when discovered",
+                                if msg == BluetoothMessage::AlreadyPaired {
+                                    "reused"
+                                } else {
+                                    "new"
+                                },
+                                if central.was_already_connected() {
+                                    "was already"
+                                } else {
+                                    "was not"
+                                },
+                            ));
+                        }
+                        last_error = Some(e);
+                        if attempt < ENUMERATION_ATTEMPTS {
+                            time::sleep(time::Duration::from_secs(1)).await;
+                        }
+                    }
+                }
+            }
+            let last_error = last_error.expect("enumeration attempts exhausted without an error");
+
+            if msg == BluetoothMessage::AlreadyPaired && !retried_after_unpair {
+                retried_after_unpair = true;
+                ui.output(
+                    "Couldn't read services of already-paired Bluetooth device. Unpairing and pairing again...",
+                );
+                if let Err(unpair_error) = central.unpair().await {
+                    println!("Error unpairing: {}", unpair_error);
+                }
+                central.rescan().await?;
+            } else {
+                if let Err(unpair_error) = central.unpair().await {
+                    println!("Error unpairing: {}", unpair_error);
+                }
+                Err(last_error)?
+            }
         }
         println!("after get_services_and_characteristics");
 
@@ -237,10 +308,10 @@ pub async fn negotiate_bluetooth<T: UI>(
             };
             (ssid, password)
         };
-        // unpair after every transfer because windows has trouble enumerating services of already-paired devices?
-        // if let Err(unpair_error) = central.unpair().await {
-        //     println!("Error unpairing: {}", unpair_error);
-        // }
+        // We stay paired after the transfer, like every other platform. When Windows then
+        // has trouble enumerating services of the already-paired device on a later
+        // transfer, the loop above unpairs and re-pairs once, so we don't unpair
+        // unconditionally here (which would cost a PIN confirmation on every transfer).
         Ok((peer, ssid, password))
     }
 }

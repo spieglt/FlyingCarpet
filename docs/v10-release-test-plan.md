@@ -73,13 +73,13 @@ W=Windows, L=Linux, M=macOS, I=iOS, A=Android.
 - [x] I → A
 - [x] A → W
 - [x] I → M  (Apple ↔ Apple, the case that *requires* shared network)
-- [ ] M → M  or  A → A  (same-OS sanity, if a second device is available)
+- [x] M → M  or  A → A  (same-OS sanity, if a second device is available)
 
 ### Hotspot — each BLE stack pairs with each other, each non-Apple platform hosts
 Apple always guests; the peer hosts. Confirm the 6-digit pairing code and the transfer.
-- [ ] A → I  and  I → A   (Android hosts; Android ↔ Apple BLE)
-- [ ] A → M  and  M → A   (Android hosts; Android ↔ macOS BLE)
-- [ ] W → I  and  I → W   (Windows hosts; Windows ↔ Apple BLE)
+- [x] A → I  and  I → A   (Android hosts; Android ↔ Apple BLE)
+- [x] A → M  and  M → A   (Android hosts; Android ↔ macOS BLE)
+- [x] W → I  and  I → W   (Windows hosts; Windows ↔ Apple BLE)
 - [ ] L → M  and  M → L   (Linux hosts; **macOS ↔ Linux — the v10 BLE fix**)
 - [ ] W → L  and  L → W   (desktop ↔ desktop hosting)
 - [ ] W → A  and  A → W   (Windows ↔ Android BLE)
@@ -194,8 +194,19 @@ Post-fix state. ✅ = correct; ⚠️ = fragile/by-design; see caveats.
   `RemoveAdvertisementStatusChanged`); the one remaining ⚠️ is the device
   connection/pairing persisting after a transfer, which is **by design** (Windows has
   trouble re-enumerating already-paired devices, so "unpair after every transfer" is
-  intentionally disabled) and is **pre-existing**, not a v10 regression. Compile-verified
-  on the Windows target; not yet hardware-tested.
+  intentionally disabled) and is **pre-existing**, not a v10 regression.
+  **Hardware-tested 2026-07-24:** Windows→iPhone hotspot (fresh pairing) passed, but the
+  reversed second leg (iPhone→Windows, reused bond) failed GATT service enumeration with
+  `0x8000FFFF`; a manual rerun with fresh pairing succeeded. The Windows central now
+  recovers from this automatically: on enumeration failure it retries enumeration (up to
+  3×, ~1 s apart), and only if the bond was reused and all retries fail does it unpair,
+  rescan, and re-pair (new PIN confirmation) within the same transfer instead of
+  aborting. **Retest 2026-07-24: passed** — reversed second leg reused the bond and
+  enumerated services on attempt 1 (leg-1 BLE link was still up, so no reconnect was
+  needed); no recovery rung fired, so the ladder itself remains field-unexercised. The
+  original failure is intermittent — if it recurs, the UI log's attempt/timing
+  diagnostics will show which rung fixed it. Root-cause investigation, sources, and the
+  recovery-ladder design: `docs/windows-ble-gatt-0x8000ffff.md`.
 - Linux is the reference implementation (full RAII); no action.
 
 **Release read on the lifecycle front:** the code gaps found in the audit are closed on
