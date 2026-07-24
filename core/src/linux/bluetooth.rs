@@ -3,7 +3,7 @@ mod peripheral;
 
 use bluer::{
     agent::{Agent, AgentHandle, ReqError, RequestConfirmation},
-    Adapter, Address, Session,
+    Adapter, Session,
 };
 use central::{exchange_info, find_characteristics};
 use std::{
@@ -11,7 +11,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tokio::{spawn, sync::mpsc, sync::Mutex as TokioMutex, time::sleep};
+use tokio::{sync::mpsc, sync::Mutex as TokioMutex, time::sleep};
 
 use crate::{
     error::{fc_error, FCError},
@@ -134,36 +134,20 @@ pub async fn negotiate_bluetooth<T: UI>(
     let (bt_tx, bt_rx) = mpsc::channel(1);
     let _agent_handle = register_pairing_agent(&session, ui, ble_ui_rx, bt_tx.clone()).await?;
 
-    struct ConnectedPeripheral {
-        adapter: Adapter,
-        address: Address,
-        keep_bond: bool,
-    }
-
-    impl Drop for ConnectedPeripheral {
-        fn drop(&mut self) {
-            // keep_bond starts true and is only cleared after a successful exchange with a
-            // non-macOS peer (Windows/Android re-pair per transfer, so removing is safe).
-            // macOS bonds must be kept: CoreBluetooth caches its half persistently and can't
-            // unpair programmatically, so removing ours creates the one-sided stale bond
-            // behind CBError 14 "Peer removed pairing information". Failed runs also keep
-            // the bond for the same reason — the peer may have completed its half.
-            if self.keep_bond {
-                return;
-            }
-            let adapter = self.adapter.clone();
-            let address = self.address.clone();
-            // let (tx, rx) = std::sync::mpsc::channel::<()>();
-            spawn(async move {
-                match adapter.remove_device(address).await {
-                    Ok(_) => println!("Removed device {}", address),
-                    Err(e) => println!("Failed to unpair from peripheral: {}", e),
-                };
-                // tx.send(()).expect("Could not send on tx when dropping ConnectedPeripheral");
-            });
-            // rx.recv().expect("Could not receive when trying to drop ConnectedPeripheral");
-        }
-    }
+    // Bonds are never removed on cleanup. Linux used to drop its half of the bond after a
+    // successful transfer with any non-macOS peer, on the premise that "Windows and Android
+    // re-pair per transfer, so removing is safe". That premise is false for both: the
+    // Windows central path short-circuits on AlreadyPaired and reuses the bond
+    // (core/src/windows/central.rs), and the Android code has no removeBond call anywhere.
+    // So the removal left every peer holding a bond Linux had forgotten, and the peer's next
+    // connection tried to encrypt with an LTK we no longer had -- which surfaces as
+    // CBError 14 on macOS and, on Windows, as a successful connect whose GATT database comes
+    // back empty (see docs/windows-ble-gatt-0x8000ffff.md, 2026-07-25 observation). macOS was
+    // never a special case; it was just the first platform where the symptom was legible.
+    //
+    // The deliberate bond removal for a *poisoned* bond is still in the central branch below:
+    // that one fires on characteristic-discovery failure, where a stale bond is the suspected
+    // cause rather than the casualty.
 
     if let Mode::Send(_) = mode {
         // acting as peripheral
@@ -265,16 +249,10 @@ pub async fn negotiate_bluetooth<T: UI>(
             }
         };
 
-        let mut connected_peripheral = ConnectedPeripheral {
-            adapter,
-            address: device.address(),
-            keep_bond: true,
-        };
         let info = match exchange_info(characteristics, mode).await {
             Ok(i) => i,
             Err(e) => Err(e)?,
         };
-        connected_peripheral.keep_bond = info.0 == "mac";
         Ok(info)
     }
 }

@@ -132,7 +132,21 @@ Each row has a specific repro that previously failed — test the repro, not jus
       "Transfer complete"
 - [ ] **Cancel mid-transfer** (each desktop) → UI recovers (drop-guard); hotspot torn down
 - [ ] **Stale BLE pairing recovery**: forget the peer on one side only, retry → re-pairs
-      cleanly (do not need to forget both)
+      cleanly (do not need to forget both). **Known to fail as of 2026-07-25** — this is the
+      unresolved half of the Windows↔Linux failure; the re-pair returns
+      `Pairing result: Failed` and keeps failing on subsequent attempts. Capture
+      `bluetoothctl paired-devices` and `btmon` on the Linux side when testing this.
+- [ ] **Bidirectional BLE hotspot, Windows ↔ Linux** (the 2026-07-25 repro): Windows → Linux,
+      then immediately Linux → Windows without restarting either app. Leg 2 must reuse the
+      bond and enumerate services. Previously leg 1 made Linux delete its half of the bond,
+      so leg 2 got an empty GATT service list and then failed to re-pair permanently. Confirm
+      `bluetoothctl paired-devices` on Linux still lists the Windows box after leg 1.
+- [ ] **Bidirectional BLE hotspot, Linux ↔ Android** and **Linux ↔ macOS**, same pattern —
+      Linux no longer removes any peer's bond, so all three pairings need one clean
+      round trip. macOS was already exempt and should be unchanged.
+- [ ] **Poisoned-bond self-heal still works** (Linux as central): the deliberate
+      `remove_device` on characteristic-discovery failure was kept; confirm a genuinely bad
+      bond still recovers via the "retrying with a fresh pairing" path.
 - [ ] **Android rotation mid-transfer**: rotate during a *multi-file* transfer (enough files
       that the log has scrolled) → transfer keeps running; the log survives whole, with no
       duplicated or missing line at the seam and no truncation; auto-scroll still follows new

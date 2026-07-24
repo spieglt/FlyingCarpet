@@ -1,9 +1,16 @@
-# Windows BLE: `0x8000FFFF` enumerating GATT services of an already-bonded peer
+# Windows BLE: failures enumerating GATT services of an already-bonded peer
 
 Findings from investigating the 2026-07-24 v10 test failure (Windows→iPhone hotspot
 succeeded with fresh pairing; the reversed leg iPhone→Windows failed). Written to answer:
 is the unpair-and-re-pair recovery in `core/src/windows/bluetooth.rs` a justified fix, or
 a workaround papering over an unexamined bug?
+
+> **Two distinct failures are described here — don't merge them.** The `0x8000FFFF`
+> HRESULT exception against an iPhone (the original subject, mechanisms 1–3) is unresolved
+> and intermittent. The Windows↔Linux failure of 2026-07-25 looks superficially similar in
+> the UI but is a *different bug with a known cause* — Linux was deleting its half of the
+> bond after every successful transfer with a non-macOS peer — and is fixed. See "Field
+> observations".
 
 **Short answer:** the failure matches a family of well-documented Windows BLE stack
 problems with *bonded* peripherals, at least two independent mechanisms plausibly apply
@@ -71,8 +78,64 @@ unpair, no PIN dialog. Notable details from stdout:
   is a no-op (status still `Created`), so the Received handler stays registered — the
   assumption `rescan()` relies on holds on real hardware.
 
-The recovery ladder itself has **not yet been exercised in the field**; the original
-failure is intermittent, so one pass doesn't retire it.
+**2026-07-25, Windows ↔ Linux (failed — and it is a different bug):** Windows→Linux
+succeeded with fresh pairing; the reversed leg Linux→Windows failed. The ladder fired for
+the first time, and what it found says the ladder was reasoning about the wrong thing.
+
+The distinguishing evidence is a line that is *absent* from the log.
+`get_services_and_characteristics` prints `UUID: {…}` once per service as it iterates
+(`core/src/windows/central.rs`). Between `got services` and `Flying Carpet service not
+found in peer's service list`, the log has **none** — so the service collection was
+**empty**. That is not "connected, but the peer's database lacks our service"; it is "no
+GATT database was read at all". Attempt timings 1.4 s / 7.7 s / 0.5 s, with the 7.7 s
+attempt showing the connect-timeout shape.
+
+**Root cause, and it is not in the Windows stack:** `core/src/linux/bluetooth.rs` used to
+end a successful transfer by removing the peer's bond unless the peer was macOS
+(`keep_bond = info.0 == "mac"`). In leg 1 Linux was the central, so on completion it did
+`adapter.remove_device()` and **dropped its half of the bond**. Windows kept its half, so
+leg 2 hit `AlreadyPaired`, skipped pairing, and tried to encrypt the link with an LTK the
+Linux box had forgotten. The link never encrypted, so there was no GATT database to read,
+and WinRT reported that as success-with-an-empty-list rather than a failure status.
+
+The premise behind that removal — recorded in the code as "Windows/Android re-pair per
+transfer, so removing is safe" — is false for **both** platforms it names. Windows'
+central path short-circuits on `AlreadyPaired` and reuses the bond; the Android code
+contains no `removeBond` call anywhere. macOS was never a special case. It was the first
+platform where the symptom happened to be legible, because CoreBluetooth names it
+(CBError 14, "Peer removed pairing information") instead of silently returning nothing.
+
+Consequences for this document's conclusions:
+
+- The iPhone→Windows failure at the top of this doc is `0x8000FFFF`, an HRESULT
+  *exception*. This one is a clean call returning an empty list. **Different failures**;
+  mechanisms 1–3 below were derived from the former and do not explain the latter.
+- The ladder's rung 1 (retry) cannot help a one-sided bond — no number of retries
+  re-creates a key the peer discarded. Rung 2 (unpair + re-pair) is the *right shape* of
+  fix, but it fired only after the retries and then failed to re-pair, leaving both sides
+  worse off: `Pairing result: Failed` on that attempt and on every subsequent transfer.
+- Reporting "Flying Carpet service not found in peer's service list" for an empty list is
+  what pointed the ladder at the peer's GATT database instead of at the link. Fixed:
+  `get_services_and_characteristics` now checks `GattDeviceServicesResult::Status()` before
+  reading `Services()`, and reports an empty-but-successful list as its own condition,
+  naming a one-sided bond as the likely cause.
+
+**Still unexplained:** why re-pairing then failed repeatedly (`Pairing result: Failed`
+across three transfer attempts), and why the ThinkPad remained listed under Windows'
+Bluetooth devices after `UnpairAsync` returned `Unpaired`. `UnpairAsync` clears the
+association belonging to the `DeviceInformation` it was called on; Windows can hold a
+separate association record for the same physical device, which would keep it listed and
+could keep a stale pairing state in play. `unpair()` now logs `IsPaired` afterward so the
+next occurrence says whether the bond this path cares about actually went away. Settling
+it needs Linux-side evidence too — `bluetoothctl paired-devices` / `btmon` during a failed
+re-pair — which no log in this document has yet.
+
+**Manual recovery, until a run confirms the fix:** remove the pairing on *both* sides —
+Windows Settings → Bluetooth → Remove device, and `bluetoothctl remove <address>` on Linux
+— then pair fresh. Removing only one side reproduces the original condition.
+
+The `0x8000FFFF` recovery ladder has still **not been exercised against the failure it was
+built for**; the iPhone case remains intermittent and unreproduced since.
 
 ## External evidence
 

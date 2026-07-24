@@ -390,11 +390,34 @@ impl BluetoothCentral {
         println!("locked");
 
         // let services = device.GetGattServicesAsync()?.get()?.Services()?;
-        let services = device
+        let result = device
             .GetGattServicesWithCacheModeAsync(BluetoothCacheMode::Uncached)?
-            .get()?
-            .Services()?;
-        println!("got services");
+            .get()?;
+        // Check Status before Services: on anything but Success the collection comes back
+        // empty, which is indistinguishable from "connected fine, peer just doesn't expose
+        // our service" if you only look at the list. Conflating those two sent the
+        // 2026-07-24 Linux failure down the unpair path, when the real problem was that the
+        // link never encrypted (the peer had dropped its half of the bond) and no GATT
+        // database was ever read.
+        let status = result.Status()?;
+        let services = result.Services()?;
+        println!("got services: status {:?}, count {}", status, services.Size()?);
+        if status != GattCommunicationStatus::Success {
+            fc_error(&format!(
+                "Could not read the peer's Bluetooth services ({}). The link to the peer \
+                 could not be established or encrypted -- most often a one-sided bond, where \
+                 this device still has a pairing the peer has forgotten.",
+                describe_gatt_status(status)
+            ))?;
+        }
+        if services.Size()? == 0 {
+            fc_error(
+                "Peer returned an empty Bluetooth service list. The connection succeeded but \
+                 no GATT database was readable, which usually means the encrypted link was \
+                 never established -- often a one-sided bond, where this device still has a \
+                 pairing the peer has forgotten.",
+            )?;
+        }
         let mut found_service = false;
         for service in services {
             println!("UUID: {:?}", service.Uuid()?);
@@ -496,12 +519,34 @@ impl BluetoothCentral {
     }
 }
 
+fn describe_gatt_status(status: GattCommunicationStatus) -> &'static str {
+    match status {
+        GattCommunicationStatus::Success => "success",
+        GattCommunicationStatus::Unreachable => "peer unreachable",
+        GattCommunicationStatus::ProtocolError => "GATT protocol error",
+        GattCommunicationStatus::AccessDenied => "access denied",
+        _ => "unknown status",
+    }
+}
+
 // used within BluetoothCentral because get_services_and_characteristics() will already have locked the peer device mutex
 fn unpair(info: DeviceInformation) -> windows::core::Result<()> {
     let pairing = info.Pairing()?;
     let unpairing_result = pairing.UnpairAsync()?.get()?;
     let status = unpairing_result.Status()?;
-    println!("Unpairing result: {:?}", status);
+    // UnpairAsync reporting Unpaired only means the LE association this DeviceInformation
+    // addresses was cleared; Windows can hold a separate association record for the same
+    // physical device (and keep showing it under Settings > Bluetooth). Re-read IsPaired so
+    // the log says whether the bond this code path cares about is actually gone, instead of
+    // just what the call returned.
+    let still_paired = info
+        .Pairing()
+        .and_then(|p| p.IsPaired())
+        .unwrap_or(false);
+    println!(
+        "Unpairing result: {:?}, still paired afterward: {}",
+        status, still_paired
+    );
     Ok(())
 }
 
