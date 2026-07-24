@@ -154,6 +154,15 @@ Each row has a specific repro that previously failed — test the repro, not jus
 - [ ] **Bidirectional BLE hotspot, Linux ↔ Android** and **Linux ↔ macOS**, same pattern —
       Linux no longer removes any peer's bond, so all three pairings need one clean
       round trip. macOS was already exempt and should be unchanged.
+- [ ] **Android as central, twice in a row, bonded** — Android↔Windows and Android↔Linux,
+      Android **receiving** both legs, no app restart between them. Android never invalidates
+      its GATT cache (`onServiceChanged` logs but its `discoverServices()` is commented out)
+      while every peripheral removes its service at teardown, so a stale cached database is
+      predicted here. It would present as a **silent hang**: `onServicesDiscovered` returns
+      without calling `bluetoothFailed()` when the service or a characteristic is missing, and
+      three of those four exits print nothing. Watch logcat for "Did not find service", and
+      treat *any* hang after "Discovered services" as this. See
+      `docs/ble-bond-asymmetries.md`.
 - [ ] **Poisoned-bond self-heal still works** (Linux as central): the deliberate
       `remove_device` on characteristic-discovery failure was kept; confirm a genuinely bad
       bond still recovers via the "retrying with a fresh pairing" path.
