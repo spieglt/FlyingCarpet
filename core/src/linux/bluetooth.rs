@@ -228,7 +228,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         let (device, characteristics) = loop {
             let device = central::scan(&adapter).await?;
             ui.output("Found device");
-            match find_characteristics(&device).await {
+            match find_characteristics(&device, ui).await {
                 Ok(c) => break (device, c),
                 Err(e) if !retried => {
                     // A poisoned bond (classic-only or dual-transport, e.g. left over from a
@@ -249,7 +249,7 @@ pub async fn negotiate_bluetooth<T: UI>(
             }
         };
 
-        let info = match exchange_info(characteristics, mode).await {
+        let info = match exchange_info(characteristics, mode, ui).await {
             Ok(i) => i,
             Err(e) => Err(e)?,
         };

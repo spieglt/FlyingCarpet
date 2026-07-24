@@ -54,11 +54,12 @@ use crate::{
     },
     network::is_hosting,
     utils::{generate_password, get_key_and_ssid},
-    Mode, Peer,
+    Mode, Peer, UI,
 };
 
-pub async fn find_characteristics(
+pub async fn find_characteristics<T: UI>(
     device: &Device,
+    ui: &T,
 ) -> Result<HashMap<&'static str, Characteristic>> {
     let addr = device.address();
     let uuids = device.uuids().await?.unwrap_or_default();
@@ -72,6 +73,7 @@ pub async fn find_characteristics(
 
     if uuids.contains(&Uuid::parse_str(SERVICE_UUID).unwrap()) {
         println!("    Device provides our service!");
+        ui.output("Peer is running Flying Carpet, connecting over Bluetooth...");
         let mut characteristics = HashMap::new();
 
         sleep(Duration::from_secs(2)).await;
@@ -93,6 +95,7 @@ pub async fn find_characteristics(
             && !device.is_connected().await?
         {
             println!("    Bonding over LE...");
+            ui.output("Bonding over Bluetooth LE...");
             let socket = Socket::<SeqPacket>::new_seq_packet()?;
             socket.bind(SocketAddr::new(Address::any(), AddressType::LePublic, 0))?;
             socket.set_security(Security { level: SecurityLevel::High, key_size: 16 })?;
@@ -109,6 +112,7 @@ pub async fn find_characteristics(
                 });
             }
             println!("    LE bond established");
+            ui.output("Bluetooth bond established");
         }
 
         if !device.is_connected().await? {
@@ -125,8 +129,10 @@ pub async fn find_characteristics(
                 }
             }
             println!("    Connected");
+            ui.output("Connected to peer over Bluetooth");
         } else {
             println!("    Already connected");
+            ui.output("Already connected to peer over Bluetooth");
         }
 
         // Persist the bond so later transfers skip pairing (and macOS's cached keys keep
@@ -147,6 +153,7 @@ pub async fn find_characteristics(
                 println!("    Service data: {:?}", service.all_properties().await?);
                 if uuid == Uuid::parse_str(SERVICE_UUID).unwrap() {
                     println!("    Found our service!");
+                    ui.output("Found Flying Carpet's Bluetooth service on peer");
                     for char in service.characteristics().await? {
                         let uuid = char.uuid().await?;
                         println!("    Characteristic UUID: {}", &uuid);
@@ -184,6 +191,7 @@ pub async fn find_characteristics(
             }
             retries -= 1;
             println!("    Flying Carpet characteristics not all present yet, retrying...");
+            ui.output("Waiting for peer's Bluetooth characteristics, retrying...");
             sleep(Duration::from_secs(2)).await;
         }
     } else {
@@ -275,9 +283,14 @@ pub async fn scan(adapter: &Adapter) -> bluer::Result<Device> {
     })
 }
 
-pub async fn exchange_info(
+// Every step here is mirrored to the UI as well as stdout. The peripheral path reports the
+// same events through process_bluetooth_message, so previously a Linux user acting as
+// central saw the app sit silent for several seconds while all of this happened — the
+// wording matches process_bluetooth_message and the Windows implementation.
+pub async fn exchange_info<T: UI>(
     characteristics: HashMap<&str, Characteristic>,
     mode: &Mode,
+    ui: &T,
 ) -> bluer::Result<(String, String, String)> {
     // have to use this with write_ext() for the write requests: iOS wouldn't receive unconfirmed writes, which WriteOp::Request provides.
     // not sure if iOS requires it or if i did somehow. bluer seems to default to WriteOp::Command which has no confirmation.
@@ -293,10 +306,12 @@ pub async fn exchange_info(
     let value = os_char.read().await?;
     let peer_os = String::from_utf8(value).expect("Peer OS value was not utf-8");
     println!("Peer OS: {}", peer_os);
+    ui.output(&format!("Peer's OS is {}", peer_os));
     sleep(Duration::from_secs(1)).await;
     // write our OS
     os_char.write_ext(OS.as_bytes(), &write_req).await?;
     println!("Wrote OS to peer");
+    ui.output("Wrote our OS to peer");
     sleep(Duration::from_secs(1)).await;
 
     let ssid_char = &characteristics[SSID_CHARACTERISTIC_UUID];
@@ -311,11 +326,13 @@ pub async fn exchange_info(
         let (_, ssid) = get_key_and_ssid(&password);
         ssid_char.write_ext(ssid.as_bytes(), &write_req).await?;
         println!("Wrote SSID to peer");
+        ui.output("Wrote our SSID to peer");
         sleep(Duration::from_secs(1)).await;
         password_char
             .write_ext(password.as_bytes(), &write_req)
             .await?;
         println!("Wrote password to peer");
+        ui.output("Wrote our password to peer");
         sleep(Duration::from_secs(1)).await;
         Ok((peer_os, ssid, password))
     } else {
@@ -323,9 +340,11 @@ pub async fn exchange_info(
         let ssid = ssid_char.read().await?;
         let ssid = String::from_utf8(ssid).expect("SSID was not UTF-8");
         println!("Peer's SSID: {}", ssid);
+        ui.output(&format!("Peer's SSID is {}", ssid));
         let password = password_char.read().await?;
         let password = String::from_utf8(password).expect("Password was not UTF-8");
         println!("Peer's password: {}", password);
+        ui.output(&format!("Peer's password is {}", password));
         Ok((peer_os, ssid, password))
     }
 }
