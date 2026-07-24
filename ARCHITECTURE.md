@@ -90,6 +90,29 @@ iOS and macOS **never host hotspots** — they lack a public hotspot API. The pe
 
 ---
 
+## Peer OS Selection — why it exists, and when it's hidden
+
+The "Select Peer OS" control (desktop radio buttons, Android spinner, macOS `peerSwitch`) exists to answer one question the app can't otherwise answer before a connection exists: **who hosts the hotspot?** `is_hosting(peer, mode)` is a pure function of *this device's OS*, *the peer's OS*, and *the transfer direction* (see the tables above). This device knows its own OS and direction; the missing input is the **peer's OS**.
+
+There are three ways to learn the peer's OS, and the UI control is only the third:
+
+1. **Shared network mode** — nobody hosts, so `is_hosting` is never called. Roles are fixed by direction (receiver = TCP server + password generator) and the peer is found by discovery over IP. Peer OS is irrelevant. → control hidden.
+2. **Hotspot mode with Bluetooth** — the BLE GATT **OS characteristic** carries each side's OS automatically (it always flows both ways, see BLE Data Flow). Peer OS is learned over the air. → control hidden.
+3. **Hotspot mode without Bluetooth** — there is no channel to exchange OS before the hotspot exists (chicken-and-egg), so the user supplies it. → **control shown.** This is the *only* case where it's needed.
+
+Every platform gates the control on exactly this condition. The desktop's `checkStatus()` hides `peerBox` when `connectionMode === 'shared_network' || usingBluetooth`; macOS hides `peerSwitch` in the same two cases; iOS omits the control entirely (see below).
+
+Beyond the hosting decision, knowing the peer OS in hotspot-without-BT also drives two secondary behaviors:
+
+- **Android's SSID is OS-assigned**, not derivable from the password, so an Android *peer* means the joiner must be told the SSID separately (every other peer derives the SSID from the password). This is why the desktop/macOS prompt for SSID **only** when the peer is Android.
+- **Fast-fail on impossible pairs.** Selecting a macOS/iOS peer in hotspot mode is invalid (neither Apple device can host), so the app can reject it up front with "use Shared Network mode" instead of failing deep in the join.
+
+### Could it be removed?
+
+Not on host-capable platforms (Windows/Linux/Android) in hotspot-without-BT: the hosting decision genuinely needs the peer OS, and there's no earlier channel to negotiate it. The control *is* effectively the manual stand-in for the BLE OS exchange. The realistic ways to shrink it are to lean harder on the two automatic paths (Bluetooth or shared network) rather than to drop the manual fallback. On Apple platforms the picture is different — see `FlyingCarpetApple`'s `CLAUDE.md`, since Apple never hosts and so never needs the peer OS to decide hosting at all.
+
+---
+
 ## TCP Roles (Hotspot Mode)
 
 TCP role follows directly from hotspot role:
