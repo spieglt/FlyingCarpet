@@ -25,6 +25,10 @@ builds/KATs first and exploiting the symmetry of the wire protocol.
 - **Late lifecycle fixes (this branch tail)** — Android hotspot flag + GATT client/server
   close; Apple BLE connection/service teardown; coroutine-cancellation no longer reported
   as an error. See "Lifecycle status" below.
+- **Send Folder is consistent across all five platforms** — a sent folder is now recreated
+  inside the receiver's chosen destination everywhere, instead of only on macOS. Fixes an
+  Android→desktop failure and two desktop abort cases along the way. Retest rows in Tier 6;
+  details in `docs/send-folder-behavior.md`.
 
 ## Platforms & environment
 
@@ -47,7 +51,8 @@ been compiled.**
 - [x] **macOS builds in Xcode** (FlyingCarpetApple)
 - [x] Android unit tests pass: `NoiseUnitTest`, `DiscoveryUnitTest`
 - [x] Rust unit tests pass: `cargo test` (incl. `official_noise_test_vector`,
-      `wrong_password_fails_handshake`, `tampering_is_detected`, `round_trip_small_and_large`)
+      `wrong_password_fails_handshake`, `tampering_is_detected`, `round_trip_small_and_large`,
+      and the `utils::selection_tests` folder-naming cases)
 - [x] Apple unit tests pass (Noise KATs, incl. cacophony vector + app KATs)
 - [x] Both repos report the **same protocol version constant** (wire-compat check)
 
@@ -80,7 +85,7 @@ Apple always guests; the peer hosts. Confirm the 6-digit pairing code and the tr
 - [x] A → I  and  I → A   (Android hosts; Android ↔ Apple BLE)
 - [x] A → M  and  M → A   (Android hosts; Android ↔ macOS BLE)
 - [x] W → I  and  I → W   (Windows hosts; Windows ↔ Apple BLE)
-- [ ] L → M  and  M → L   (Linux hosts; **macOS ↔ Linux — the v10 BLE fix**)
+- [x] L → M  and  M → L   (Linux hosts; **macOS ↔ Linux — the v10 BLE fix**)
 - [ ] W → L  and  L → W   (desktop ↔ desktop hosting)
 - [ ] W → A  and  A → W   (Windows ↔ Android BLE)
 - [ ] L → A  and  A → L   (Linux ↔ Android BLE)
@@ -162,7 +167,6 @@ Each row has a specific repro that previously failed — test the repro, not jus
 ## Tier 6 — Robustness / edge cases
 
 - [x] Multi-file transfer (2+ files)
-- [x] Whole-folder transfer (nested; common-folder placement matches other platforms)
 - [ ] Large single file (> 2 GB if feasible; sustained multi-record Noise streaming)
 - [ ] Empty / zero-byte file
 - [ ] Filename with Unicode / spaces / emoji
@@ -172,6 +176,48 @@ Each row has a specific repro that previously failed — test the repro, not jus
       "both sides picked the same mode" error
 - [ ] Two transfers in a row in **shared network** mode on every platform (mirror the
       Android repeat-transfer regression)
+
+### Send Folder — retest on all five (behavior changed; previously inconsistent)
+
+Every platform now sends a chosen folder so the **receiver recreates that folder inside the
+destination they picked, with the contents inside it**. Before this change only macOS did
+that; Windows, Linux, Android, and iOS dumped the contents loose into the destination, and
+Android→desktop failed outright for any folder with sub-folders. Rationale, the old
+per-platform behavior, and the fixes: `docs/send-folder-behavior.md`.
+
+Use one test folder throughout, so results are comparable. It must exercise every case that
+used to break:
+
+```
+TestFolder/
+  top.txt                  <- file directly inside the selection
+  Nested/inner.txt         <- one level down
+  Nested/Deeper/deep.txt   <- two levels down
+  OnlyDirs/x/1.txt         <- selection level with NO loose files (used to flatten or fail)
+  OnlyDirs/y/2.txt         <- sibling of the above (used to abort: "Strip prefix error")
+```
+
+Pass = destination contains `TestFolder/` with all five files at the paths above, and
+**nothing** loose in the destination root.
+
+- [ ] Windows sends `TestFolder` (Send Folder checkbox) → receiver gets `TestFolder/…`
+- [ ] Windows sends `TestFolder` by **drag-and-drop** onto the window → same result
+- [ ] Linux sends `TestFolder` (checkbox and drag-and-drop)
+- [ ] Android sends `TestFolder` (Send Folder checkbox) → **to a Windows or Linux receiver**;
+      this is the combination that used to fail with "Received invalid filename path"
+- [ ] iOS sends `TestFolder` ("Send Folder" in the "Send from:" prompt)
+- [ ] macOS sends `TestFolder` (choose the folder in the picker) → confirm **no regression**;
+      this is the one platform whose behavior did not change
+- [ ] Each of the five **receives** `TestFolder` from at least one other platform, and the
+      folder is recreated rather than flattened
+- [ ] Plain multi-file selection still arrives **flat** (no folder created) on all five —
+      the fix must not wrap ordinary file sends in a directory
+- [ ] Desktop: select/drop files from **two different directories** at once → all arrive,
+      flat, no "Strip prefix error" (previously aborted the transfer)
+- [ ] Desktop: drop **two folders** at once → both recreated side by side (previously aborted)
+- [ ] Send a folder twice into the same destination → second copy lands under "(1) name"
+      siblings rather than clobbering
+- [ ] Folder containing a file with Unicode / spaces / emoji in a **sub-folder** name
 
 ---
 

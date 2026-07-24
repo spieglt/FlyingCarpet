@@ -153,7 +153,7 @@ async fn receive_chunk<S: AsyncRead + Unpin>(stream: &mut S) -> Result<Vec<u8>, 
     Ok(chunk)
 }
 
-fn sanitize_relative_filename(filename: &str) -> Result<PathBuf, FCError> {
+pub(crate) fn sanitize_relative_filename(filename: &str) -> Result<PathBuf, FCError> {
     let mut sanitized = PathBuf::new();
     for component in Path::new(filename).components() {
         match component {

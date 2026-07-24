@@ -39,7 +39,7 @@ pub fn run_command(
     }
 }
 
-pub fn expand_dir(dir: PathBuf) -> (Vec<String>, Vec<PathBuf>) {
+pub fn expand_dir(dir: PathBuf) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let mut files_found = vec![];
     let mut dirs_to_search = vec![];
     if let Ok(entries) = fs::read_dir(&dir) {
@@ -49,12 +49,193 @@ pub fn expand_dir(dir: PathBuf) -> (Vec<String>, Vec<PathBuf>) {
                     dirs_to_search.push(entry.path());
                 }
                 if metadata.is_file() {
-                    files_found.push(entry.path().to_string_lossy().to_string());
+                    files_found.push(entry.path());
                 }
             }
         }
     }
     (files_found, dirs_to_search)
+}
+
+// Turn what the user picked (files, folders, or a mix — from a dialog or a drag-and-drop)
+// into the flat list of files to send, each carrying the relative name the peer will store
+// it under.
+//
+// The rule, matching the Apple and Android senders: *every top-level selection is named
+// relative to its own parent directory*. So a selected folder keeps its own name as the
+// first component and the receiver recreates it with the files inside, while individually
+// selected files arrive flat in the destination. Because each selection is resolved against
+// its own parent, selections spanning different directories work too — previously they made
+// the sender abort with a strip-prefix error. See docs/send-folder-behavior.md.
+pub fn expand_selection(roots: Vec<PathBuf>) -> Vec<crate::SendFile> {
+    let mut selected = vec![];
+    for root in roots {
+        // A root at a filesystem root ("/", "C:\") has no parent to strip; naming its
+        // contents relative to itself is the only sane reading, and keeps the relative
+        // name from starting with a separator.
+        let prefix = root.parent().unwrap_or(&root).to_path_buf();
+        let Ok(metadata) = fs::metadata(&root) else {
+            continue;
+        };
+        if metadata.is_file() {
+            selected.extend(make_send_file(&root, &prefix));
+        } else if metadata.is_dir() {
+            let mut dirs_to_search = vec![root];
+            while let Some(dir) = dirs_to_search.pop() {
+                let (files, subdirs) = expand_dir(dir);
+                selected.extend(files.iter().filter_map(|f| make_send_file(f, &prefix)));
+                dirs_to_search.extend(subdirs);
+            }
+        }
+    }
+    selected
+}
+
+// Name `path` relative to `prefix`, normalized to the "/" separators the wire format uses.
+// Anything that doesn't sit under the prefix is dropped rather than sent under a wrong (or
+// absolute) name.
+fn make_send_file(path: &Path, prefix: &Path) -> Option<crate::SendFile> {
+    let relative = path.strip_prefix(prefix).ok()?;
+    let name = relative
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/");
+    if name.is_empty() {
+        return None;
+    }
+    Some(crate::SendFile {
+        path: path.to_path_buf(),
+        name,
+    })
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+
+    // Lay out a temp tree and return its root:
+    //   <root>/loose.txt
+    //   <root>/Photos/a.jpg
+    //   <root>/Photos/sub/b.jpg
+    //   <root>/OnlySubdirs/x/1.txt
+    //   <root>/OnlySubdirs/y/2.txt
+    //   <root>/Other/c.jpg
+    fn make_tree(tag: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "fc_selection_{}_{}_{:?}",
+            std::process::id(),
+            tag,
+            std::thread::current().id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        for dir in [
+            root.join("Photos").join("sub"),
+            root.join("OnlySubdirs").join("x"),
+            root.join("OnlySubdirs").join("y"),
+            root.join("Other"),
+        ] {
+            fs::create_dir_all(dir).unwrap();
+        }
+        for (path, contents) in [
+            (root.join("loose.txt"), "loose"),
+            (root.join("Photos").join("a.jpg"), "a"),
+            (root.join("Photos").join("sub").join("b.jpg"), "b"),
+            (root.join("OnlySubdirs").join("x").join("1.txt"), "1"),
+            (root.join("OnlySubdirs").join("y").join("2.txt"), "2"),
+            (root.join("Other").join("c.jpg"), "c"),
+        ] {
+            fs::write(path, contents).unwrap();
+        }
+        root
+    }
+
+    fn names(roots: Vec<PathBuf>) -> Vec<String> {
+        let mut names: Vec<String> = expand_selection(roots)
+            .into_iter()
+            .map(|f| f.name)
+            .collect();
+        names.sort();
+        names
+    }
+
+    // The headline behavior: selecting a folder recreates that folder on the receiving end
+    // with everything inside it, rather than dumping its contents into the destination.
+    #[test]
+    fn selected_folder_keeps_its_own_name() {
+        let root = make_tree("folder");
+        assert_eq!(
+            names(vec![root.join("Photos")]),
+            vec!["Photos/a.jpg", "Photos/sub/b.jpg"]
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    // Individually selected files still land flat in the destination.
+    #[test]
+    fn selected_files_are_flat() {
+        let root = make_tree("files");
+        assert_eq!(
+            names(vec![root.join("loose.txt"), root.join("Photos").join("a.jpg")]),
+            vec!["a.jpg", "loose.txt"]
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    // A folder whose top level holds only subdirectories used to lose a level of structure
+    // (single subdir) or abort the transfer with a strip-prefix error (sibling subdirs),
+    // because the prefix was "whichever parent had the fewest components".
+    #[test]
+    fn folder_of_only_subdirectories_keeps_full_structure() {
+        let root = make_tree("subdirs");
+        assert_eq!(
+            names(vec![root.join("OnlySubdirs")]),
+            vec!["OnlySubdirs/x/1.txt", "OnlySubdirs/y/2.txt"]
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    // Dropping two folders at once, or files from different directories, is resolved
+    // per-selection now; both used to fail.
+    #[test]
+    fn selections_from_different_directories_coexist() {
+        let root = make_tree("mixed");
+        assert_eq!(
+            names(vec![root.join("Photos"), root.join("Other")]),
+            vec!["Other/c.jpg", "Photos/a.jpg", "Photos/sub/b.jpg"]
+        );
+        assert_eq!(
+            names(vec![
+                root.join("Photos").join("a.jpg"),
+                root.join("Other").join("c.jpg"),
+            ]),
+            vec!["a.jpg", "c.jpg"]
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    // Relative names must never start with a separator: the Rust receiver rejects those
+    // outright (Component::RootDir in receiving::sanitize_relative_filename), which is
+    // exactly how Android's folder sends used to fail against desktop peers.
+    #[test]
+    fn names_are_relative_and_slash_separated() {
+        let root = make_tree("separators");
+        for file in expand_selection(vec![root.join("Photos"), root.join("loose.txt")]) {
+            assert!(!file.name.starts_with('/'), "leading slash in {}", file.name);
+            assert!(!file.name.contains('\\'), "backslash in {}", file.name);
+            assert!(
+                crate::receiving::sanitize_relative_filename(&file.name).is_ok(),
+                "receiver rejected {}",
+                file.name
+            );
+        }
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn nonexistent_selection_is_skipped() {
+        assert!(expand_selection(vec![PathBuf::from("fc_no_such_path_here")]).is_empty());
+    }
 }
 
 pub fn make_parent_directories(full_path: &Path) -> io::Result<()> {

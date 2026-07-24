@@ -117,7 +117,9 @@ class MainActivity : AppCompatActivity() {
                         viewModel.cleanUpTransfer()
                         return@registerForActivityResult
                     }
-                    val filesAndPaths = getFilesInDir(dir, "")
+                    // seed with the folder's own name so the receiving device recreates the
+                    // folder and puts the files inside it
+                    val filesAndPaths = getFilesInDir(dir, dir.name ?: "")
                     for (fileAndPath in filesAndPaths) {
                         val file = fileAndPath.first
                         val path = fileAndPath.second

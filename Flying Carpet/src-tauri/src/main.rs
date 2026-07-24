@@ -5,7 +5,7 @@
 
 use flying_carpet_core::{
     bluetooth, clean_up_transfer, network, start_transfer, utils, ConnectionMode, InterfaceInfo,
-    Transfer, WiFiInterface, UI,
+    SendFile, Transfer, WiFiInterface, UI,
 };
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -141,7 +141,7 @@ fn start_async(
     peer: Option<String>,
     password: Option<String>,
     interface: WiFiInterface,
-    file_list: Option<Vec<String>>,
+    file_list: Option<Vec<SendFile>>,
     receive_dir: Option<String>,
     using_bluetooth: bool,
     connection_mode: Option<String>,
@@ -263,34 +263,17 @@ fn is_dir(path: &str) -> bool {
     }
 }
 
+// Expand whatever the user picked or dropped into the files to send. Each file comes back
+// paired with the relative name the peer will store it under, so a selected folder is
+// recreated on the receiving end instead of having its contents dumped loose into the
+// destination. All the path logic lives in the core (and is unit-tested there).
 #[tauri::command]
-fn expand_files(paths: Vec<&str>) -> Vec<String> {
-    let path_bufs: Vec<PathBuf> = paths
+fn expand_files(paths: Vec<&str>) -> Vec<SendFile> {
+    let roots: Vec<PathBuf> = paths
         .iter()
         .filter_map(|p| PathBuf::from_str(p).ok())
         .collect();
-    let mut files: Vec<String> = vec![];
-    let mut dirs_to_search: Vec<PathBuf> = vec![];
-    for path in path_bufs {
-        if let Some(metadata) = fs::metadata(&path).ok() {
-            if metadata.is_dir() {
-                dirs_to_search.push(path.clone());
-            }
-            if metadata.is_file() {
-                files.push(path.to_string_lossy().to_string());
-            }
-        }
-    }
-    while dirs_to_search.len() > 0 {
-        let (mut temp_files, mut temp_dirs) = utils::expand_dir(
-            dirs_to_search
-                .pop()
-                .expect("Had dirs to search but couldn't pop."),
-        );
-        files.append(&mut temp_files);
-        dirs_to_search.append(&mut temp_dirs);
-    }
-    files
+    utils::expand_selection(roots)
 }
 
 #[tauri::command]

@@ -86,7 +86,14 @@ fun MainViewModel.makeParentDirectories(filename: String): DocumentFile? {
 }
 
 // returns an array of tuples where the first item is the file and the second item is the path
-// to get to it relative to root directory we're sending from
+// to get to it relative to root directory we're sending from.
+//
+// Callers seed pathSoFar with the selected folder's own name, so the peer recreates that
+// folder inside their chosen destination instead of having its contents dumped loose into
+// it (matching the desktop and Apple senders; see docs/send-folder-behavior.md). The join is
+// guarded so a relative path can never begin with "/": seeding from "" used to produce
+// "/sub/file.jpg" for anything below the top level, which the desktop receiver rejects
+// outright as a rooted path.
 fun getFilesInDir(dir: DocumentFile, pathSoFar: String): Array<Pair<DocumentFile, String>> {
     var allFiles: Array<Pair<DocumentFile, String>> = arrayOf()
     val files = dir.listFiles()
@@ -94,7 +101,8 @@ fun getFilesInDir(dir: DocumentFile, pathSoFar: String): Array<Pair<DocumentFile
         if (file.isFile) {
             allFiles += file to pathSoFar
         } else if (file.isDirectory) {
-            val newDirectoryPath = pathSoFar + '/' + file.name
+            val name = file.name ?: continue
+            val newDirectoryPath = if (pathSoFar.isEmpty()) name else "$pathSoFar/$name"
             allFiles += getFilesInDir(file, newDirectoryPath)
         }
     }

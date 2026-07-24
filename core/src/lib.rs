@@ -18,7 +18,7 @@ use discovery::{DiscoveryRole, DiscoveryService};
 use error::{fc_error, FCError};
 use std::{
     net::SocketAddr,
-    path::{Path, PathBuf},
+    path::PathBuf,
     pin::Pin,
     sync::{Arc, Mutex},
     task::{Context, Poll},
@@ -102,8 +102,22 @@ pub trait UI: Clone + Send + 'static {
 
 #[derive(Clone)]
 pub enum Mode {
-    Send(Vec<PathBuf>),
+    Send(Vec<SendFile>),
     Receive(PathBuf),
+}
+
+// A file queued for sending, paired with the relative name the peer will receive it under.
+//
+// The name is computed once at selection time (utils::expand_selection) instead of being
+// derived from a common prefix at send time: every top-level selection is stripped of its
+// own parent directory, so a selected folder's name survives on the wire and the receiver
+// recreates the folder with the files inside, while individually selected files arrive
+// flat. Separators are always "/", whatever the host platform uses. Matches the Apple and
+// Android senders; see docs/send-folder-behavior.md.
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+pub struct SendFile {
+    pub path: PathBuf,
+    pub name: String,
 }
 
 #[derive(Clone, Copy)]
@@ -175,7 +189,7 @@ pub async fn start_transfer<T: UI>(
     mut peer: Option<String>,
     mut password: Option<String>,
     interface: WiFiInterface,
-    file_list: Option<Vec<String>>,
+    file_list: Option<Vec<SendFile>>,
     receive_dir: Option<String>,
     ui: &T,
     hotspot: Arc<Mutex<Option<PeerResource>>>,
@@ -187,14 +201,17 @@ pub async fn start_transfer<T: UI>(
     // don't panic on bad input: a panic here kills the transfer task without running
     // cleanup, which is how the UI used to get stuck in its in-progress state (#118)
     let mode = if mode == "send" {
-        let paths = match file_list {
-            Some(files) => files.into_iter().map(PathBuf::from).collect(),
-            None => {
+        // an empty list is treated as "nothing chosen" rather than started: javascript's
+        // truthiness check passes an empty array through, and a zero-file send has nothing
+        // to do anyway
+        let files = match file_list {
+            Some(files) if !files.is_empty() => files,
+            _ => {
                 ui.output("Error: send mode selected but no files were chosen.");
                 return None;
             }
         };
-        Mode::Send(paths)
+        Mode::Send(files)
     } else if mode == "receive" {
         match receive_dir {
             Some(folder) => Mode::Receive(PathBuf::from(folder)),
@@ -407,36 +424,17 @@ pub async fn start_transfer<T: UI>(
                     return Some(stream);
                 }
             }
-            // find folder common to all files
-            let mut common_folder = files[0].parent().or(Some(Path::new(""))).unwrap();
-            if files.len() > 1 {
-                for file in &files[1..] {
-                    let current = file.parent().or(Some(Path::new(""))).unwrap();
-                    let current_len = current.components().collect::<Vec<_>>().len();
-                    let common_len = common_folder.components().collect::<Vec<_>>().len();
-                    if current_len < common_len {
-                        common_folder = current;
-                    }
-                    // this puts two files in the same directory in a directory on the other side, which doesn't match other versions' behavior
-                    // else if current_len == common_len {
-                    //     common_folder = current.parent().or(Some(Path::new(""))).unwrap();
-                    // }
-                }
-            }
-            // send files
+            // send files. each file already carries the relative name the peer will store
+            // it under, resolved at selection time by utils::expand_selection
             for (i, file) in files.iter().enumerate() {
-                let file_name = file
-                    .file_name()
-                    .expect("could not get filename from PathBuf")
-                    .to_string_lossy();
                 ui.output("=========================");
                 ui.output(&format!(
                     "Sending file {} of {}. Filename: {}",
                     i + 1,
                     files.len(),
-                    file_name
+                    file.name
                 ));
-                match sending::send_file(file, common_folder, &mut stream, ui).await {
+                match sending::send_file(&file.path, &file.name, &mut stream, ui).await {
                     Ok(_) => (),
                     Err(e) => {
                         ui.output(&format!("Error sending file: {}", e));
@@ -809,7 +807,6 @@ mod transfer_tests {
 
         let (a, b) = tokio::io::duplex(64 * 1024);
         let src2 = src.clone();
-        let send_dir2 = send_dir.clone();
         let recv_dir2 = recv_dir.clone();
 
         let sender = tokio::spawn(async move {
@@ -817,7 +814,9 @@ mod transfer_tests {
                 .await
                 .unwrap();
             enc.write_u64(1).await.unwrap(); // file count, as the orchestrator does
-            sending::send_file(&src2, &send_dir2, &mut enc, &TestUi)
+            // sent under a folder-relative name, as a "send folder" selection produces,
+            // so the receiver's directory recreation is covered end to end
+            sending::send_file(&src2, "album/photo.bin", &mut enc, &TestUi)
                 .await
                 .unwrap();
             enc.flush().await.unwrap();
@@ -835,7 +834,7 @@ mod transfer_tests {
         sender.await.unwrap();
         receiver.await.unwrap();
 
-        let got = std::fs::read(recv_dir.join("photo.bin")).unwrap();
+        let got = std::fs::read(recv_dir.join("album").join("photo.bin")).unwrap();
         assert_eq!(
             got, data,
             "received file must match sent file byte-for-byte"

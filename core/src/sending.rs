@@ -10,9 +10,12 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 // v10+: file contents are protected by the Noise transport (see core/src/noise.rs), which
 // wraps the whole connection, so chunks are sent as raw bytes here — no separate
 // application-level encryption.
+// `relative_name` is the path the peer stores the file under, relative to the folder they
+// chose, always with "/" separators. It is resolved when the user makes their selection
+// (utils::expand_selection), not here.
 pub async fn send_file<S: AsyncRead + AsyncWrite + Unpin, T: UI>(
     file: &Path,
-    prefix: &Path,
+    relative_name: &str,
     stream: &mut S,
     ui: &T,
 ) -> Result<(), FCError> {
@@ -24,11 +27,7 @@ pub async fn send_file<S: AsyncRead + AsyncWrite + Unpin, T: UI>(
     ui.output(&format!("File size: {}", utils::make_size_readable(size)));
 
     // send file details
-    let mut filename = file.strip_prefix(prefix)?.to_string_lossy().to_string();
-    if cfg!(windows) {
-        filename = filename.replace("\\", "/");
-    }
-    send_file_details(&filename, size, stream).await?;
+    send_file_details(relative_name, size, stream).await?;
 
     // check to see if receiving end already has the file
     let need_transfer = check_for_file(&file, stream).await?;
@@ -112,7 +111,9 @@ async fn check_for_file<S: AsyncRead + AsyncWrite + Unpin>(
     let has_file = stream.read_u64().await?;
     if has_file == 1 {
         let hash = utils::hash_file(filename)?;
-        stream.write(&hash).await?;
+        // write_all, not write: a short write would send a truncated hash and leave the
+        // rest of it to be read as the next protocol field
+        stream.write_all(&hash).await?;
         let hashes_match = stream.read_u64().await?;
         Ok(hashes_match != 1) // if hashes match, return false because we don't need transfer
     } else {
