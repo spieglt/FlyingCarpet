@@ -40,7 +40,7 @@ use std::{
     collections::{HashMap, HashSet},
     time::Duration,
 };
-use tokio::time::{sleep, timeout};
+use tokio::time::{interval, sleep, timeout};
 
 use super::SERVICE_UUID;
 
@@ -256,23 +256,57 @@ pub async fn scan(adapter: &Adapter) -> bluer::Result<Device> {
         );
         let discover = adapter.discover_devices().await?;
         pin_mut!(discover);
-        while let Some(evt) = discover.next().await {
-            match evt {
-                AdapterEvent::DeviceAdded(addr) => {
-                    let device = adapter.device(addr)?;
-                    // The pre-seeded events include unrelated known devices (the discovery
-                    // filter does not apply to them); only accept our service.
-                    let dev_uuids = device.uuids().await.ok().flatten().unwrap_or_default();
-                    if !dev_uuids.contains(&fc_uuid) {
-                        println!("Ignoring device {} without Flying Carpet service", addr);
-                        continue;
+        // DeviceAdded fires once per device, and for a bonded peer that once is the
+        // pre-seeded cache entry — BlueZ resolves the peer's rotating private address back to
+        // the existing entry with the stored IRK, so no amount of live advertising produces a
+        // second DeviceAdded. If that cached entry predates the peer ever advertising our
+        // service (it was created when the peer connected to *us* as a central, so it records
+        // the peer's GATT server, not the service it advertises when sending), the branch
+        // below dismisses it and the scan waits forever. Purging it like the unpaired entries
+        // above is not an option: remove_device takes the bond with it.
+        //
+        // So re-read the known devices on a timer as well. A device whose cached UUIDs lack
+        // our service and later gain it must have just advertised, so this adds no staleness
+        // risk that the pre-seeded DeviceAdded path doesn't already carry.
+        let mut recheck = interval(Duration::from_millis(500));
+        loop {
+            tokio::select! {
+                event = discover.next() => {
+                    let Some(event) = event else { break };
+                    match event {
+                        AdapterEvent::DeviceAdded(addr) => {
+                            let device = adapter.device(addr)?;
+                            // The pre-seeded events include unrelated known devices (the
+                            // discovery filter does not apply to them); only accept our service.
+                            let dev_uuids = device.uuids().await.ok().flatten().unwrap_or_default();
+                            if !dev_uuids.contains(&fc_uuid) {
+                                println!(
+                                    "Device {} has no Flying Carpet service yet (paired: {:?}, rssi: {:?}); will keep re-checking",
+                                    addr,
+                                    device.is_paired().await,
+                                    device.rssi().await.ok().flatten(),
+                                );
+                                continue;
+                            }
+                            println!("Found peer {} from a discovery event", addr);
+                            return Ok(device);
+                        }
+                        AdapterEvent::DeviceRemoved(addr) => {
+                            println!("Device removed {addr}");
+                        }
+                        other_event => println!("Processed other event: {:?}", other_event),
                     }
-                    return Ok(device);
                 }
-                AdapterEvent::DeviceRemoved(addr) => {
-                    println!("Device removed {addr}");
+                _ = recheck.tick() => {
+                    for addr in adapter.device_addresses().await? {
+                        let device = adapter.device(addr)?;
+                        let dev_uuids = device.uuids().await.ok().flatten().unwrap_or_default();
+                        if dev_uuids.contains(&fc_uuid) {
+                            println!("Found peer {} by re-reading known devices", addr);
+                            return Ok(device);
+                        }
+                    }
                 }
-                other_event => println!("Processed other event: {:?}", other_event),
             }
         }
         println!("Stopping discovery");

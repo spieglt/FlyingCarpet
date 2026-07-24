@@ -134,6 +134,43 @@ re-pair — which no log in this document has yet.
 Windows Settings → Bluetooth → Remove device, and `bluetoothctl remove <address>` on Linux
 — then pair fresh. Removing only one side reproduces the original condition.
 
+**2026-07-25, second Windows ↔ Linux run (bond fix confirmed; a third bug behind it):**
+starting from fully unpaired, Linux → Windows succeeded and bonded. The reverse leg
+Windows → Linux then hung: Linux stuck at "Started Bluetooth scan, waiting for sending
+device...", Windows at "Started advertising Bluetooth service". Windows was advertising
+correctly (the sender is the BLE peripheral, the receiver the central); Linux simply never
+recognized the advertisement.
+
+Cause, in `central::scan` (`core/src/linux/central.rs`): the discovery loop only acted on
+`AdapterEvent::DeviceAdded`. For a **bonded** peer that event fires exactly once — as the
+pre-seeded cache entry — because BlueZ resolves the peer's rotating private address back to
+the existing device object using the stored IRK. No amount of live advertising produces a
+second `DeviceAdded`. The loop then dismissed the entry (`Ignoring device … without Flying
+Carpet service`) and waited forever on an event that could never arrive.
+
+Whether the cached entry carries our service UUID depends on **how the bond was made**,
+which is why the two runs disagree:
+
+| Bond created during | Linux's cache entry for the peer | Result |
+|---|---|---|
+| a leg where Linux was **central** (it discovered the peer's FC advertisement) | has the FC service UUID | pre-seeded `DeviceAdded` is accepted — works |
+| a leg where Linux was **peripheral** (the peer connected in) | records the peer's GATT *server*, no FC UUID | dismissed — hangs |
+
+The first run bonded in the first arrangement and the reverse leg worked; this run bonded in
+the second and it hung. Same bond, opposite provenance, opposite outcome.
+
+The cached entry cannot be purged the way the unpaired ones above it are: `remove_device`
+takes the bond with it, which is the bug fixed immediately above. The fix is instead to
+re-read the known devices on a 500 ms timer alongside the event stream, so the peer is picked
+up when BlueZ refreshes the entry's UUIDs from a live advertisement. A device whose cached
+UUIDs lack our service and later gain it must have just advertised, so this adds no
+staleness risk the pre-seeded `DeviceAdded` path doesn't already carry.
+
+Note the theme across all three bugs in this document: **bonded peers take different code
+paths from unbonded ones, on every stack**, and each platform's discovery/enumeration logic
+was written and tested against the unbonded path first. Keeping bonds (the fix above) makes
+the bonded path the normal one, so it needs the same scrutiny.
+
 The `0x8000FFFF` recovery ladder has still **not been exercised against the failure it was
 built for**; the iPhone case remains intermittent and unreproduced since.
 

@@ -141,6 +141,16 @@ Each row has a specific repro that previously failed — test the repro, not jus
       bond and enumerate services. Previously leg 1 made Linux delete its half of the bond,
       so leg 2 got an empty GATT service list and then failed to re-pair permanently. Confirm
       `bluetoothctl paired-devices` on Linux still lists the Windows box after leg 1.
+- [ ] **Both bond provenances, Windows ↔ Linux.** Run the pair twice from fully unpaired,
+      once in each starting order, because the two produce *different* cached state on Linux
+      and only one of them used to work:
+      - [ ] unpaired → **Windows → Linux** first (Linux bonds as central) → then Linux → Windows
+      - [ ] unpaired → **Linux → Windows** first (Linux bonds as peripheral) → then
+            Windows → Linux. This is the order that hung: Linux's cache entry for the peer had
+            no Flying Carpet UUID, and the scan only reacted to `DeviceAdded`, which never
+            fires twice for a bonded peer. Expect `Found peer … by re-reading known devices`
+            in the Linux stdout.
+      - [ ] Then a third leg in each case, to confirm repeat transfers keep working
 - [ ] **Bidirectional BLE hotspot, Linux ↔ Android** and **Linux ↔ macOS**, same pattern —
       Linux no longer removes any peer's bond, so all three pairings need one clean
       round trip. macOS was already exempt and should be unchanged.
@@ -214,9 +224,9 @@ TestFolder/
 Pass = destination contains `TestFolder/` with all five files at the paths above, and
 **nothing** loose in the destination root.
 
-- [ ] Windows sends `TestFolder` (Send Folder checkbox) → receiver gets `TestFolder/…`
-- [ ] Windows sends `TestFolder` by **drag-and-drop** onto the window → same result
-- [ ] Linux sends `TestFolder` (checkbox and drag-and-drop)
+- [x] Windows sends `TestFolder` (Send Folder checkbox) → receiver gets `TestFolder/…`
+- [x] Windows sends `TestFolder` by **drag-and-drop** onto the window → same result
+- [x] Linux sends `TestFolder` (checkbox and drag-and-drop)
 - [ ] Android sends `TestFolder` (Send Folder checkbox) → **to a Windows or Linux receiver**;
       this is the combination that used to fail with "Received invalid filename path"
 - [ ] iOS sends `TestFolder` ("Send Folder" in the "Send from:" prompt)
