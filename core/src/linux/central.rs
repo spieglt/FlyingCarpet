@@ -254,21 +254,26 @@ pub async fn scan(adapter: &Adapter) -> bluer::Result<Device> {
             adapter.name(),
             adapter.address().await?
         );
-        let discover = adapter.discover_devices().await?;
-        pin_mut!(discover);
-        // DeviceAdded fires once per device, and for a bonded peer that once is the
-        // pre-seeded cache entry — BlueZ resolves the peer's rotating private address back to
-        // the existing entry with the stored IRK, so no amount of live advertising produces a
-        // second DeviceAdded. If that cached entry predates the peer ever advertising our
-        // service (it was created when the peer connected to *us* as a central, so it records
-        // the peer's GATT server, not the service it advertises when sending), the branch
-        // below dismisses it and the scan waits forever. Purging it like the unpaired entries
-        // above is not an option: remove_device takes the bond with it.
+        // discover_devices_with_changes, NOT discover_devices. The plain version emits
+        // DeviceAdded once per device, and for a bonded peer that once is the pre-seeded cache
+        // entry: BlueZ resolves the peer's rotating private address back to the existing entry
+        // using the stored IRK, so no amount of live advertising produces a second DeviceAdded.
+        // If that cached entry predates the peer ever advertising our service — it was created
+        // when the peer connected to *us* as a central, so it records the peer's GATT server
+        // rather than the service it advertises when sending — the filter below dismisses it
+        // and the scan waits forever on an event that can never arrive. That is the
+        // Windows -> Linux hang.
         //
-        // So re-read the known devices on a timer as well. A device whose cached UUIDs lack
-        // our service and later gain it must have just advertised, so this adds no staleness
-        // risk that the pre-seeded DeviceAdded path doesn't already carry.
-        let mut recheck = interval(Duration::from_millis(500));
+        // The _with_changes variant subscribes to each device's property stream and re-emits
+        // DeviceAdded on every change, so the peer is picked up the moment BlueZ merges the
+        // service UUID in from a live advertisement. Purging the cached entry the way the
+        // unpaired ones above are purged is not an option: remove_device takes the bond too.
+        let discover = adapter.discover_devices_with_changes().await?;
+        pin_mut!(discover);
+        // DeviceAdded now repeats per property change, so only log each address once.
+        let mut reported: HashSet<Address> = HashSet::new();
+        let mut diag = interval(Duration::from_secs(5));
+        diag.tick().await; // the first tick is immediate; we want the first dump at +5s
         loop {
             tokio::select! {
                 event = discover.next() => {
@@ -276,35 +281,47 @@ pub async fn scan(adapter: &Adapter) -> bluer::Result<Device> {
                     match event {
                         AdapterEvent::DeviceAdded(addr) => {
                             let device = adapter.device(addr)?;
-                            // The pre-seeded events include unrelated known devices (the
-                            // discovery filter does not apply to them); only accept our service.
+                            // Known devices are included regardless of the discovery filter,
+                            // so check the service ourselves.
                             let dev_uuids = device.uuids().await.ok().flatten().unwrap_or_default();
                             if !dev_uuids.contains(&fc_uuid) {
-                                println!(
-                                    "Device {} has no Flying Carpet service yet (paired: {:?}, rssi: {:?}); will keep re-checking",
-                                    addr,
-                                    device.is_paired().await,
-                                    device.rssi().await.ok().flatten(),
-                                );
+                                if reported.insert(addr) {
+                                    println!(
+                                        "Device {} has no Flying Carpet service yet (paired: {:?}, connected: {:?}, rssi: {:?})",
+                                        addr,
+                                        device.is_paired().await,
+                                        device.is_connected().await,
+                                        device.rssi().await.ok().flatten(),
+                                    );
+                                }
                                 continue;
                             }
-                            println!("Found peer {} from a discovery event", addr);
+                            println!("Found peer {}", addr);
                             return Ok(device);
                         }
                         AdapterEvent::DeviceRemoved(addr) => {
+                            reported.remove(&addr);
                             println!("Device removed {addr}");
                         }
                         other_event => println!("Processed other event: {:?}", other_event),
                     }
                 }
-                _ = recheck.tick() => {
+                // Periodic dump of what BlueZ believes, so a scan that finds nothing says why
+                // rather than going silent. In particular this shows whether a bonded peer's
+                // UUID list ever gains our service while it is advertising.
+                _ = diag.tick() => {
+                    println!("--- still scanning; known devices ---");
                     for addr in adapter.device_addresses().await? {
                         let device = adapter.device(addr)?;
-                        let dev_uuids = device.uuids().await.ok().flatten().unwrap_or_default();
-                        if dev_uuids.contains(&fc_uuid) {
-                            println!("Found peer {} by re-reading known devices", addr);
-                            return Ok(device);
-                        }
+                        println!(
+                            "    {} name {:?} paired {:?} connected {:?} rssi {:?} uuids {:?}",
+                            addr,
+                            device.name().await.ok().flatten(),
+                            device.is_paired().await,
+                            device.is_connected().await,
+                            device.rssi().await.ok().flatten(),
+                            device.uuids().await.ok().flatten(),
+                        );
                     }
                 }
             }
