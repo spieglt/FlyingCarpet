@@ -1,5 +1,12 @@
 [workspace]
 
+# Virtual workspaces don't inherit a resolver from the members' edition, so cargo would
+# default to resolver v1 and warn. v2 is what edition 2021 implies, and it matters here:
+# v1 unifies features across build-/dev-dependencies and across platform-specific deps,
+# so features from a target we aren't building (core is split cfg(windows)/cfg(unix))
+# could leak into the normal dependency graph.
+resolver = "2"
+
 members = [
     "core",
     "Flying Carpet/src-tauri",

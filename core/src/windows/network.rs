@@ -856,30 +856,40 @@ fn add_firewall_rule(add_tcp: bool, add_udp: bool) -> Option<String> {
         .expect("Error: couldn't convert path to string.")
         .to_string_lossy();
 
-    let program = "netsh";
+    let exe_path = path.to_string_lossy();
+
+    // Each ShellExecute with the "runas" verb raises its own UAC prompt, so adding the TCP
+    // and UDP rules as two separate netsh invocations made the user approve twice. Build
+    // both commands and run them under a single elevated cmd.exe instead: one prompt.
+    // The rule name and program path stay double-quoted, which also makes any cmd
+    // metacharacter in the path (`&`, `|`, `^`) literal, so odd install paths are safe.
+    let mut commands: Vec<String> = Vec::new();
 
     // TCP rule for file transfer
     if add_tcp {
-        let tcp_parameters = "advfirewall firewall add rule name=\"".to_string()
-            + &file_name
-            + "\" dir=in action=allow program=\""
-            + &path.to_string_lossy()
-            + "\" enable=yes profile=any localport=3290 protocol=tcp";
-        if let Err(e) = run_shell_execute(program, Some(&tcp_parameters), true) {
-            return Some(e.to_string());
-        }
+        commands.push(format!(
+            "netsh advfirewall firewall add rule name=\"{}\" dir=in action=allow program=\"{}\" enable=yes profile=any localport=3290 protocol=tcp",
+            file_name, exe_path
+        ));
     }
 
     // UDP rule for discovery (multicast + unicast)
     if add_udp {
-        let udp_parameters = "advfirewall firewall add rule name=\"".to_string()
-            + &file_name
-            + " UDP\" dir=in action=allow program=\""
-            + &path.to_string_lossy()
-            + "\" enable=yes profile=any localport=3290 protocol=udp";
-        if let Err(e) = run_shell_execute(program, Some(&udp_parameters), true) {
-            return Some(e.to_string());
-        }
+        commands.push(format!(
+            "netsh advfirewall firewall add rule name=\"{} UDP\" dir=in action=allow program=\"{}\" enable=yes profile=any localport=3290 protocol=udp",
+            file_name, exe_path
+        ));
+    }
+
+    if commands.is_empty() {
+        return None;
+    }
+
+    // `&&` rather than `&`: if the first rule fails there's no point applying the second,
+    // and the caller re-checks both rules afterward and reports if either is missing.
+    let parameters = format!("/C {}", commands.join(" && "));
+    if let Err(e) = run_shell_execute("cmd.exe", Some(&parameters), true) {
+        return Some(e.to_string());
     }
 
     None
