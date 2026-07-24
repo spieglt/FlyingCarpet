@@ -71,7 +71,12 @@ pub async fn find_characteristics<T: UI>(
     let md = device.manufacturer_data().await?;
     println!("    Manufacturer data: {:x?}", &md);
 
-    if uuids.contains(&Uuid::parse_str(SERVICE_UUID).unwrap()) {
+    // The cached UUIDs property is stale for bonded peers (see scan()), so a device that
+    // scan() already verified over a live connection would be rejected here on the same bad
+    // evidence. If it's connected, scan() vouched for it — the service enumeration below is
+    // the real check either way.
+    let already_connected = device.is_connected().await.unwrap_or(false);
+    if uuids.contains(&Uuid::parse_str(SERVICE_UUID).unwrap()) || already_connected {
         println!("    Device provides our service!");
         ui.output("Peer is running Flying Carpet, connecting over Bluetooth...");
         let mut characteristics = HashMap::new();
@@ -203,6 +208,29 @@ pub async fn find_characteristics<T: UI>(
     }
 }
 
+// Connect and ask BlueZ to resolve the peer's GATT database, then report whether our service
+// is actually there. Used when the cached UUIDs property can't be trusted (bonded peers).
+async fn probe_for_service(device: &Device, fc_uuid: &Uuid) -> bluer::Result<bool> {
+    if !device.is_connected().await? {
+        device.connect().await?;
+    }
+    // services() waits for ServicesResolved internally, with bluer's own timeout
+    let services = device.services().await?;
+    let mut found = false;
+    for service in &services {
+        if service.uuid().await? == *fc_uuid {
+            found = true;
+        }
+    }
+    println!(
+        "    resolved {} services on {}; Flying Carpet present: {}",
+        services.len(),
+        device.address(),
+        found
+    );
+    Ok(found)
+}
+
 pub async fn scan(adapter: &Adapter) -> bluer::Result<Device> {
     let fc_uuid = Uuid::parse_str(SERVICE_UUID).expect("Could not parse service UUID");
     let mut uuids = HashSet::new();
@@ -270,8 +298,9 @@ pub async fn scan(adapter: &Adapter) -> bluer::Result<Device> {
         // unpaired ones above are purged is not an option: remove_device takes the bond too.
         let discover = adapter.discover_devices_with_changes().await?;
         pin_mut!(discover);
-        // DeviceAdded now repeats per property change, so only log each address once.
+        // DeviceAdded now repeats per property change, so only log/probe each address once.
         let mut reported: HashSet<Address> = HashSet::new();
+        let mut probed: HashSet<Address> = HashSet::new();
         let mut diag = interval(Duration::from_secs(5));
         diag.tick().await; // the first tick is immediate; we want the first dump at +5s
         loop {
@@ -284,20 +313,54 @@ pub async fn scan(adapter: &Adapter) -> bluer::Result<Device> {
                             // Known devices are included regardless of the discovery filter,
                             // so check the service ourselves.
                             let dev_uuids = device.uuids().await.ok().flatten().unwrap_or_default();
-                            if !dev_uuids.contains(&fc_uuid) {
-                                if reported.insert(addr) {
-                                    println!(
-                                        "Device {} has no Flying Carpet service yet (paired: {:?}, connected: {:?}, rssi: {:?})",
-                                        addr,
-                                        device.is_paired().await,
-                                        device.is_connected().await,
-                                        device.rssi().await.ok().flatten(),
-                                    );
-                                }
-                                continue;
+                            if dev_uuids.contains(&fc_uuid) {
+                                println!("Found peer {}", addr);
+                                return Ok(device);
                             }
-                            println!("Found peer {}", addr);
-                            return Ok(device);
+                            // For a *bonded* device, BlueZ's UUIDs property is its cached view
+                            // of the peer's GATT database from the last connection, and it is
+                            // NOT refreshed from advertisements. Observed 2026-07-25: the peer
+                            // sat at rssi -50 listing only its generic services (1800, 1801,
+                            // 180a, 1849, 184c, 1855) for as long as we scanned, while it was
+                            // advertising Flying Carpet the whole time. Unbonded peers never
+                            // hit this — with no cache, the advertised UUID is all BlueZ has,
+                            // which is why first-time pairing always worked and every reuse
+                            // hung. Purging the entry to force rediscovery is not an option:
+                            // remove_device takes the bond with it.
+                            //
+                            // So ask over an actual connection instead. device.services()
+                            // waits for BlueZ to resolve the GATT database, which is the
+                            // source of truth the cached property is only an approximation of.
+                            if device.is_paired().await.unwrap_or(false) && probed.insert(addr) {
+                                println!(
+                                    "Paired device {} doesn't list our service; connecting to re-resolve its GATT database",
+                                    addr
+                                );
+                                match probe_for_service(&device, &fc_uuid).await {
+                                    Ok(true) => {
+                                        println!("Found peer {} after re-resolving services", addr);
+                                        return Ok(device);
+                                    }
+                                    Ok(false) => {
+                                        println!("    {} has no Flying Carpet service; disconnecting", addr);
+                                        let _ = device.disconnect().await;
+                                    }
+                                    Err(e) => {
+                                        println!("    Could not probe {}: {}", addr, e);
+                                        let _ = device.disconnect().await;
+                                    }
+                                }
+                            }
+                            if reported.insert(addr) {
+                                println!(
+                                    "Device {} has no Flying Carpet service yet (paired: {:?}, connected: {:?}, rssi: {:?})",
+                                    addr,
+                                    device.is_paired().await,
+                                    device.is_connected().await,
+                                    device.rssi().await.ok().flatten(),
+                                );
+                            }
+                            continue;
                         }
                         AdapterEvent::DeviceRemoved(addr) => {
                             reported.remove(&addr);

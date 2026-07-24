@@ -225,7 +225,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         // acting as central
         ui.output("Started Bluetooth scan, waiting for sending device...");
         let mut retried = false;
-        let (device, characteristics) = loop {
+        let (_device, characteristics) = loop {
             let device = central::scan(&adapter).await?;
             ui.output("Found device");
             match find_characteristics(&device, ui).await {
