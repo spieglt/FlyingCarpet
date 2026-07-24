@@ -338,6 +338,8 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             // this was actually the culprit
             // .setLegacy(false)
             .build()
+        // new transfer: allow the credential exchange (and its retry) to run again
+        bluetoothReceiver.exchangeComplete = false
         bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
         _status.postValue(true)
         outputText("Scanning for Bluetooth peripherals...")
@@ -406,6 +408,13 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         var passwordCharacteristic: BluetoothGattCharacteristic? = null
         var waitingForConnection = false
         private var bonded = false
+        // Set once the credential exchange has actually completed (connectToPeer has run).
+        // Gates the post-bond connection's replay: the replay must stay available as a retry
+        // until the exchange succeeds once, then be suppressed so a reconnect doesn't re-run
+        // read-OS → write-OS → connectToPeer against a transfer already in progress. Set only
+        // *after* success (not on connect, which was the exchangeStarted mistake), so this can
+        // only ever remove a redundant replay, never a needed retry. Reset per transfer in scan().
+        var exchangeComplete = false
 
         val gattCallback = object : BluetoothGattCallback() {
             // this is called when we as central have read a characteristic from the peer's peripheral
@@ -532,6 +541,22 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     bluetoothGatt = gatt
                     outputText("Connected")
+                    // Both GATT connections we open — the autoConnect=false one from
+                    // onScanResult and the autoConnect=true one the bond receiver opens after
+                    // pairing — run discoverServices() and replay read-OS → write-OS. That
+                    // repetition is deliberate: the first connection's encrypted read only
+                    // *triggers* pairing, and its write-back can be lost while the link is
+                    // still bonding, so the post-bond connection is the one that reliably
+                    // completes the exchange.
+                    //
+                    // Once the exchange has actually completed, though, further replays are
+                    // pure waste — the transfer is over TCP now — and the autoConnect=true
+                    // link re-establishing mid-transfer would otherwise re-run the whole chain.
+                    // So skip discovery once the exchange is done; until then, keep retrying.
+                    if (exchangeComplete) {
+                        Log.i("Bluetooth", "Skipping rediscovery; credential exchange already complete")
+                        return
+                    }
                     // this was the reason android couldn't connect to macOS? no, was the setLegacy(false). diagnosed by comparing nRF Connect logs from Flying Carpet pairings to nRF Connect pairings.
                     Thread.sleep(1600)
                     gatt?.discoverServices()

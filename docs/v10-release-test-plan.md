@@ -71,8 +71,8 @@ W=Windows, L=Linux, M=macOS, I=iOS, A=Android.
 - [x] L → M
 - [x] M → I
 - [x] I → A
-- [ ] A → W
-- [ ] I → M  (Apple ↔ Apple, the case that *requires* shared network)
+- [x] A → W
+- [x] I → M  (Apple ↔ Apple, the case that *requires* shared network)
 - [ ] M → M  or  A → A  (same-OS sanity, if a second device is available)
 
 ### Hotspot — each BLE stack pairs with each other, each non-Apple platform hosts
@@ -128,6 +128,13 @@ Each row has a specific repro that previously failed — test the repro, not jus
 - [ ] **Cancel mid-transfer** (each desktop) → UI recovers (drop-guard); hotspot torn down
 - [ ] **Stale BLE pairing recovery**: forget the peer on one side only, retry → re-pairs
       cleanly (do not need to forget both)
+- [ ] **Android rotation mid-transfer**: rotate during a *multi-file* transfer (enough files
+      that the log has scrolled) → transfer keeps running; the log survives whole, with no
+      duplicated or missing line at the seam and no truncation; auto-scroll still follows new
+      lines afterward; progress bar and button states are preserved. The log now lives in the
+      ViewModel instead of the saved-state `Bundle`, so this also covers the
+      `TransactionTooLargeException` that a long transfer's log previously risked on rotation.
+      Rotate a second time after the transfer completes to confirm the finished log persists.
 
 ---
 

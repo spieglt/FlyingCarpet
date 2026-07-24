@@ -134,6 +134,15 @@ class RecordingOutputStream(val inner: OutputStream) : OutputStream() {
 // PBKDF2WithHmacSHA256 / PBEKeySpec) so the encoding is unambiguously UTF-8 and matches the
 // Rust `pbkdf2_hmac::<Sha256>` output exactly.
 fun derivePsk(password: String): ByteArray {
+    // An empty password must never reach the handshake: it would mean the transfer's
+    // credentials were lost (or never set) and the peer is being authenticated against
+    // nothing. SecretKeySpec below rejects a zero-length key anyway, but as an opaque
+    // "Empty key" IllegalArgumentException that says nothing about the actual fault.
+    require(password.isNotEmpty()) {
+        "No password available to secure the transfer. The Wi-Fi credentials were lost " +
+            "before the encrypted handshake, or the hotspot started without a password. " +
+            "Cancel and start the transfer again."
+    }
     val mac = Mac.getInstance("HmacSHA256")
     mac.init(SecretKeySpec(password.toByteArray(Charsets.UTF_8), "HmacSHA256"))
     // dkLen == hLen == 32, so a single block.

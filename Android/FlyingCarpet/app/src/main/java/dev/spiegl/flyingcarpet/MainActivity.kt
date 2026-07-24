@@ -230,9 +230,20 @@ class MainActivity : AppCompatActivity() {
         peerInstruction = findViewById(id.peerInstruction)
         connectionGroup = findViewById(id.connectionGroup)
         outputBox = findViewById(id.outputBox)
-        viewModel.output.observe(this) { msg ->
-            outputBox.append(msg + '\n')
+        // Seed from the ViewModel, which survives rotation, rather than from the saved-state
+        // Bundle, which can't hold a long transfer's log (see MainViewModel.outputSnapshot).
+        val (transcript, seededThrough) = viewModel.outputSnapshot()
+        outputBox.text = transcript
+        var lastRenderedLine = seededThrough
+        viewModel.output.observe(this) { line ->
+            // LiveData redelivers its latest value on (re)subscription; skip it if the seed
+            // already covers it, so rotation doesn't duplicate the last line.
+            if (line.seq <= lastRenderedLine) return@observe
+            lastRenderedLine = line.seq
+            outputBox.append(line.text + '\n')
+            scrollOutputToBottom()
         }
+        scrollOutputToBottom()
         progressBar = findViewById(id.progressBar)
         viewModel.progressBar.observe(this) { value ->
             progressBar.progress = value
@@ -503,9 +514,31 @@ class MainActivity : AppCompatActivity() {
             viewModel.connectionMode == ConnectionMode.Hotspot
     }
 
+    // The output box is a bare TextView, not a ScrollView. android:gravity="bottom" keeps the
+    // newest line visible only while the log is shorter than the box: TextView clamps its
+    // vertical gravity offset to zero once the text is taller than the view, so past that point
+    // the box pins to the top and stops following, which is why long transfers appear to stall.
+    // scrollbars="vertical" only draws the scrollbar; it doesn't move the view. So scroll it
+    // ourselves after every line, as the desktop and Apple apps already do.
+    private fun scrollOutputToBottom() {
+        // post() because append() invalidates the layout — the new line's position isn't
+        // measurable until the next pass.
+        outputBox.post {
+            val layout = outputBox.layout ?: return@post
+            if (layout.lineCount == 0) return@post
+            val visibleHeight =
+                outputBox.height - outputBox.compoundPaddingTop - outputBox.compoundPaddingBottom
+            val overflow = layout.getLineBottom(layout.lineCount - 1) - visibleHeight
+            // Below the overflow point this is a no-op scroll to 0, leaving gravity="bottom"
+            // to hold the text against the bottom edge as before.
+            outputBox.scrollTo(0, overflow.coerceAtLeast(0))
+        }
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putString("output", outputBox.text.toString())
+        // NB: the output log is deliberately not saved here — it lives in the ViewModel so it
+        // can't overflow the Binder transaction buffer. See MainViewModel.outputSnapshot().
         val modeGroup = findViewById<MaterialButtonToggleGroup>(id.modeGroup)
         val modeIndex = when (modeGroup.checkedButtonId) {
             id.sendButton -> 1
@@ -537,7 +570,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
         super.onRestoreInstanceState(savedInstanceState)
-        outputBox.text = savedInstanceState.getString("output")
         val modeGroup = findViewById<MaterialButtonToggleGroup>(id.modeGroup)
         when (savedInstanceState.getInt("mode")) {
             1 -> modeGroup.check(id.sendButton)

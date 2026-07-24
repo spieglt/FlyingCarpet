@@ -59,6 +59,9 @@ val one = byteArrayOf(0, 0, 0, 0, 0, 0, 0, 1) // meant to represent a 64-bit uns
 const val chunkSize = 5_000_000
 //fun ByteArray.toHex(): String = joinToString(separator = "") { eachByte -> "%02x".format(eachByte) }
 
+/** One line of transfer log, tagged with a monotonically increasing sequence number. */
+data class OutputLine(val seq: Long, val text: String)
+
 class MainViewModel(private val application: Application) : AndroidViewModel(application), BluetoothDelegate {
 
     lateinit var mode: Mode
@@ -97,12 +100,39 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     private var discoveryJob: Job? = null // receiver-role background discovery in shared network mode
     private var boundToWifiNetwork = false
     private val handler = Handler(Looper.getMainLooper())
-    private var _output = MutableLiveData<String>()
-    val output: LiveData<String>
+    private var _output = MutableLiveData<OutputLine>()
+    val output: LiveData<OutputLine>
         get() = _output
+
+    // The whole transcript is kept here, not in the Activity's saved-state Bundle. Bundles
+    // cross Binder, whose transaction buffer is ~1MB for the whole process, so putString()ing
+    // a many-file transfer's log risks TransactionTooLargeException on rotation. The ViewModel
+    // already outlives configuration changes, so the log rides along whole: no size cap, no
+    // serialization, nothing dropped. Both fields are touched only from the main thread, by
+    // way of the Dispatchers.Main hop in outputText().
+    private val outputLog = StringBuilder()
+    private var outputSeq = 0L
+
+    /**
+     * The transcript so far, paired with the sequence number of its last line. A recreated
+     * Activity seeds its fresh TextView with this, then ignores any [output] line at or below
+     * that sequence number — LiveData redelivers its most recent value to a newly registered
+     * observer, and that line is already in the seed.
+     */
+    fun outputSnapshot(): Pair<String, Long> = outputLog.toString() to outputSeq
+
     override fun outputText(msg: String) {
+        // Mirror every user-facing line to logcat under one greppable tag, so a transfer's
+        // on-screen log can be pulled off the device with `adb logcat -s FlyingCarpet` instead
+        // of being retyped by hand. Logged here, off the main-thread hop below, so the logcat
+        // timestamps reflect when each line was produced. Trim only for the log line: the
+        // leading blank line some messages carry ("\nStarting Transfer") is for on-screen
+        // spacing and would otherwise print as an empty logcat entry.
+        Log.i("FlyingCarpet", msg.trim())
         GlobalScope.launch(Dispatchers.Main) {
-            _output.value = msg
+            outputLog.append(msg).append('\n')
+            outputSeq++
+            _output.value = OutputLine(outputSeq, msg)
         }
     }
 
@@ -134,6 +164,16 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
     suspend fun startTransfer() {
         outputText("\nStarting Transfer")
+        // Derive the hotspot PSK up front, while `password` is still known to be the one the
+        // peer joined with. Deriving it at handshake time instead left a multi-second window —
+        // startTCP() blocks waiting for the peer to associate and connect — during which a
+        // stray callback could clear the credentials out from under the transfer. In shared
+        // network mode the PSK is derived even earlier, before discovery, which keys its
+        // announcement HMAC from it. Same PSK either way: this is ordering only, not a wire
+        // change.
+        if (connectionMode == ConnectionMode.Hotspot) {
+            withContext(Dispatchers.IO) { psk = derivePsk(password) }
+        }
         startTCP()
         // Plaintext preamble on the raw socket: version, then send/receive mode. Every
         // preamble byte, sent and received, is recorded and bound into the Noise prologue
@@ -163,11 +203,6 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         }
         outputText("Establishing encrypted connection...")
         withContext(Dispatchers.IO) {
-            // In shared network mode the PSK was already derived (before discovery, which
-            // keys its announcement HMAC from it); in hotspot mode this is the first use.
-            if (connectionMode == ConnectionMode.Hotspot) {
-                psk = derivePsk(password)
-            }
             val transport = noiseHandshake(inputStream, outputStream, role, psk, prologue)
             inputStream = transport.input
             outputStream = transport.output
@@ -255,6 +290,21 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     }
 
     override fun connectToPeer() {
+        // The BLE credential exchange deliberately runs over two GATT connections (see
+        // Bluetooth.onConnectionStateChange), so this, its final step, can be reached more
+        // than once per transfer. Re-entering after the hotspot is up would clear the
+        // ssid/password the peer has already used to join — and startHotspot() below then
+        // no-ops because hotspotRunning is set, so nothing puts them back. That left the
+        // in-flight transfer deriving its Noise PSK from an empty password, failing the
+        // handshake with SecretKeySpec's opaque "Empty key" while the peer, already
+        // associated and waiting, saw only a dropped socket. This guard is the single point
+        // that enforces "start the hotspot once": the first call always arrives with
+        // hotspotRunning false (MainActivity clears it when Start is pressed; only the
+        // LocalOnlyHotspot onStarted callback sets it), and every later replay is a no-op.
+        if (hotspotRunning) {
+            Log.i("Flying Carpet", "connectToPeer() replayed after hotspot start; ignoring")
+            return
+        }
         ssid = ""
         password = ""
         if (connectionMode == ConnectionMode.SharedNetwork) {
@@ -278,6 +328,12 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         // if we're joining and not using bluetooth, barcodeLauncher will call joinHotspot()
         // but who will call connectToPeer? file/folder pickers in MainActivity if not using bluetooth, or after we write OS if bluetooth
         if (isHosting()) {
+            // The BLE exchange has done its job for the host: from here the peer reads/receives
+            // the wifi details and joins. Mark it complete so a post-bond GATT reconnection
+            // doesn't replay read-OS → write-OS mid-transfer. Scoped to the host path on
+            // purpose — the joiner (else branch) is only *starting* its SSID/password reads
+            // here, so it still relies on the replay as a retry and must not be gated.
+            bluetooth.bluetoothReceiver.exchangeComplete = true
             startHotspot()
         } else { // joining hotspot
             if (bluetooth.active) {
