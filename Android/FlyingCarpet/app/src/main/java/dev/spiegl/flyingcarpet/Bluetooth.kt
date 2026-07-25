@@ -32,6 +32,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelUuid
 import android.util.Log
 import androidx.core.app.ActivityCompat
@@ -79,6 +81,13 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         // ignoring genuine Bluetooth failures. Before the permission gate below because this is
         // just a flag — nothing here needs a permission we might not have.
         bluetoothReceiver.exchangeComplete = false
+        // Same reasoning for `bonded`: it means "this transfer's post-bond connection has been
+        // opened", and it was never cleared anywhere, so the first fresh pairing in an app
+        // session disarmed the post-bond connectGatt — the connection that reliably completes
+        // the exchange — for every later fresh pairing. And for `result`: a stale scan result
+        // left here would let an unrelated bond event connect to the previous transfer's peer.
+        bluetoothReceiver.bonded = false
+        bluetoothReceiver.result = null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
             && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
         {
@@ -95,9 +104,10 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         bluetoothReceiver.bluetoothGatt?.disconnect()
         bluetoothReceiver.bluetoothGatt?.close()
         bluetoothReceiver.bluetoothGatt = null
-        // peripheral
+        // peripheral. adapter and bluetoothLeAdvertiser are null when Bluetooth is off or
+        // unsupported — a user flipping Bluetooth off mid-transfer must not crash teardown.
         if (this::bluetoothManager.isInitialized) {
-            bluetoothManager.adapter.bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
+            bluetoothManager.adapter?.bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback)
         }
         // Close the GATT server, not just clearServices(): an open server stays connectable
         // between transfers, so a peer (e.g. iOS starting its next transfer before this
@@ -153,8 +163,8 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             super.onConnectionStateChange(device, status, newState)
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 outputText("Device connected")
-                val bluetoothLeAdvertiser = bluetoothManager.adapter.bluetoothLeAdvertiser
-                bluetoothLeAdvertiser.stopAdvertising(advertiseCallback)
+                // null if Bluetooth was switched off between the connect and this callback
+                bluetoothManager.adapter?.bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback)
                 outputText("Stopped advertising")
             } else {
                 outputText("Device disconnected")
@@ -286,8 +296,15 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         {
             return
         }
-        // BluetoothLeAdvertiser
-        val bluetoothLeAdvertiser = bluetoothManager.adapter.bluetoothLeAdvertiser
+        // BluetoothLeAdvertiser. null when Bluetooth is off: report and fail the transfer
+        // rather than crash — this used to be an unguarded platform-type dereference.
+        val bluetoothLeAdvertiser = bluetoothManager.adapter?.bluetoothLeAdvertiser
+        if (bluetoothLeAdvertiser == null) {
+            outputText("Bluetooth advertiser unavailable. Is Bluetooth turned on?")
+            active = false
+            bluetoothFailed()
+            return
+        }
         val settingsBuilder = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
             .setConnectable(true)
@@ -299,7 +316,8 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         val settings = settingsBuilder.build()
 
         val data = AdvertiseData.Builder()
-            .setIncludeDeviceName(bluetoothManager.adapter.name.length <= 8)
+            // adapter.name is nullable (and the adapter can vanish if Bluetooth turns off)
+            .setIncludeDeviceName((bluetoothManager.adapter?.name?.length ?: Int.MAX_VALUE) <= 8)
             .setIncludeTxPowerLevel(false)
             .addServiceUuid(ParcelUuid(SERVICE_UUID))
             .build()
@@ -324,11 +342,11 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
     // central
 
     fun initializeCentral(): Boolean {
-        if (bluetoothManager.adapter.bluetoothLeScanner == null) {
-            return false
-        }
-        bluetoothLeScanner = bluetoothManager.adapter.bluetoothLeScanner
-        return bluetoothManager.adapter != null
+        // adapter is null when Bluetooth is unsupported; check it before dereferencing
+        // rather than after (the old order NPE'd on the adapter access itself)
+        val scanner = bluetoothManager.adapter?.bluetoothLeScanner ?: return false
+        bluetoothLeScanner = scanner
+        return true
     }
 
     fun scan() {
@@ -345,8 +363,10 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             // this was actually the culprit
             // .setLegacy(false)
             .build()
-        // new transfer: allow the credential exchange (and its retry) to run again
+        // new transfer: allow the credential exchange (and its retry) to run again, and let
+        // this transfer's pairing (if one happens) open its own post-bond connection
         bluetoothReceiver.exchangeComplete = false
+        bluetoothReceiver.bonded = false
         bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
         _status.postValue(true)
         outputText("Scanning for Bluetooth peripherals...")
@@ -414,7 +434,10 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         var ssidCharacteristic: BluetoothGattCharacteristic? = null
         var passwordCharacteristic: BluetoothGattCharacteristic? = null
         var waitingForConnection = false
-        private var bonded = false
+        // "This transfer's post-bond connection has been opened." Cleared in scan() and
+        // stop(), like exchangeComplete: left latched, the first fresh pairing in an app
+        // session would suppress the post-bond connectGatt for every later fresh pairing.
+        var bonded = false
         // Set once the credential exchange has actually completed. Gates the post-bond
         // connection's replay: the replay must stay available as a retry until the exchange
         // succeeds once, then be suppressed so a reconnect doesn't re-run read-OS → write-OS →
@@ -430,6 +453,11 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         // axes: connectToPeer() for the host, gotPassword() for either kind of joiner.
         // Cleared in scan() and, for roles that never scan, in stop().
         var exchangeComplete = false
+
+        // For delays that used to be Thread.sleep() on the GATT binder thread: sleeping
+        // there stalls every other callback behind it (Apple's equivalent was converted to
+        // asyncAfter for the same reason), so schedule instead.
+        private val handler = Handler(Looper.getMainLooper())
 
         // True from the moment discoverServices() is accepted until onServicesDiscovered fires
         // for it. Two call sites start a discovery — onConnectionStateChange after its settle,
@@ -482,12 +510,16 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     }
                     SSID_CHARACTERISTIC_UUID -> {
                         val ssid = value.toString(Charsets.UTF_8)
-                        if (ssid == "") {
-                            // peripheral hasn't stood up its hotspot yet, have to wait.
-                            // kill a second, then read again, which will loop us back here.
+                        if (ssid == "" || ssid == NO_SSID) {
+                            // "" is an Android host whose hotspot isn't up yet; NO_SSID is a
+                            // Windows host whose main thread hasn't generated credentials yet
+                            // (our read can race it right after the OS exchange). Either way
+                            // the credentials don't exist yet — wait a second and read again,
+                            // which loops us back here. NO_SSID used to fall through as a
+                            // final answer, which joined a hotspot derived from an empty
+                            // password while the host waited forever for a real SSID read.
                             outputText("Could not read peer's WiFi characteristic. trying again...")
-                            Thread.sleep(1000)
-                            read(SSID_CHARACTERISTIC_UUID)
+                            handler.postDelayed({ read(SSID_CHARACTERISTIC_UUID) }, 1000)
                             return
                         }
                         gotSsid(ssid)
@@ -652,8 +684,19 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                         return
                     }
                     // this was the reason android couldn't connect to macOS? no, was the setLegacy(false). diagnosed by comparing nRF Connect logs from Flying Carpet pairings to nRF Connect pairings.
-                    Thread.sleep(1600)
-                    gatt?.let { startDiscovery(it, "connected") }
+                    // The settle delay is kept, but scheduled rather than slept: this
+                    // callback runs on the GATT binder thread, and sleeping there stalls
+                    // every other callback (including the disconnect that would explain a
+                    // failure) behind it. Only fire if this is still the live connection —
+                    // a link that dropped during the delay would otherwise produce a
+                    // spurious "could not start discovery" on a closed client.
+                    gatt?.let {
+                        handler.postDelayed({
+                            if (bluetoothGatt === it) {
+                                startDiscovery(it, "connected")
+                            }
+                        }, 1600)
+                    }
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     // This was a bare Log.i that ignored `status` entirely — the last silent
                     // failure on the Android central path. 6b29695 instrumented every exit
@@ -741,6 +784,13 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
 
             if (result == null) {
                 Log.e("Bluetooth", "Received ACTION_BOND_STATE_CHANGED but do not have device result")
+                return
+            }
+            // This receiver hears every bond event on the system, not just our peer's. A
+            // headset bonding mid-transfer must not open (or use up) the post-bond
+            // connection meant for the device we scanned.
+            if (peerDevice?.address != result?.device?.address) {
+                Log.i("Bluetooth", "Bond state change for a different device; ignoring")
                 return
             }
             if (!bonded) {
