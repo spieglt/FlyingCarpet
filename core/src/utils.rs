@@ -39,6 +39,26 @@ pub fn run_command(
     }
 }
 
+/// Async twin of [`run_command`], for commands run while a transfer is in flight. Awaiting
+/// the child is a cancellation point, so aborting the transfer task lands here instead of
+/// after the command returns — `nmcli con up` alone can sit for the better part of a minute.
+///
+/// `kill_on_drop` means the child is signalled when the task is aborted rather than left
+/// running. Note what that does and doesn't buy: nmcli is a D-Bus client, so killing it does
+/// not call off the work NetworkManager is already doing on its behalf. Undoing a half-made
+/// connection is still `stop_hotspot`'s job, which the cancel path runs afterwards.
+pub async fn run_command_async(
+    program: &str,
+    parameters: Option<Vec<&str>>,
+) -> std::io::Result<process::Output> {
+    let mut command = tokio::process::Command::new(program);
+    command.kill_on_drop(true);
+    if let Some(p) = parameters {
+        command.args(p);
+    }
+    command.output().await
+}
+
 pub fn expand_dir(dir: PathBuf) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let mut files_found = vec![];
     let mut dirs_to_search = vec![];
@@ -328,6 +348,32 @@ pub fn is_compatible(peer_version: u64) -> bool {
 #[cfg(test)]
 mod tests {
     use crate::utils::make_size_readable;
+
+    // The whole point of run_command_async: a transfer that's waiting on an external command
+    // can still be cancelled. Aborting the task has to land while the child is running, not
+    // after it exits — with the blocking run_command this takes the full five seconds.
+    // Unix-only because the test needs a slow command that exists; run_command_async is only
+    // used by the Linux network code.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn async_command_is_interruptible() {
+        let handle =
+            tokio::spawn(async { super::run_command_async("sleep", Some(vec!["5"])).await });
+        // let it get as far as actually spawning the child
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let abort_issued = std::time::Instant::now();
+        handle.abort();
+        let outcome = handle.await;
+        let waited = abort_issued.elapsed();
+
+        assert!(outcome.unwrap_err().is_cancelled());
+        assert!(
+            waited < std::time::Duration::from_secs(1),
+            "cancel took {:?}; it should not have waited for the command to finish",
+            waited
+        );
+    }
 
     #[test]
     fn size_readable() {

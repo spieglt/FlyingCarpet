@@ -1,5 +1,5 @@
 use crate::error::{fc_error, FCError};
-use crate::utils::run_command;
+use crate::utils::{run_command, run_command_async};
 use crate::{InterfaceInfo, Mode, Peer, PeerResource, WiFiInterface, UI};
 use tokio::task;
 
@@ -30,7 +30,7 @@ pub async fn connect_to_peer<T: UI>(
     if is_hosting(&peer, &mode) {
         // start hotspot
         ui.output(&format!("Starting hotspot {}", ssid));
-        start_hotspot(&ssid, &password, &interface.0)?;
+        start_hotspot(&ssid, &password, &interface.0).await?;
         Ok(PeerResource::LinuxHotspot)
     } else {
         // join hotspot and find gateway
@@ -52,7 +52,9 @@ pub async fn connect_to_peer<T: UI>(
     }
 }
 
-fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), FCError> {
+// async, and using the async command runner, so that a cancel lands between (or during) the
+// nmcli calls instead of after the whole sequence: `con up` is the slow one
+async fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), FCError> {
     let nmcli = "nmcli";
     let user_str = &format!("user:{}", get_username());
     let commands = vec![
@@ -93,7 +95,7 @@ fn start_hotspot(ssid: &str, password: &str, interface: &str) -> Result<(), FCEr
         vec!["con", "up", ssid],
     ];
     for command in commands {
-        let res = run_command(nmcli, Some(command))?;
+        let res = run_command_async(nmcli, Some(command)).await?;
         if !res.status.success() {
             let stderr = String::from_utf8_lossy(&res.stderr);
             fc_error(&format!("Could not start hotspot: {}", stderr))?;
@@ -189,7 +191,7 @@ async fn join_hotspot<T: UI>(
         vec!["con", "modify", ssid, "wifi-sec.psk", password],
     ];
     for command in commands {
-        let res = run_command(nmcli, Some(command))?;
+        let res = run_command_async(nmcli, Some(command)).await?;
         if !res.status.success() {
             let stderr = String::from_utf8_lossy(&res.stderr);
             fc_error(&format!("Error joining hotspot: {}", stderr))?;
@@ -200,7 +202,7 @@ async fn join_hotspot<T: UI>(
         // );
     }
     loop {
-        let res = run_command(nmcli, Some(vec!["con", "up", ssid]))?;
+        let res = run_command_async(nmcli, Some(vec!["con", "up", ssid])).await?;
         if !res.status.success() {
             let stderr = String::from_utf8_lossy(&res.stderr);
             // Err(format!("Error joining hotspot: {}", stderr))?;
@@ -373,24 +375,32 @@ fn get_username() -> String {
         .unwrap_or_else(|_| "user".to_string())
 }
 
+// These drive the real wifi card, so they're #[ignore]d: a plain `cargo test` would take the
+// machine's wifi down for the length of the run (start_and_stop_hotspot puts the interface
+// into AP mode for five seconds, join_hotspot tries to associate). Run them deliberately,
+// one at a time, with `cargo test -- --ignored --test-threads=1`.
 #[cfg(test)]
 mod test {
     use crate::{PeerResource, UI};
 
     use super::get_wifi_interfaces;
 
-    #[test]
-    fn start_and_stop_hotspot() {
+    #[tokio::test]
+    #[ignore = "starts a real hotspot on the wifi card"]
+    async fn start_and_stop_hotspot() {
         let ssid = "flyingCarpet_1234";
         let password = "password";
         let _pr = PeerResource::WifiClient("".to_string());
         let interface = &get_wifi_interfaces().expect("no wifi interface present")[0].name;
-        crate::network::start_hotspot(ssid, password, interface).unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(5));
+        crate::network::start_hotspot(ssid, password, interface)
+            .await
+            .unwrap();
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         crate::network::stop_hotspot(Some(&_pr), Some(ssid)).unwrap();
     }
 
     #[test]
+    #[ignore = "joins a real hotspot; also needs a runtime, see the TODO in lib.rs"]
     fn join_hotspot() {
         #[derive(Clone)]
         struct TestUI {}

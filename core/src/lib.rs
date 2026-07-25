@@ -758,9 +758,10 @@ async fn confirm_version<S: AsyncRead + AsyncWrite + Unpin>(
 // test closing about window with x on linux: panic?
 // https://github.com/hbldh/bleak/issues/367#issuecomment-784375835
 // linux name is null on android when pairing - manufacturer info?
-// make cancellation faster, not just safe: the nmcli calls in linux/network.rs and the
-//   windows pairing calls are blocking, so an abort doesn't land until the task next awaits.
-//   tokio::process::Command (or spawn_blocking) for run_command would cut the wait.
+// windows cancellation is still slow in one spot: start_wifi_direct blocks on an untimed
+//   std mpsc recv() waiting for the WiFiDirect callback, so an abort can't land until the
+//   runtime answers. no subprocess involved, so run_command_async doesn't help; needs a
+//   tokio channel or spawn_blocking.
 // show qr code after refresh
 
 // TESTS:
