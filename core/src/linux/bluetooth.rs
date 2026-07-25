@@ -33,7 +33,9 @@ const SERVICE_UUID: &str = "A70BF3CA-F708-4314-8A0E-5E37C259BE5C";
 pub(crate) const OS_CHARACTERISTIC_UUID: &str = "BEE14848-CC55-4FDE-8E9D-2E0F9EC45946";
 pub(crate) const SSID_CHARACTERISTIC_UUID: &str = "0D820768-A329-4ED4-8F53-BDF364EDAC75";
 pub(crate) const PASSWORD_CHARACTERISTIC_UUID: &str = "E1FA8F66-CF88-4572-9527-D5125A2E0762";
-// const NO_SSID: &str = "NONE";
+// A host that hasn't generated its credentials yet answers an SSID read with this (Windows)
+// or with an empty string (Android); centrals treat both as "not ready, re-read".
+pub(crate) const NO_SSID: &str = "NONE";
 
 /// Registers a Bluetooth pairing agent for as long as the returned handle is held.
 ///
@@ -153,14 +155,23 @@ pub async fn negotiate_bluetooth<T: UI>(
         // acting as peripheral
         let tx = bt_tx;
         let mut rx = bt_rx;
-        let mut password = generate_password();
-        let (_, mut ssid) = get_key_and_ssid(&password);
+        let password = generate_password();
+        let (_, ssid) = get_key_and_ssid(&password);
         let (app_handle, adv_handle, peer_address) =
             peripheral::advertise(&adapter, tx, &ssid, &password).await?;
         ui.output("Started Bluetooth advertisement, waiting for receiving device...");
-        let peer_os =
-            match process_bluetooth_message(BluetoothMessage::PeerOS("".to_string()), &mut rx, ui)
-                .await?
+        // The exchange runs in a block so every exit -- success or error (a rejected
+        // pairing, an unexpected message) -- shares the teardown below. The error paths
+        // used to return without dropping the GATT service or the link, leaving the next
+        // transfer to inherit a live ACL in the opposite role (law 9 in
+        // docs/bluetooth-field-guide.md, the §3a bug).
+        let exchange: Result<(String, String, String), FCError> = async {
+            let peer_os = match process_bluetooth_message(
+                BluetoothMessage::PeerOS("".to_string()),
+                &mut rx,
+                ui,
+            )
+            .await?
             {
                 BluetoothMessage::PeerOS(os) => os,
                 other => Err(FCError {
@@ -171,53 +182,61 @@ pub async fn negotiate_bluetooth<T: UI>(
                 })?,
             };
 
-        println!("Removing advertisement");
-        drop(adv_handle);
+            println!("Removing advertisement");
+            drop(adv_handle);
 
-        let peer = Peer::try_from(peer_os.as_str())?;
-        if is_hosting(&peer, mode) {
-            // wait for peer to read our ssid and password
-            process_bluetooth_message(BluetoothMessage::PeerReadSsid, &mut rx, ui).await?;
-            println!("Peer read SSID");
-            process_bluetooth_message(BluetoothMessage::PeerReadPassword, &mut rx, ui).await?;
-            println!("Peer read password");
-        } else {
-            // wait for peer to write its ssid and password
-            ssid = match process_bluetooth_message(
-                BluetoothMessage::SSID("".to_string()),
-                &mut rx,
-                ui,
-            )
-            .await?
-            {
-                BluetoothMessage::SSID(s) => s,
-                other => Err(FCError {
-                    message: format!(
-                        "Received unexpected BluetoothMessage when waiting for peer OS: {:?}",
-                        other
-                    ),
-                })?,
-            };
-            println!("Peer's SSID: {}", ssid);
-            password = match process_bluetooth_message(
-                BluetoothMessage::Password("".to_string()),
-                &mut rx,
-                ui,
-            )
-            .await?
-            {
-                BluetoothMessage::Password(p) => p,
-                other => Err(FCError {
-                    message: format!(
-                        "Received unexpected BluetoothMessage when waiting for peer OS: {:?}",
-                        other
-                    ),
-                })?,
-            };
-            println!("Peer's password: {}", password);
+            let peer = Peer::try_from(peer_os.as_str())?;
+            if is_hosting(&peer, mode) {
+                // wait for peer to read our ssid and password
+                process_bluetooth_message(BluetoothMessage::PeerReadSsid, &mut rx, ui).await?;
+                println!("Peer read SSID");
+                process_bluetooth_message(BluetoothMessage::PeerReadPassword, &mut rx, ui)
+                    .await?;
+                println!("Peer read password");
+                Ok((peer_os, ssid, password))
+            } else {
+                // wait for peer to write its ssid and password
+                let ssid = match process_bluetooth_message(
+                    BluetoothMessage::SSID("".to_string()),
+                    &mut rx,
+                    ui,
+                )
+                .await?
+                {
+                    BluetoothMessage::SSID(s) => s,
+                    other => Err(FCError {
+                        message: format!(
+                            "Received unexpected BluetoothMessage when waiting for peer SSID: {:?}",
+                            other
+                        ),
+                    })?,
+                };
+                println!("Peer's SSID: {}", ssid);
+                let password = match process_bluetooth_message(
+                    BluetoothMessage::Password("".to_string()),
+                    &mut rx,
+                    ui,
+                )
+                .await?
+                {
+                    BluetoothMessage::Password(p) => p,
+                    other => Err(FCError {
+                        message: format!(
+                            "Received unexpected BluetoothMessage when waiting for peer password: {:?}",
+                            other
+                        ),
+                    })?,
+                };
+                println!("Peer's password: {}", password);
+                Ok((peer_os, ssid, password))
+            }
         }
+        .await;
 
-        sleep(Duration::from_secs(1)).await;
+        // Give the peer a moment to finish its final read before the service disappears.
+        if exchange.is_ok() {
+            sleep(Duration::from_secs(1)).await;
+        }
         println!("Removing GATT service");
         drop(app_handle);
 
@@ -251,7 +270,7 @@ pub async fn negotiate_bluetooth<T: UI>(
             None => println!("No BLE peer address recorded; nothing to disconnect"),
         }
 
-        Ok((peer_os, ssid, password))
+        exchange
     } else {
         // acting as central
         ui.output("Started Bluetooth scan, waiting for sending device...");
@@ -309,14 +328,13 @@ pub async fn negotiate_bluetooth<T: UI>(
             }
         };
 
-        let info = match exchange_info(characteristics, mode, ui).await {
-            Ok(i) => i,
-            Err(e) => Err(e)?,
-        };
-        // Hang up, for the same reason the peripheral branch above does: every write here is a
-        // confirmed WriteOp::Request and every read has returned, so the exchange is complete,
-        // and a link left up is one the next transfer inherits in the opposite role. The bond
-        // survives; only the link goes.
+        let info = exchange_info(characteristics, mode, ui).await;
+        // Hang up, for the same reason the peripheral branch above does: on success every
+        // write was a confirmed WriteOp::Request and every read has returned, so the
+        // exchange is complete, and a link left up is one the next transfer inherits in the
+        // opposite role. On failure the same applies with more force -- the error path used
+        // to return with the link still up, which is exactly the inherited-link hazard (law
+        // 9). The bond survives; only the link goes.
         match device.disconnect().await {
             Ok(()) => println!("Disconnected BLE link to {}", device.address()),
             Err(e) => println!(
@@ -325,7 +343,7 @@ pub async fn negotiate_bluetooth<T: UI>(
                 e
             ),
         }
-        Ok(info)
+        Ok(info?)
     }
 }
 

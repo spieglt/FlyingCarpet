@@ -50,7 +50,8 @@ use super::SERVICE_UUID;
 const BOND_PSM: u16 = 0x0083;
 use crate::{
     bluetooth::{
-        OS, OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID, SSID_CHARACTERISTIC_UUID,
+        NO_SSID, OS, OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID,
+        SSID_CHARACTERISTIC_UUID,
     },
     network::is_hosting,
     utils::{generate_password, get_key_and_ssid},
@@ -534,13 +535,48 @@ pub async fn exchange_info<T: UI>(
         sleep(Duration::from_secs(1)).await;
         Ok((peer_os, ssid, password))
     } else {
-        // read ssid and password
-        let ssid = ssid_char.read().await?;
-        let ssid = String::from_utf8(ssid).expect("SSID was not UTF-8");
+        // Read ssid and password. An empty SSID (an Android host whose OS hasn't stood the
+        // hotspot up yet) or NO_SSID (a Windows host whose main thread hasn't generated
+        // credentials yet -- our read can race it right after the OS exchange) means the
+        // credentials don't exist yet: wait and re-read rather than joining a hotspot named
+        // after the placeholder. The Android and Apple centrals retry the same way.
+        let mut attempts = 0;
+        let ssid = loop {
+            let ssid = ssid_char.read().await?;
+            let ssid = String::from_utf8(ssid).expect("SSID was not UTF-8");
+            if !ssid.is_empty() && ssid != NO_SSID {
+                break ssid;
+            }
+            attempts += 1;
+            if attempts >= 30 {
+                return Err(bluer::Error {
+                    kind: ErrorKind::Failed,
+                    message: "Peer never provided its Wi-Fi credentials over Bluetooth."
+                        .to_string(),
+                });
+            }
+            ui.output("Waiting for peer's Wi-Fi details...");
+            sleep(Duration::from_secs(1)).await;
+        };
         println!("Peer's SSID: {}", ssid);
         ui.output(&format!("Peer's SSID is {}", ssid));
-        let password = password_char.read().await?;
-        let password = String::from_utf8(password).expect("Password was not UTF-8");
+        let password = loop {
+            let password = password_char.read().await?;
+            let password = String::from_utf8(password).expect("Password was not UTF-8");
+            if !password.is_empty() {
+                break password;
+            }
+            attempts += 1;
+            if attempts >= 30 {
+                return Err(bluer::Error {
+                    kind: ErrorKind::Failed,
+                    message: "Peer never provided its Wi-Fi password over Bluetooth."
+                        .to_string(),
+                });
+            }
+            ui.output("Waiting for peer's Wi-Fi password...");
+            sleep(Duration::from_secs(1)).await;
+        };
         println!("Peer's password: {}", password);
         ui.output(&format!("Peer's password is {}", password));
         Ok((peer_os, ssid, password))
