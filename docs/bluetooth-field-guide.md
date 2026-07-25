@@ -72,6 +72,19 @@ Learned the hard way. Violate these and you get an intermittent hang weeks later
    bearer tiebreak, CTKD dual bonds, and the L2CAP-socket cure a month before this session
    re-derived them from scratch against a different peer.
 
+8. **"Connected" is not a bearer, and it is not a GATT database.** BlueZ's `Device1.Connected`
+   is `bredr_state.connected || le_state.connected` — a peer reachable only over classic reads
+   as connected. Never let it stand in for "we have a usable LE link"; `ServicesResolved` is
+   the property that means that. Every guard of the form `if !is_connected() { force LE }` is
+   this bug waiting to happen, because it skips the fix in the one case that needs it.
+
+9. **Hang up when you're done.** A link left open outlives the transfer and is inherited by the
+   next one *in the opposite role*, where it silently satisfies every "are we connected?" check
+   while being the wrong bearer, the wrong direction, or attached to a service that has since
+   been removed. Dropping the GATT service without dropping the link also strands the peer's
+   cache: it holds a snapshot of a database that no longer exists, with no Service Changed
+   coming. Disconnect ≠ unpair — law 4 is about the *bond*, and this is about the *link*.
+
 ---
 
 ## 3. What actually happened this session
@@ -154,6 +167,64 @@ hung depending on which direction you transferred *first*:
 
 ---
 
+## 3a. The Android sequel — same axis, one layer further in (2026-07-25)
+
+`386f654` fixed `Connect()` picking BR/EDR. It did not fix the case where **something else
+already established the link**, which is what Linux↔Android surfaced.
+
+**Symptom:** Linux→Android (pairing along the way), then Android→Linux. Android advertises
+happily. Linux logs, twice:
+
+```
+Found device
+Peer is running Flying Carpet, connecting over Bluetooth...
+Already connected to peer over Bluetooth
+Bluetooth connection failed; retrying...
+```
+
+and never exchanges credentials.
+
+**Cause, three defects stacked in the order they fire:**
+
+1. **Linux never disconnected, in either role.** `negotiate_bluetooth` dropped the
+   advertisement and the GATT application at the end of a transfer but left the ACL up. There
+   was no `disconnect()` anywhere outside `scan()`'s probe-failure path. So the reverse
+   transfer began with a live link left over from the previous one.
+
+2. **`Device1.Connected` is bearer-agnostic (law 8), so the leftover link satisfied every
+   check.** `find_characteristics` took its "already connected" arm, which skipped `Connect()`
+   *and* `ensure_le_link()`. The bond in this direction is the dual-transport CTKD kind — the
+   previous transfer had Linux as the peripheral — so the inherited link can be the bearer that
+   serves no GATT.
+
+3. **`ensure_le_link()` would have been a no-op anyway.** Its first statement was
+   `if is_connected() { return }` — the exact property that cannot distinguish the two bearers.
+   The function written to force LE disabled itself in precisely the situation it existed for.
+
+Then `device.services()` sat in bluer's `wait_for_services_resolved` (120 s `TIMEOUT`) and
+returned `ServicesUnresolved`. The retry rung re-ran an identical attempt, because nothing had
+torn the link down — hence the log repeating verbatim.
+
+**Fixes:** `ensure_le_link()` short-circuits on `ServicesResolved` instead of `Connected` and is
+now called for every paired peer regardless of connection state (`central.rs`); the retry rung
+disconnects first; and both roles hang up when the exchange is done (`bluetooth.rs`).
+
+This was already recorded as a symptom in a `lib.rs` TODO — *"linux can't receive from windows
+or android if already paired/connected, service not found. but then it disconnects and next
+transfer works"* — including the cure. Law 7 again.
+
+### Why Android makes this easy to hit
+
+Android is the only platform whose Flying Carpet GATT service is registered **permanently**,
+not per transfer. `Bluetooth.stop()` calls `initializePeripheral()`, which closes the old server
+and immediately opens a new one *and re-adds the service*; `MainActivity` does the same whenever
+Bluetooth is switched on. So BlueZ's cached `Device1.UUIDs` for an Android peer always contains
+our service, and `scan()` returns it from cache instantly — without waiting for a live
+advertisement, and without ever taking the bonded-peer probe path that would have re-resolved
+the database. Fast, and wrong-bearer failures surface immediately rather than after a scan.
+
+---
+
 ## 4. Where all five platforms stand
 
 Verified by reading the code on 2026-07-25. ✅ correct · ⚠️ works but fragile · ❌ known gap.
@@ -183,7 +254,7 @@ Verified by reading the code on 2026-07-25. ✅ correct · ⚠️ works but frag
 |---|---|---|
 | **Windows** | n/a — `BluetoothLEDevice` is LE by definition | ✅ immune |
 | **iOS/macOS** | n/a — CoreBluetooth is LE-only | ✅ immune |
-| **Linux** | BlueZ `select_conn_bearer` | ✅ forced LE via L2CAP socket, unbonded *and* bonded |
+| **Linux** | BlueZ `select_conn_bearer` | ✅ forced LE via L2CAP socket, unbonded *and* bonded, and now on inherited links too (§3a) |
 | **Android** | `TRANSPORT_LE` on the scan path… | ❌ **`TRANSPORT_AUTO` on the post-bond path** — see §5 |
 
 ### Bond retention
@@ -204,12 +275,12 @@ try everything else first and tell the user what to do on the other device.
 |---|---|---|
 | **Windows** | registered per transfer | ✅ `Uncached` + `Status()` checked |
 | **Linux** | per transfer (`drop(app_handle)`) | ✅ connects to re-resolve when cached UUIDs look wrong |
-| **Android** | per transfer (server closed) | ✅ `onServiceChanged` → `discoverServices()`, gated on `exchangeComplete` |
-| **iOS** | per transfer (`removeService`) | ✅ `didModifyServices` re-discovers |
-| **macOS** | per transfer | ✅ same, via the shared helper |
+| **Android** | ⚠️ **permanent** — `stop()` calls `initializePeripheral()`, which reopens the server *and re-adds the service* | ✅ `onServiceChanged` → `discoverServices()`, gated on `exchangeComplete` |
+| **iOS** | per transfer (`removeService`) | ❌ `didModifyServices` is a print-only stub |
+| **macOS** | per transfer | ❌ `didModifyServices` not implemented |
 
-All five depend on the peer sending a Service Changed indication. Where one isn't sent, no
-stack learns its cache is stale — see §5.4.
+Every stack that does re-discover depends on the peer sending a Service Changed indication.
+Where one isn't sent, no stack learns its cache is stale — see §5.4.
 
 ---
 
@@ -261,17 +332,19 @@ Linux's poisoned-bond `remove_device` was written for the bearer problem that
 last: retry once with the bond intact, and only then remove and re-pair, with the same
 warning.
 
-### 4. ~~Android and Apple never invalidate their GATT cache~~ — fixed 2026-07-25
+### 4. ~~Android~~ and Apple never invalidate their GATT cache — Android fixed 2026-07-25
 
 Android's `onServiceChanged` now calls `discoverServices()`, gated on `exchangeComplete` — the
 TODO asked whether enabling it causes problems, and it does if ungated, because
 `onServicesDiscovered` restarts the credential exchange. That's the same re-entrancy hazard
 `onConnectionStateChange` already guards the same way.
 
-Apple now re-discovers in `didModifyServices`, implemented once in `shared/Bluetooth.swift`
-and called from both ViewControllers (the delegate method has to live on them, since they are
-the `CBPeripheralDelegate`). macOS previously didn't implement it at all — that gap closes in
-the same change.
+**Apple was written up as fixed in the same change and is not.** Verified in
+`FlyingCarpetApple` at `328dfc8` on 2026-07-25: iOS's `didModifyServices` is a `print`-only
+stub (`iOS/FlyingCarpet/ViewController.swift`), macOS does not implement the delegate method at
+all, and the only `discoverServices` call in the whole repo is the one in `didConnect`
+(`shared/Bluetooth.swift:170`). There is no shared re-discovery helper. So both Apple centrals
+still serve a stale snapshot when a peer re-registers its service, and this item stays open.
 
 **Remaining limitation, by design:** this only helps when the peer *sends* a Service Changed
 indication. If it doesn't, neither stack learns its cache is stale. Android's only other lever
@@ -296,6 +369,7 @@ codebase.
 | Error containing **`br-`** | classic bearer chosen for an LE-only service | force LE; check bond provenance |
 | Scan never finds an advertising peer | filtering on cached rather than advertised data | does the filter read advertisement data? |
 | Works on first pairing, fails on reuse | bonded-vs-unbonded divergence | test both bond provenances (see below) |
+| **"Already connected"**, then a ~120 s stall and a retry that repeats verbatim | a link inherited from the previous transfer, on the wrong bearer (§3a) | did either side `disconnect()` last time? is the guard checking `Connected` where it means `ServicesResolved`? |
 | macOS: **CBError 14** | peer deleted its half of the bond | law 4 |
 | Windows: `0x8000FFFF` on enumeration | unresolved; retry ladder | `docs/windows-ble-gatt-0x8000ffff.md` |
 

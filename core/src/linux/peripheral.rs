@@ -15,7 +15,13 @@ use bluer::{
     Adapter, Address, Uuid,
 };
 use futures::FutureExt;
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
+
+/// The address of the central that drove this transfer, filled in by the first characteristic
+/// request. `negotiate_bluetooth` uses it to hang up the BLE link when the exchange is done —
+/// see the disconnect there for why leaving it up breaks the *next* transfer.
+pub(crate) type PeerSlot = Arc<Mutex<Option<Address>>>;
 
 // Direction A (macOS central -> Linux peripheral): after the central bonds, mark it
 // trusted so BlueZ keeps the bond and can resolve macOS's rotating (RPA) address on
@@ -25,7 +31,10 @@ use tokio::sync::mpsc;
 // time a request arrives the peer has bonded, and only our actual peer (never some
 // bystander device) touches the characteristics. Do NOT remove_device this peer on
 // cleanup.
-async fn trust_peer(adapter: &Adapter, address: Address) {
+async fn trust_peer(adapter: &Adapter, peer: &PeerSlot, address: Address) {
+    // Record who we're talking to before the early return below, so the address is captured
+    // on repeat transfers with an already-trusted peer too.
+    *peer.lock().expect("Could not lock peer address mutex") = Some(address);
     let device = match adapter.device(address) {
         Ok(device) => device,
         Err(e) => {
@@ -45,12 +54,18 @@ async fn trust_peer(adapter: &Adapter, address: Address) {
     }
 }
 
-fn get_os_characteristic(adapter: Adapter, tx: mpsc::Sender<BluetoothMessage>) -> Characteristic {
+fn get_os_characteristic(
+    adapter: Adapter,
+    tx: mpsc::Sender<BluetoothMessage>,
+    peer: PeerSlot,
+) -> Characteristic {
     // when the OS characteristic is read, return the constant
     // when it's written to, return that to calling thread, so we need tx
     let write_tx = tx.clone();
     let read_adapter = adapter.clone();
     let write_adapter = adapter;
+    let read_peer = peer.clone();
+    let write_peer = peer;
     Characteristic {
         uuid: Uuid::parse_str(OS_CHARACTERISTIC_UUID).unwrap(),
         read: Some(CharacteristicRead {
@@ -60,10 +75,11 @@ fn get_os_characteristic(adapter: Adapter, tx: mpsc::Sender<BluetoothMessage>) -
             // a box containing function, that takes a characteristicreadrequest, and returns a pin box containing an async future, that returns a byte vec
             fun: Box::new(move |req| {
                 let adapter = read_adapter.clone();
+                let peer = read_peer.clone();
                 async move {
                     let value = OS.as_bytes().to_vec();
                     println!("Read request {:?} with value {:x?}", &req, &value);
-                    trust_peer(&adapter, req.device_address).await;
+                    trust_peer(&adapter, &peer, req.device_address).await;
                     Ok(value)
                 }
                 .boxed()
@@ -78,9 +94,10 @@ fn get_os_characteristic(adapter: Adapter, tx: mpsc::Sender<BluetoothMessage>) -
                 // let value = value_write.clone();
                 let thread_tx = write_tx.clone();
                 let adapter = write_adapter.clone();
+                let peer = write_peer.clone();
                 async move {
                     println!("Write request {:?} with value {:x?}", &req, &new_value);
-                    trust_peer(&adapter, req.device_address).await;
+                    trust_peer(&adapter, &peer, req.device_address).await;
                     let peer_os = String::from_utf8(new_value).expect("Peer OS was not UTF-8");
                     if thread_tx
                         .send(BluetoothMessage::PeerOS(peer_os))
@@ -218,7 +235,7 @@ pub(crate) async fn advertise(
     tx: mpsc::Sender<BluetoothMessage>,
     ssid: &str,
     password: &str,
-) -> bluer::Result<(ApplicationHandle, AdvertisementHandle)> {
+) -> bluer::Result<(ApplicationHandle, AdvertisementHandle, PeerSlot)> {
     let service_uuid = Uuid::parse_str(SERVICE_UUID).unwrap();
     // Accept incoming pairing so a central (e.g. macOS) can bond to read our encrypted
     // characteristics. Combined with the agent registered in negotiate_bluetooth, this lets
@@ -243,8 +260,9 @@ pub(crate) async fn advertise(
         adapter.name()
     );
 
+    let peer: PeerSlot = Arc::new(Mutex::new(None));
     let characteristics = vec![
-        get_os_characteristic(adapter.clone(), tx.clone()),
+        get_os_characteristic(adapter.clone(), tx.clone(), peer.clone()),
         get_ssid_characteristic(tx.clone(), ssid.to_string()),
         get_password_characteristic(tx, password.to_string()),
     ];
@@ -259,5 +277,5 @@ pub(crate) async fn advertise(
         ..Default::default()
     };
     let app_handle = adapter.serve_gatt_application(app).await?;
-    Ok((app_handle, adv_handle))
+    Ok((app_handle, adv_handle, peer))
 }

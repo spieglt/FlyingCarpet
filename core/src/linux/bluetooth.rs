@@ -155,7 +155,8 @@ pub async fn negotiate_bluetooth<T: UI>(
         let mut rx = bt_rx;
         let mut password = generate_password();
         let (_, mut ssid) = get_key_and_ssid(&password);
-        let (app_handle, adv_handle) = peripheral::advertise(&adapter, tx, &ssid, &password).await?;
+        let (app_handle, adv_handle, peer_address) =
+            peripheral::advertise(&adapter, tx, &ssid, &password).await?;
         ui.output("Started Bluetooth advertisement, waiting for receiving device...");
         let peer_os =
             match process_bluetooth_message(BluetoothMessage::PeerOS("".to_string()), &mut rx, ui)
@@ -220,6 +221,36 @@ pub async fn negotiate_bluetooth<T: UI>(
         println!("Removing GATT service");
         drop(app_handle);
 
+        // Hang up the BLE link, not just the service. Nothing on Linux disconnected before
+        // this, in either role, so the ACL raised for the credential exchange outlived the
+        // whole transfer. Two consequences, both observed on the next transfer in the reverse
+        // direction (Linux->Android, then Android->Linux, 2026-07-25):
+        //
+        //   1. We come back as the *central* and find Device1.Connected already true, so
+        //      find_characteristics takes its "already connected" arm and inherits whatever
+        //      bearer that link happens to be. If the bond is dual-transport -- which is
+        //      exactly what a bond made while we were the peripheral is, via CTKD -- that can
+        //      be BR/EDR, which serves no GATT, and services() then burns bluer's 120s
+        //      ServicesResolved timeout before failing.
+        //   2. The peer keeps a live link to a device that just dropped its GATT service, so
+        //      its cache of our database goes stale in place with no Service Changed to tell
+        //      it otherwise.
+        //
+        // Disconnect() drops every bearer, so the next transfer starts from nothing. The bond
+        // is untouched -- this is not remove_device (law 4 in docs/bluetooth-field-guide.md).
+        let peer_address = *peer_address.lock().expect("Could not lock peer address mutex");
+        match peer_address {
+            Some(addr) => match adapter.device(addr) {
+                Ok(device) => match device.disconnect().await {
+                    Ok(()) => println!("Disconnected BLE link to {}", addr),
+                    Err(e) => println!("Could not disconnect BLE link to {}: {}", addr, e),
+                },
+                Err(e) => println!("Could not get device {} to disconnect: {}", addr, e),
+            },
+            // No characteristic request ever landed, so no link of ours to drop.
+            None => println!("No BLE peer address recorded; nothing to disconnect"),
+        }
+
         Ok((peer_os, ssid, password))
     } else {
         // acting as central
@@ -238,7 +269,7 @@ pub async fn negotiate_bluetooth<T: UI>(
         // in docs/bluetooth-field-guide.md (law 4) and the bug fixed in 6039d53. Apple peers
         // cannot clear their half programmatically at all, so the user is told what to do.
         let mut attempt = 0;
-        let (_device, characteristics) = loop {
+        let (device, characteristics) = loop {
             let device = central::scan(&adapter).await?;
             ui.output("Found device");
             match find_characteristics(&device, ui).await {
@@ -246,6 +277,15 @@ pub async fn negotiate_bluetooth<T: UI>(
                 Err(e) => {
                     attempt += 1;
                     println!("    Device failed (attempt {}): {}", attempt, e);
+                    // Drop the link before retrying. Without this the retry is bit-for-bit the
+                    // same attempt: find_characteristics reports "Already connected", skips
+                    // Connect(), and fails the same way, because nothing else on Linux ever
+                    // disconnects. Both rounds of the Android->Linux hang looked identical for
+                    // exactly this reason. Disconnect() drops every bearer, so the next round
+                    // starts from no link and ensure_le_link picks LE.
+                    if let Err(disconnect_error) = device.disconnect().await {
+                        println!("    Could not disconnect before retry: {}", disconnect_error);
+                    }
                     match attempt {
                         1 => {
                             ui.output("Bluetooth connection failed; retrying...");
@@ -273,6 +313,18 @@ pub async fn negotiate_bluetooth<T: UI>(
             Ok(i) => i,
             Err(e) => Err(e)?,
         };
+        // Hang up, for the same reason the peripheral branch above does: every write here is a
+        // confirmed WriteOp::Request and every read has returned, so the exchange is complete,
+        // and a link left up is one the next transfer inherits in the opposite role. The bond
+        // survives; only the link goes.
+        match device.disconnect().await {
+            Ok(()) => println!("Disconnected BLE link to {}", device.address()),
+            Err(e) => println!(
+                "Could not disconnect BLE link to {}: {}",
+                device.address(),
+                e
+            ),
+        }
         Ok(info)
     }
 }

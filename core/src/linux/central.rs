@@ -123,13 +123,21 @@ pub async fn find_characteristics<T: UI>(
             ui.output("Bluetooth bond established");
         }
 
+        // Force LE for a bonded peer whether or not BlueZ already calls us connected. This
+        // used to be inside the `if !is_connected()` arm below, which meant the one case it
+        // exists for could skip it: Device1.Connected is bearer-agnostic, so a live BR/EDR
+        // link -- the natural product of the dual-transport CTKD bond we get whenever the
+        // *previous* transfer had us as the peripheral -- takes the "already connected" arm,
+        // never raises an LE ACL, and then waits out bluer's 120s ServicesResolved timeout on
+        // a link that serves no GATT. Nothing on Linux disconnects at the end of a transfer,
+        // so the reverse direction routinely walks in on exactly that link. Observed
+        // 2026-07-25, Linux->Android then Android->Linux.
+        if device.is_paired().await.unwrap_or(false) {
+            ensure_le_link(device).await;
+        }
+
         if !device.is_connected().await? {
             println!("    Connecting...");
-            // For an already-bonded peer the bond may be dual-transport, in which case
-            // Connect() would page BR/EDR and fail; bring the LE link up first.
-            if device.is_paired().await.unwrap_or(false) {
-                ensure_le_link(device).await;
-            }
             let mut retries = 2;
             loop {
                 match device.connect().await {
@@ -233,14 +241,18 @@ pub async fn find_characteristics<T: UI>(
 // *already-paired* peers of any address type. The bonding socket is gated on LePublic because
 // only a Mac's public-address advertisement poisons the bearer choice pre-bond; this hazard is
 // created by the bond itself, so address type is irrelevant to it.
+//
+// Deliberately NOT short-circuited on is_connected(). BlueZ's Device1.Connected is
+// bearer-agnostic -- device.c sets it from `bredr_state.connected || le_state.connected` -- so
+// a peer reachable only over classic reads as connected, and returning early on that turned
+// this function into a no-op in precisely the situation it was written for. ServicesResolved
+// is the property that means what the caller actually needs ("an LE link whose GATT database
+// is discovered"), so that is what short-circuits instead. Re-running the socket against a
+// live LE ACL is cheap: the kernel reuses the existing link and the peer refuses the dead PSM
+// immediately.
 async fn ensure_le_link(device: &Device) {
-    match device.is_connected().await {
-        Ok(true) => return,
-        Ok(false) => (),
-        Err(e) => {
-            println!("    Could not read connection state: {}", e);
-            return;
-        }
+    if device.is_services_resolved().await.unwrap_or(false) {
+        return;
     }
     let addr_type = match device.address_type().await {
         Ok(t) => t,
@@ -280,9 +292,9 @@ async fn ensure_le_link(device: &Device) {
 // Connect and ask BlueZ to resolve the peer's GATT database, then report whether our service
 // is actually there. Used when the cached UUIDs property can't be trusted (bonded peers).
 async fn probe_for_service(device: &Device, fc_uuid: &Uuid) -> bluer::Result<bool> {
-    if !device.is_connected().await? {
-        ensure_le_link(device).await;
-    }
+    // Unconditional, for the reason given on ensure_le_link: a peer that is "connected" over
+    // BR/EDR would otherwise be probed over a bearer that serves no GATT.
+    ensure_le_link(device).await;
     if !device.is_connected().await? {
         device.connect().await?;
     }
