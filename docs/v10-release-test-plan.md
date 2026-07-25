@@ -116,22 +116,22 @@ Apple always guests; the peer hosts. Confirm the 6-digit pairing code and the tr
 
 Each row has a specific repro that previously failed — test the repro, not just "works."
 
-- [ ] **Android repeat transfer**: iOS → Android **twice in a row**, no restart →
+- [x] **Android repeat transfer**: iOS → Android **twice in a row**, no restart →
       transfer 2 stands up its hotspot; no "hotspot already running" in logcat; the
       Bluetooth switch stays **on** between legs (2026-07-25: a leftover pre-bond GATT
       client received iOS's teardown Service Changed after stop() and flipped it off —
       field guide §2c; expect "Ignoring service change after teardown" in logcat instead)
-- [ ] **Android GATT teardown**: back-to-back hotspot transfers → no phantom
+- [x] **Android GATT teardown**: back-to-back hotspot transfers → no phantom
       "Wrote OS to peer" / "Device connected" churn between transfers (logcat)
-- [ ] **Apple central teardown**: macOS/iOS as **receiver** (central), then a second
+- [x] **Apple central teardown**: macOS/iOS as **receiver** (central), then a second
       transfer → no leaked connection; second transfer clean
-- [ ] **Apple peripheral service**: Apple as **sender** twice in a row → service
+- [x] **Apple peripheral service**: Apple as **sender** twice in a row → service
       re-registers; second advertise/read works
 - [ ] **Cancel mid-transfer** (Android, hotspot) → UI re-enables; no spurious
       "Transfer error: … cancelled"
 - [ ] **Cancel mid-transfer** (Android, shared network) → no spurious "Transfer error"
       or "Discovery error: … cancelled"
-- [ ] **Successful shared-network receive** (Android) → **no** "Discovery error" after
+- [x] **Successful shared-network receive** (Android) → **no** "Discovery error" after
       "Transfer complete"
 - [ ] **Cancel mid-transfer** (each desktop) → UI recovers (drop-guard); hotspot torn down
 - [ ] **Stale BLE pairing recovery**: forget the peer on one side only, retry → re-pairs
@@ -139,16 +139,16 @@ Each row has a specific repro that previously failed — test the repro, not jus
       unresolved half of the Windows↔Linux failure; the re-pair returns
       `Pairing result: Failed` and keeps failing on subsequent attempts. Capture
       `bluetoothctl paired-devices` and `btmon` on the Linux side when testing this.
-- [ ] **Bidirectional BLE hotspot, Windows ↔ Linux** (the 2026-07-25 repro): Windows → Linux,
+- [x] **Bidirectional BLE hotspot, Windows ↔ Linux** (the 2026-07-25 repro): Windows → Linux,
       then immediately Linux → Windows without restarting either app. Leg 2 must reuse the
       bond and enumerate services. Previously leg 1 made Linux delete its half of the bond,
       so leg 2 got an empty GATT service list and then failed to re-pair permanently. Confirm
       `bluetoothctl paired-devices` on Linux still lists the Windows box after leg 1.
-- [ ] **Both bond provenances, Windows ↔ Linux.** Run the pair twice from fully unpaired,
+- [x] **Both bond provenances, Windows ↔ Linux.** Run the pair twice from fully unpaired,
       once in each starting order, because the two produce *different* cached state on Linux
       and only one of them used to work:
-      - [ ] unpaired → **Windows → Linux** first (Linux bonds as central) → then Linux → Windows
-      - [ ] unpaired → **Linux → Windows** first (Linux bonds as peripheral) → then
+      - [x] unpaired → **Windows → Linux** first (Linux bonds as central) → then Linux → Windows
+      - [x] unpaired → **Linux → Windows** first (Linux bonds as peripheral) → then
             Windows → Linux. This is the order that hung: Linux's cache entry for the peer had
             no Flying Carpet UUID, and the scan only reacted to `DeviceAdded`, which never
             fires twice for a bonded peer. Expect `Found peer … by re-reading known devices`
@@ -187,7 +187,7 @@ Each row has a specific repro that previously failed — test the repro, not jus
 
 ## Tier 5 — Platform-specific
 
-- [ ] **Android**: LocalOnlyHotspot works on target device (known-broken on some
+- [x] **Android**: LocalOnlyHotspot works on target device (known-broken on some
       Xiaomi/MIUI/HarmonyOS — note device model tested)
 - [ ] **Android**: deny then re-grant Bluetooth permission → switch stays usable, recovers
       on resume (#101); password-prompt dialog readable in dark mode
@@ -199,7 +199,7 @@ Each row has a specific repro that previously failed — test the repro, not jus
       not break profile handling (XML-injection fix); firewall prompt handled
 - [ ] **macOS**: long transfer doesn't silently drop when macOS switches back to an
       internet network (known caveat — confirm behavior/messaging)
-- [ ] **Interface chooser** (desktop): dropdown lists interfaces with IPs, hides unusable
+- [x] **Interface chooser** (desktop): dropdown lists interfaces with IPs, hides unusable
       ones, wired interface works in shared network mode
 - [ ] **Shared network over a manual iPhone Personal Hotspot** joined by both devices
       (documented Apple↔Apple path)
