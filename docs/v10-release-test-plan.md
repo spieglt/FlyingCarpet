@@ -45,7 +45,10 @@ been compiled.**
 
 - [x] Android: `./gradlew assembleDebug` (and `lintDebug` — only the pre-existing
       `MainActivity:94` MissingPermission finding is expected)
-- [x] Rust core: `cargo build` for Windows and Linux; `cargo clippy` clean
+- [x] Rust core: `cargo build` for Windows and Linux; `cargo clippy` clean — "clean" means
+      no errors. `cargo clippy --workspace --all-targets` on Windows emits 23 style lints in
+      `core` and 4 in the app (`is_none()` over `== None`, `Ok(…)?`, `expect` with a format
+      arg, arg counts); all pre-existing, none in v10 code paths.
 - [x] Tauri desktop app builds on Windows and Linux (`cargo tauri build`)
 - [x] **iOS builds in Xcode** (FlyingCarpetApple)
 - [x] **macOS builds in Xcode** (FlyingCarpetApple)
@@ -54,7 +57,11 @@ been compiled.**
       `wrong_password_fails_handshake`, `tampering_is_detected`, `round_trip_small_and_large`,
       and the `utils::selection_tests` folder-naming cases)
 - [x] Apple unit tests pass (Noise KATs, incl. cacophony vector + app KATs)
-- [x] Both repos report the **same protocol version constant** (wire-compat check)
+- [x] Both repos report the **same protocol version constant** (wire-compat check).
+      Re-verified 2026-07-25: Rust `MAJOR_VERSION: u64 = 10` (`core/src/lib.rs:83`), Kotlin
+      `MAJOR_VERSION: Long = 10` (`MainViewModel.kt:56`), Swift `VERSION: UInt8 = 10`
+      (`shared/Transfer.swift:17`). The Swift type is narrower but goes out as
+      `Data([0,0,0,0,0,0,0,VERSION])`, so all three write the same 8 big-endian bytes.
 
 ---
 
@@ -98,17 +105,38 @@ Apple always guests; the peer hosts. Confirm the 6-digit pairing code and the tr
 
 ## Tier 3 — Cryptography & protocol validation
 
-- [ ] KATs green on all three implementations (Rust, Android, Apple) — the real
-      cross-platform interop guarantee
+- [x] KATs green on all three implementations (Rust, Android, Apple) — the real
+      cross-platform interop guarantee. 2026-07-25: Rust (28 pass, 2 hardware-ignored) and
+      Android (`NoiseUnitTest` 10, `DiscoveryUnitTest` 4) re-run; Apple's suite was run on
+      a Mac in Tier 0 and its sources are unchanged since. All nine shared vectors — PSK,
+      discovery key, app handshake msg1/msg2/record, prologue + its msg1/msg2/record — are
+      byte-identical in `core/src/noise.rs`, `NoiseUnitTest.kt`, and
+      `macOS/FlyingCarpetTests/FlyingCarpetTests.swift`, as is the discovery announcement
+      vector between Rust and Kotlin.
+      - Two asymmetries in *coverage*, not in the vectors: Swift has the discovery **key**
+        KAT but no discovery **announcement** vector (the 108-byte layout + HMAC is pinned
+        only between Rust and Kotlin), and the iOS test target holds only the Xcode
+        template tests — the Noise KATs live in the macOS target. Both projects compile the
+        same `shared/Noise.swift`, so iOS's implementation is covered as long as the macOS
+        suite is run; nothing guards a Swift-side change to the announcement format.
 - [x] **Wrong password** (shared network): enter a mismatching password → clear
       "could not establish a secure connection / check the password" message, no hang
 - [ ] **Wrong password** (hotspot): same, via the BLE-exchanged password path
 - [x] **Version mismatch**: run a v10 build against a v9 build → clear version-mismatch
       message on both ends, no hang or garbage
-- [ ] **Preamble tamper** (if a test hook exists / via unit test) — handshake fails,
-      transfer aborts
-- [ ] Metadata confidentiality sanity: confirm filenames/sizes are no longer sent in the
-      clear (packet capture optional; primarily covered by Noise KATs)
+- [x] **Preamble tamper** (if a test hook exists / via unit test) — handshake fails,
+      transfer aborts. Unit-tested on all three: `prologue_mismatch_fails_handshake` (Rust),
+      `prologueMismatchFailsHandshake` (Kotlin), `testPrologueMismatchFails` (Swift). Each
+      flips one bit of the responder's transcript and asserts the handshake fails even
+      though the passwords match. `tampered_handshake_is_detected` covers a corrupted
+      handshake message on all three as well.
+- [x] Metadata confidentiality sanity: confirm filenames/sizes are no longer sent in the
+      clear (packet capture optional; primarily covered by Noise KATs). Verified by
+      inspection 2026-07-25: everything after the preamble goes through the
+      `TransferStream::Encrypted` handle — file count (`lib.rs`), then filename length,
+      filename bytes, size, per-chunk lengths and hashes (`sending.rs:87-117`). The only
+      plaintext writes are the version/mode preamble, which the prologue binds, and the
+      `TransferStream::Plain` fallback used solely to report a version/mode mismatch.
 
 ---
 
@@ -157,7 +185,7 @@ Each row has a specific repro that previously failed — test the repro, not jus
 - [ ] **Bidirectional BLE hotspot, Linux ↔ Android** and **Linux ↔ macOS**, same pattern —
       Linux no longer removes any peer's bond, so all three pairings need one clean
       round trip. macOS was already exempt and should be unchanged.
-- [ ] **Android post-bond bearer** (`TRANSPORT_AUTO` → `TRANSPORT_LE`, fixed 2026-07-25):
+- [x] **Android post-bond bearer** (`TRANSPORT_AUTO` → `TRANSPORT_LE`, fixed 2026-07-25):
       Android ↔ **macOS** and Android ↔ Linux/Windows, from fully unpaired, so the post-bond
       `connectGatt` runs against a dual-mode peer right after cross-transport key derivation.
       This was the direct analogue of the Windows↔Linux `br-connection-canceled` bug and had
@@ -314,5 +342,11 @@ items are not new in v10 and should not block release.
 - [ ] Tier 4 green (lifecycle regressions — highest-risk new code)
 - [ ] Tier 5 green or documented known-issue per platform
 - [ ] Tier 6 green or documented
-- [ ] Version strings bumped to 10 in all artifacts; changelog/README updated
+- [ ] Version strings bumped to 10 in all artifacts; changelog/README updated. Versions
+      checked 2026-07-25 and all agree: `core/Cargo.toml`, `src-tauri/Cargo.toml`, and
+      `tauri.conf.json` at 10.0.0; Android `versionName "10.0.0"` (`versionCode 22`); iOS and
+      macOS app targets `MARKETING_VERSION = 10.0.0` (the 1.0 entries in both pbxprojs belong
+      to the test bundles, which don't ship). README covers Shared Network + Noise. Left
+      unchecked for the changelog only — the repo has no `CHANGELOG.md`, so if release notes
+      live on the GitHub Releases page, that's the remaining item.
 - [ ] Both repos tagged in lockstep (wire-compatible)
