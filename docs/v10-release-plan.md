@@ -393,7 +393,7 @@ confirming before closing.
       to size).
 - [ ] **Run the Tier 6 Send Folder rows on hardware** — behavior changed on four of five
       platforms and only Rust has unit coverage; Kotlin and Swift are verified by hand.
-- [ ] **Build the Apple repo.** `shared/Transfer.swift` and the iOS storyboard changed and
+- [x] **Build the Apple repo.** `shared/Transfer.swift` and the iOS storyboard changed and
       have not been compiled here (no Mac).
 - [ ] **Confirm both repos report the same protocol version constant** (wire-compat gate).
 - [ ] Finish `docs/v10-release-test-plan.md` — Tiers 2–6 and the release gate.

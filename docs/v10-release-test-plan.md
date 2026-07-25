@@ -86,9 +86,9 @@ Apple always guests; the peer hosts. Confirm the 6-digit pairing code and the tr
 - [x] A → M  and  M → A   (Android hosts; Android ↔ macOS BLE)
 - [x] W → I  and  I → W   (Windows hosts; Windows ↔ Apple BLE)
 - [x] L → M  and  M → L   (Linux hosts; **macOS ↔ Linux — the v10 BLE fix**)
-- [ ] W → L  and  L → W   (desktop ↔ desktop hosting)
-- [ ] W → A  and  A → W   (Windows ↔ Android BLE)
-- [ ] L → A  and  A → L   (Linux ↔ Android BLE)
+- [x] W → L  and  L → W   (desktop ↔ desktop hosting)
+- [x] W → A  and  A → W   (Windows ↔ Android BLE)
+- [x] L → A  and  A → L   (Linux ↔ Android BLE)
 
 > If any single hop fails, expand *only that pair* to localize it. Passing the cycle +
 > the hotspot pairs means every platform's discovery, Noise, BLE, and hotspot code has
@@ -100,10 +100,10 @@ Apple always guests; the peer hosts. Confirm the 6-digit pairing code and the tr
 
 - [ ] KATs green on all three implementations (Rust, Android, Apple) — the real
       cross-platform interop guarantee
-- [ ] **Wrong password** (shared network): enter a mismatching password → clear
+- [x] **Wrong password** (shared network): enter a mismatching password → clear
       "could not establish a secure connection / check the password" message, no hang
 - [ ] **Wrong password** (hotspot): same, via the BLE-exchanged password path
-- [ ] **Version mismatch**: run a v10 build against a v9 build → clear version-mismatch
+- [x] **Version mismatch**: run a v10 build against a v9 build → clear version-mismatch
       message on both ends, no hang or garbage
 - [ ] **Preamble tamper** (if a test hook exists / via unit test) — handshake fails,
       transfer aborts
@@ -242,12 +242,12 @@ Pass = destination contains `TestFolder/` with all five files at the paths above
 - [x] Windows sends `TestFolder` (Send Folder checkbox) → receiver gets `TestFolder/…`
 - [x] Windows sends `TestFolder` by **drag-and-drop** onto the window → same result
 - [x] Linux sends `TestFolder` (checkbox and drag-and-drop)
-- [ ] Android sends `TestFolder` (Send Folder checkbox) → **to a Windows or Linux receiver**;
+- [x] Android sends `TestFolder` (Send Folder checkbox) → **to a Windows or Linux receiver**;
       this is the combination that used to fail with "Received invalid filename path"
 - [ ] iOS sends `TestFolder` ("Send Folder" in the "Send from:" prompt)
 - [ ] macOS sends `TestFolder` (choose the folder in the picker) → confirm **no regression**;
       this is the one platform whose behavior did not change
-- [ ] Each of the five **receives** `TestFolder` from at least one other platform, and the
+- [x] Each of the five **receives** `TestFolder` from at least one other platform, and the
       folder is recreated rather than flattened
 - [ ] Plain multi-file selection still arrives **flat** (no folder created) on all five —
       the fix must not wrap ordinary file sends in a directory
