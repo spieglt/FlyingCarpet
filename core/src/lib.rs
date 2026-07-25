@@ -165,8 +165,27 @@ pub struct InterfaceInfo {
     pub ip: Option<String>,
 }
 
+/// The running transfer, if any, and whether a cancellation is already in flight. Both live
+/// under one lock so starting and cancelling can't race: every transition (start, begin
+/// cancel, finish cancel) is decided while holding it. Aborting a task only takes effect at
+/// its next await, so a cancel can stay in flight for a while if the transfer is inside a
+/// blocking wifi or bluetooth call; `cancelling` is what makes the clicks that arrive during
+/// that window no-ops instead of a queued-up second transfer.
+#[derive(Default)]
+pub struct TransferTask {
+    pub handle: Option<tokio::task::JoinHandle<()>>,
+    pub cancelling: bool,
+}
+
+impl TransferTask {
+    /// True while a transfer task exists and hasn't finished on its own.
+    pub fn is_running(&self) -> bool {
+        self.handle.as_ref().is_some_and(|h| !h.is_finished())
+    }
+}
+
 pub struct Transfer {
-    pub cancel_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    pub task: Mutex<TransferTask>,
     pub hotspot: Arc<Mutex<Option<PeerResource>>>,
     pub ssid: Arc<Mutex<Option<String>>>,
     pub ble_ui_tx: Mutex<Option<mpsc::Sender<bool>>>, // used by javascript to report user's choice about whether to pair with bluetooth device to windows custom pairing callback.
@@ -175,7 +194,7 @@ pub struct Transfer {
 impl Transfer {
     pub fn new() -> Self {
         Transfer {
-            cancel_handle: Mutex::new(None),
+            task: Mutex::new(TransferTask::default()),
             hotspot: Arc::new(Mutex::new(None)),
             ssid: Arc::new(Mutex::new(None)),
             ble_ui_tx: Mutex::new(None),
@@ -734,13 +753,14 @@ async fn confirm_version<S: AsyncRead + AsyncWrite + Unpin>(
 }
 
 // TODO:
-// drag and drop shouldn't work when already in transfer
 // linux can't receive from windows or android if already paired/connected, service not found. but then it disconnects and next transfer works. unpair after every transfer?
 // don't write ssid over bluetooth till hotspot has started, so that peer (especially iOS) doesn't start trying too early.
 // test closing about window with x on linux: panic?
 // https://github.com/hbldh/bleak/issues/367#issuecomment-784375835
 // linux name is null on android when pairing - manufacturer info?
-// fix bug where multiple start/cancel clicks stack while waiting for transfer to cancel, at least on linux: have to get whatever is blocking on background thread?
+// make cancellation faster, not just safe: the nmcli calls in linux/network.rs and the
+//   windows pairing calls are blocking, so an abort doesn't land until the task next awaits.
+//   tokio::process::Command (or spawn_blocking) for run_command would cut the wait.
 // show qr code after refresh
 
 // TESTS:

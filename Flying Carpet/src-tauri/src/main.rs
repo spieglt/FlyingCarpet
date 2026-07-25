@@ -97,43 +97,75 @@ impl Drop for EnableUiGuard {
     }
 }
 
+// Async on purpose: a sync command body runs inline on the main thread, so the old version
+// blocked the GTK event loop while it waited for the transfer to wind down. The window froze,
+// X11 queued the user's clicks, and they landed after the UI had been re-enabled — on the
+// Start button, which sits exactly where Cancel was. As an async command this runs on the
+// async runtime instead, so the window keeps repainting and every click is handled live.
 #[tauri::command]
-fn cancel_transfer(window: Window, state: State<Transfer>) -> String {
-    let mut message = String::new();
-
-    // cancel file transfer, which should close tcp socket?
-    let cancel_handle = &mut state.cancel_handle.lock().unwrap();
-    if let Some(handle) = cancel_handle.as_ref() {
-        handle.abort();
-        while !handle.is_finished() {
-            println!("Waiting for transfer to cancel...");
-            std::thread::sleep(std::time::Duration::from_millis(100));
+async fn cancel_transfer(window: Window, state: State<'_, Transfer>) -> Result<String, String> {
+    // Take the task out and claim the cancellation under the lock, so a second click gets a
+    // fast "already cancelling" instead of stacking up behind this one.
+    let handle = {
+        let mut task = state.task.lock().unwrap_or_else(|e| e.into_inner());
+        if task.cancelling {
+            return Ok("Already cancelling transfer.".to_string());
         }
-        **cancel_handle = None;
-        message += "Transfer cancelled"
-    } else {
-        message += "No transfer to cancel"
-    }
-
-    // shut down hotspot
-    let hotspot = state
-        .hotspot
-        .lock()
-        .expect("Couldn't lock state hotspot mutex.");
-    let hotspot = &*hotspot;
-    let ssid = state.ssid.lock().expect("Couldn't lock state ssid mutex.");
-    let ssid = &*ssid;
-    match network::stop_hotspot(hotspot.as_ref(), ssid.as_deref()) {
-        Err(e) => println!("Error stopping hotspot: {}", e),
-        Ok(msg) => println!("{}", msg),
+        match task.handle.take() {
+            Some(handle) => {
+                task.cancelling = true;
+                Some(handle)
+            }
+            None => None,
+        }
     };
 
-    window
-        .emit("enableUi", Progress { value: 0 })
-        .expect("Couldn't emit to window");
-    message
+    let message = match handle {
+        Some(handle) => {
+            handle.abort();
+            // an abort only lands at the task's next await, so this can take a while if the
+            // transfer is inside a blocking wifi or bluetooth call. awaiting it (rather than
+            // polling is_finished in a sleep loop) keeps this off the main thread the whole
+            // time.
+            println!("Waiting for transfer to cancel...");
+            let _ = handle.await;
+            "Transfer cancelled"
+        }
+        None => "No transfer to cancel",
+    };
+
+    // shut down hotspot. blocking, but we're on the async runtime, not the main thread.
+    {
+        let hotspot = state
+            .hotspot
+            .lock()
+            .expect("Couldn't lock state hotspot mutex.");
+        let hotspot = &*hotspot;
+        let ssid = state.ssid.lock().expect("Couldn't lock state ssid mutex.");
+        let ssid = &*ssid;
+        match network::stop_hotspot(hotspot.as_ref(), ssid.as_deref()) {
+            Err(e) => println!("Error stopping hotspot: {}", e),
+            Ok(msg) => println!("{}", msg),
+        };
+    }
+
+    // release the cancellation before re-enabling the UI, so the start the user is now free
+    // to click isn't refused by start_async.
+    state
+        .task
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .cancelling = false;
+
+    // don't panic on a failed emit: this is the cleanup path, and the frontend re-enables
+    // itself when the invoke resolves anyway.
+    let _ = window.emit("enableUi", Progress { value: 0 });
+    Ok(message.to_string())
 }
 
+// Returns None if the transfer was started, or a message explaining why it wasn't. The
+// frontend guards against starting twice as well, but this is the only place that knows
+// whether the previous task is really gone, so it gets the last word.
 #[tauri::command]
 fn start_async(
     state: State<Transfer>,
@@ -146,7 +178,7 @@ fn start_async(
     using_bluetooth: bool,
     connection_mode: Option<String>,
     window: Window,
-) {
+) -> Option<String> {
     let thread_window = window.clone();
     let gui = GUI {
         window: Arc::new(Mutex::new(thread_window)),
@@ -165,7 +197,16 @@ fn start_async(
         _ => ConnectionMode::Hotspot,
     };
 
-    let cancel_handle = tokio::spawn(async move {
+    // hold the lock across the check and the spawn so two starts can't both pass the check
+    let mut task = state.task.lock().unwrap_or_else(|e| e.into_inner());
+    if task.cancelling {
+        return Some("Still cancelling the previous transfer. Try again in a moment.".to_string());
+    }
+    if task.is_running() {
+        return Some("A transfer is already in progress.".to_string());
+    }
+
+    let handle = tokio::spawn(async move {
         let _enable_ui_guard = EnableUiGuard { gui: gui.clone() };
         let stream: Option<flying_carpet_core::TransferStream> = start_transfer(
             mode,
@@ -184,10 +225,12 @@ fn start_async(
         .await;
         clean_up_transfer(stream, transfer_hotspot, transfer_ssid, &gui).await;
     });
-    let mut state_cancel_handle = state.cancel_handle.lock().unwrap();
-    *state_cancel_handle = Some(cancel_handle);
+    task.handle = Some(handle);
+    // only after the start is committed: overwriting this on a refused start would cut the
+    // running transfer off from the pairing dialog's answer
     let mut state_ble_ui_tx = state.ble_ui_tx.lock().unwrap();
     *state_ble_ui_tx = Some(ble_ui_tx);
+    None
 }
 
 #[tokio::main]
@@ -209,6 +252,23 @@ async fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_os::init())
         .manage(Transfer::new())
+        .setup(|_app| {
+            // Tauri's default window icon is the first PNG listed in bundle.icon, i.e. the
+            // 32x32 one, and that's all it publishes as _NET_WM_ICON. Window managers scale
+            // that up for the alt-tab switcher (96px on Cinnamon) and it looks it. Publish
+            // the 128x128 instead. This is what the panel and switcher fall back to when the
+            // window can't be matched to an installed .desktop file, which is the case when
+            // running from source or from the AppImage.
+            #[cfg(target_os = "linux")]
+            {
+                use tauri::Manager;
+                let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png"))?;
+                if let Some(window) = _app.get_webview_window("main") {
+                    window.set_icon(icon)?;
+                }
+            }
+            Ok(())
+        })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // best-effort cleanup when the app is closed mid-transfer (#51):
@@ -216,8 +276,8 @@ async fn main() {
                 // NetworkManager connection doesn't linger
                 use tauri::Manager;
                 let state: State<Transfer> = window.state();
-                if let Ok(mut cancel_handle) = state.cancel_handle.lock() {
-                    if let Some(handle) = cancel_handle.take() {
+                if let Ok(mut task) = state.task.lock() {
+                    if let Some(handle) = task.handle.take() {
                         handle.abort();
                     }
                 }
@@ -315,10 +375,12 @@ fn user_bluetooth_pair(choice: bool, state: State<Transfer>) {
     let ble_ui_tx = ble_ui_tx.clone();
 
     tokio::spawn(async move {
-        ble_ui_tx
-            .send(choice)
-            .await
-            .expect("Could not send on ble_ui_tx");
-        println!("sent in user_bluetooth_pair");
+        // the receiver lives in the transfer task, so it's gone if the transfer ended or was
+        // cancelled while the PIN dialog was still up. answering it then is a no-op, not a
+        // panic.
+        match ble_ui_tx.send(choice).await {
+            Ok(()) => println!("sent in user_bluetooth_pair"),
+            Err(_) => println!("no transfer waiting for a pairing choice, ignoring"),
+        }
     });
 }

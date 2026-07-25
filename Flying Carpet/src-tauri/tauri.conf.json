@@ -6,7 +6,7 @@
   },
   "bundle": {
     "active": true,
-    "category": "DeveloperTool",
+    "category": "Utility",
     "copyright": "",
     "targets": "all",
     "externalBin": [],
@@ -27,7 +27,11 @@
     "shortDescription": "",
     "linux": {
       "deb": {
-        "depends": []
+        "depends": [],
+        "desktopTemplate": "FlyingCarpet.desktop"
+      },
+      "rpm": {
+        "desktopTemplate": "FlyingCarpet.desktop"
       }
     }
   },

@@ -22,6 +22,12 @@ let selectedFiles;
 let selectedFolder;
 let connectionMode = 'hotspot';
 
+// 'idle' -> 'starting' (user is picking files/password) -> 'running' -> 'cancelling' -> 'idle'.
+// Everything that can kick off or stop a transfer (the buttons, Enter, drag and drop) checks
+// this first, so clicks that arrive while a transfer is starting or winding down are dropped
+// instead of queueing up behind it. The backend enforces the same rule independently.
+let transferState = 'idle';
+
 // save UI if user refreshes
 window.onunload = () => {
   let uiState = {
@@ -91,8 +97,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     progressBar.value = event.payload.value;
   });
 
-  // enable UI when transfer finishes
+  // enable UI when transfer finishes. ignored mid-cancel: the aborted transfer task emits
+  // this as it unwinds, and re-showing the Start button before the cancel has actually
+  // finished is what used to let a stray click start a second transfer.
   await appWindow.listen('enableUi', (_event) => {
+    if (transferState === 'cancelling') {
+      return;
+    }
     enableUi();
   });
 
@@ -124,6 +135,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   // handle drag and drop
   await appWindow.onDragDropEvent(async event => {
     if (event.payload.type != 'drop') {
+      return;
+    }
+    // ignore drops once a transfer is under way: startTransfer() would refuse anyway, but
+    // the selection below would still have overwritten the running transfer's file list
+    if (transferState !== 'idle') {
       return;
     }
     if (selectedMode === 'send') {
@@ -279,7 +295,27 @@ function makeQRCode(str) {
   });
 }
 
+// Only one transfer can be in flight at a time, and picking files/entering the password
+// happens between the click and the transfer actually starting. This gate covers that whole
+// window, so a second click (or Enter, or a drop onto the window) while a file dialog is open
+// or a transfer is running does nothing.
 async function startTransfer(filesSelected) {
+  if (transferState !== 'idle') {
+    return;
+  }
+  transferState = 'starting';
+  try {
+    await beginTransfer(filesSelected);
+  } finally {
+    // if we bailed out early (no interface, user dismissed a dialog) we never reached
+    // disableUi(), so hand the UI back
+    if (transferState === 'starting') {
+      transferState = 'idle';
+    }
+  }
+}
+
+async function beginTransfer(filesSelected) {
 
   // the password is collected after files are chosen (below), so file selection isn't
   // gated on the other device having started and displayed its password yet.
@@ -433,8 +469,10 @@ async function startTransfer(filesSelected) {
   // disable UI
   disableUi();
 
-  // kick off transfer
-  await core.invoke('start_async', {
+  // kick off transfer. the backend returns a message instead of null if it refused to start
+  // (a transfer is still running or still cancelling), in which case the UI stays disabled:
+  // the transfer that's already going will re-enable it when it ends.
+  let refused = await core.invoke('start_async', {
     mode: selectedMode,
     peer: selectedPeer,
     password: password,
@@ -445,10 +483,29 @@ async function startTransfer(filesSelected) {
     connectionMode: connectionMode,
     window: appWindow,
   });
+  if (refused) {
+    output(refused);
+  }
 }
 
 async function cancelTransfer() {
-  output(await core.invoke('cancel_transfer'));
+  if (transferState === 'cancelling') {
+    return;
+  }
+  transferState = 'cancelling';
+  // the transfer can take a while to come out of a blocking wifi or bluetooth call, so say so
+  // and stop taking clicks rather than letting them pile up
+  cancelButton.disabled = true;
+  cancelButton.innerText = 'Cancelling...';
+  try {
+    output(await core.invoke('cancel_transfer'));
+  } catch (e) {
+    output(`Error cancelling transfer: ${e}`);
+  } finally {
+    cancelButton.disabled = false;
+    cancelButton.innerText = 'Cancel Transfer';
+    enableUi();
+  }
 }
 
 // selectedFiles holds {path, name} pairs, where name is the relative path the receiving
@@ -562,6 +619,7 @@ let needPassword = async () => {
 }
 
 let enableUi = async () => {
+  transferState = 'idle';
   // show start button
   startButton.style.display = '';
   // hide cancel button
@@ -580,6 +638,7 @@ let enableUi = async () => {
 }
 
 let disableUi = async () => {
+  transferState = 'running';
   // hide start button
   startButton.style.display = 'none';
   // show cancel button
