@@ -603,6 +603,54 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     // this was the reason android couldn't connect to macOS? no, was the setLegacy(false). diagnosed by comparing nRF Connect logs from Flying Carpet pairings to nRF Connect pairings.
                     Thread.sleep(1600)
                     gatt?.discoverServices()
+                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    // This was a bare Log.i that ignored `status` entirely — the last silent
+                    // failure on the Android central path. 6b29695 instrumented every exit
+                    // from onServicesDiscovered, but a connect that never succeeds never
+                    // reaches it, so the UI simply went quiet right after "Stopped scanning"
+                    // and the status code that names the cause was dropped on the floor.
+                    // Observed 2026-07-25, Linux->Android.
+                    //
+                    // close() is not optional. Android leaks the underlying client if it is
+                    // not called after a disconnect, and connectGatt() starts failing with
+                    // status 133 once enough have leaked. Nothing closed it here, and
+                    // Bluetooth.stop() only closes `bluetoothGatt`, which a *failed* connect
+                    // never assigns — so every failed attempt leaked one and the retries
+                    // leaked more. That is what turns one transient error into a device that
+                    // stays broken until the app is restarted.
+                    val current = bluetoothGatt
+                    gatt?.close()
+                    if (current === gatt) {
+                        bluetoothGatt = null
+                    }
+                    when {
+                        // The peer hangs up once it has our credentials and the transfer has
+                        // moved to TCP. Expected — Linux now does exactly this.
+                        exchangeComplete ->
+                            Log.i("Bluetooth", "Disconnected after exchange (status $status)")
+                        // Pairing in flight. The first connection's encrypted read only
+                        // *triggers* bonding, and the link commonly drops doing it; the
+                        // ACTION_BOND_STATE_CHANGED receiver then opens the connection that
+                        // actually completes the exchange. A step, not a failure.
+                        result?.device?.bondState == BOND_BONDING ->
+                            Log.i("Bluetooth", "Disconnected while bonding (status $status)")
+                        // An older connection dropping while a newer one is live. The two
+                        // overlap deliberately after bonding (see the comment above), so only
+                        // the live one is allowed to fail the transfer.
+                        current != null && current !== gatt ->
+                            Log.i("Bluetooth", "Stale connection dropped (status $status)")
+                        else -> {
+                            outputText("Bluetooth connection failed with status $status.")
+                            if (status == 133) {
+                                outputText(
+                                    "Status 133 is Android's generic GATT failure. If it keeps " +
+                                    "happening, restart Flying Carpet on this device; if it " +
+                                    "still fails, unpair the two devices from each other."
+                                )
+                            }
+                            bluetoothFailed()
+                        }
+                    }
                 } else {
                     Log.i("Bluetooth", "New connection state: $newState")
                 }

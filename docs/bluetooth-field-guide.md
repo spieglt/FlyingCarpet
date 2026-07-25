@@ -310,12 +310,30 @@ this document, and it is the direct analogue of the bug that cost this session.
 The unchecked Android↔Windows and Android↔Linux hotspot rows in the test plan are exactly the
 ones that would expose it.
 
-### 2. Android fails silently when the service or characteristics are missing
+### 2. ~~Android fails silently when the service or characteristics are missing~~ — fixed
 
 Four exits from `onServicesDiscovered` — three printing nothing, none calling
 `bluetoothFailed()`, no timeout behind them. Linux errors, Windows retries then errors, Apple
 calls `cleanUpTransfer()`; Android hangs. Any of the bugs above, hit on Android, presents as
-"it just hangs" with nothing in the log. Fix regardless of whether item 1 is real.
+"it just hangs" with nothing in the log. Fixed in `6b29695`; all four exits now report and call
+`bluetoothFailed()`.
+
+**But that left the callback *before* it silent, which is worse.** A GATT connect that never
+succeeds never reaches `onServicesDiscovered` at all, and `onConnectionStateChange`'s
+disconnect branch was a bare `Log.i` that ignored `status` — so a failed connect showed up as
+the UI going quiet immediately after "Stopped scanning", with the one number that names the
+cause thrown away. Observed 2026-07-25 on Linux→Android.
+
+It also never called `close()`. Android leaks the underlying client if you don't close it after
+a disconnect, `connectGatt()` starts returning status 133 once enough have leaked, and
+`Bluetooth.stop()` only closes `bluetoothGatt` — which a *failed* connect never assigns. So
+each failed attempt leaked a client and each retry leaked another, which is the mechanism that
+turns one transient failure into a device that stays broken until the app restarts. Both fixed;
+the disconnect branch now closes, reports `status`, and distinguishes the three benign
+disconnects (post-exchange, mid-bonding, and a stale overlapping connection) from a real one.
+
+**Diagnostic value:** if Android goes quiet right after "Stopped scanning", it is failing to
+connect, not failing to find the service — those are different callbacks with different causes.
 
 ### 3. ~~The two unilateral-unpair paths violate law 4~~ — fixed 2026-07-25
 
@@ -370,6 +388,7 @@ codebase.
 | Scan never finds an advertising peer | filtering on cached rather than advertised data | does the filter read advertisement data? |
 | Works on first pairing, fails on reuse | bonded-vs-unbonded divergence | test both bond provenances (see below) |
 | **"Already connected"**, then a ~120 s stall and a retry that repeats verbatim | a link inherited from the previous transfer, on the wrong bearer (§3a) | did either side `disconnect()` last time? is the guard checking `Connected` where it means `ServicesResolved`? |
+| Android goes quiet right after **"Stopped scanning"** | the GATT *connect* failed — not service discovery, which reports every exit | `adb logcat -s Bluetooth` for the status in `onConnectionStateChange`; 133 after repeated attempts means leaked clients, so restart the app |
 | macOS: **CBError 14** | peer deleted its half of the bond | law 4 |
 | Windows: `0x8000FFFF` on enumeration | unresolved; retry ladder | `docs/windows-ble-gatt-0x8000ffff.md` |
 
