@@ -1,5 +1,13 @@
 # Audit: bonded vs. unbonded BLE behavior on every platform
 
+> **Superseded in part by `docs/bluetooth-field-guide.md`** (2026-07-25), which consolidates
+> this audit with the session's findings and carries the current per-platform matrix. Two
+> corrections to what follows: the Windows↔Linux hang turned out to be **bearer selection**,
+> not GATT caching (see the field guide §3, bug 4); and the "stop removing the GATT service
+> between transfers" recommendation in §Recommendation below is **withdrawn** — it would have
+> required registering the service even while acting as central, and it was never the cause.
+> The cache findings about Android and Apple below still stand and are still unfixed.
+
 Date: 2026-07-25. Prompted by three Windows↔Linux failures in a row, all of which turned out
 to be the same shape: **code that works against an unbonded peer and behaves differently, or
 not at all, against a bonded one.** This audit asks where else that shape exists.

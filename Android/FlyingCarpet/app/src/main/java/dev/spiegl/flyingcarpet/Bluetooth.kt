@@ -495,23 +495,50 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     return
                 }
                 super.onServicesDiscovered(gatt, status)
-                outputText("Discovered services")
-                for (service in gatt?.services!!) {
-                    // outputText("Service: ${service.uuid}")
-                }
-                val service = gatt.getService(SERVICE_UUID)
-                if (service == null) {
-                    outputText("Did not find service")
-//                    outputText("Trying to find services again")
-//                    Thread.sleep(1000)
-//                    gatt.discoverServices()
+                // Every exit below used to `return` silently, leaving the transfer waiting
+                // forever for a credential exchange that would never happen — three of them
+                // without printing anything at all. Linux errors, Windows retries then
+                // errors, and Apple cleans up; Android was the only platform that hung. See
+                // docs/bluetooth-field-guide.md.
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    outputText("Bluetooth service discovery failed with status $status.")
+                    bluetoothFailed()
                     return
                 }
-                // outputText("Got service: $service")
-                osCharacteristic = service.getCharacteristic(OS_CHARACTERISTIC_UUID) ?: return
-                ssidCharacteristic = service.getCharacteristic(SSID_CHARACTERISTIC_UUID) ?: return
-                passwordCharacteristic = service.getCharacteristic(PASSWORD_CHARACTERISTIC_UUID) ?: return
-                // outputText("Got characteristics: $osCharacteristic, $ssidCharacteristic, $passwordCharacteristic")
+                if (gatt == null) {
+                    outputText("Bluetooth service discovery returned no GATT client.")
+                    bluetoothFailed()
+                    return
+                }
+                outputText("Discovered ${gatt.services.size} services")
+                val service = gatt.getService(SERVICE_UUID)
+                if (service == null) {
+                    // Android caches the GATT database for bonded devices and never
+                    // invalidates it here (onServiceChanged is a no-op), while every
+                    // peripheral removes its service at teardown — so a stale cache lands
+                    // exactly here.
+                    outputText(
+                        "Did not find the Flying Carpet service on the peer. If the other " +
+                        "device has started its transfer, try unpairing the two devices from " +
+                        "each other and running the transfer again."
+                    )
+                    bluetoothFailed()
+                    return
+                }
+                val os = service.getCharacteristic(OS_CHARACTERISTIC_UUID)
+                val ssid = service.getCharacteristic(SSID_CHARACTERISTIC_UUID)
+                val password = service.getCharacteristic(PASSWORD_CHARACTERISTIC_UUID)
+                if (os == null || ssid == null || password == null) {
+                    outputText(
+                        "Peer's Flying Carpet service is missing characteristics " +
+                        "(os: ${os != null}, ssid: ${ssid != null}, password: ${password != null})."
+                    )
+                    bluetoothFailed()
+                    return
+                }
+                osCharacteristic = os
+                ssidCharacteristic = ssid
+                passwordCharacteristic = password
                 read(OS_CHARACTERISTIC_UUID)
             }
 
@@ -604,7 +631,13 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     application.applicationContext,
                     true,
                     gattCallback,
-                    BluetoothDevice.TRANSPORT_AUTO,
+                    // TRANSPORT_LE, never TRANSPORT_AUTO. Flying Carpet's GATT service exists
+                    // only over LE, and this fires the instant bonding completes — exactly
+                    // when cross-transport key derivation has minted BR/EDR keys alongside the
+                    // LE ones. Letting the stack choose from a dual-transport bond is what
+                    // made BlueZ page classic and fail with br-connection-canceled against a
+                    // peer that serves no GATT there (docs/bluetooth-field-guide.md).
+                    BluetoothDevice.TRANSPORT_LE,
                 )
             } else {
                 Log.e("Bluetooth", "Received ACTION_BOND_STATE_CHANGED but already bonded")

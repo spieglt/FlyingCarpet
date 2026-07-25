@@ -154,6 +154,12 @@ Each row has a specific repro that previously failed — test the repro, not jus
 - [ ] **Bidirectional BLE hotspot, Linux ↔ Android** and **Linux ↔ macOS**, same pattern —
       Linux no longer removes any peer's bond, so all three pairings need one clean
       round trip. macOS was already exempt and should be unchanged.
+- [ ] **Android post-bond bearer** (`TRANSPORT_AUTO` → `TRANSPORT_LE`, fixed 2026-07-25):
+      Android ↔ **macOS** and Android ↔ Linux/Windows, from fully unpaired, so the post-bond
+      `connectGatt` runs against a dual-mode peer right after cross-transport key derivation.
+      This was the direct analogue of the Windows↔Linux `br-connection-canceled` bug and had
+      never been exercised. Failure looks like a connect that succeeds with no Flying Carpet
+      service.
 - [ ] **Android as central, twice in a row, bonded** — Android↔Windows and Android↔Linux,
       Android **receiving** both legs, no app restart between them. Android never invalidates
       its GATT cache (`onServiceChanged` logs but its `discoverServices()` is commented out)

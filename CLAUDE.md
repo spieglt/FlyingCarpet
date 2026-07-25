@@ -36,6 +36,7 @@ Rust is a Cargo **workspace** (`core` + `Flying Carpet/src-tauri`):
 
 - **`ARCHITECTURE.md`** — the four independent role axes (transfer direction / BLE peripheral-central / hotspot host-joiner / TCP server-client) and how they map per platform pair. Read before touching connection setup, hosting logic, or BLE.
 - **`docs/shared-network-crypto.md`** — the full v10 cryptographic design (the normative reference for the handshake bytes). Read before touching anything crypto, discovery-auth, or the record/framing layer.
+- **`docs/bluetooth-field-guide.md`** — **read before touching any BLE code on any platform.** The four independent axes (advertising / scanning / bonding / GATT services), seven hard-won laws, a per-platform matrix, and a symptom→cause playbook. Bluetooth bugs here are subtle, intermittent, and platform-asymmetric; several have been re-derived from scratch more than once. Chronological investigation logs: `docs/windows-ble-gatt-0x8000ffff.md`, `docs/ble-bond-asymmetries.md`.
 
 ## Load-bearing invariants (don't "simplify" these)
 
