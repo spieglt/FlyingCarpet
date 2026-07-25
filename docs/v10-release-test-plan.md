@@ -117,7 +117,10 @@ Apple always guests; the peer hosts. Confirm the 6-digit pairing code and the tr
 Each row has a specific repro that previously failed — test the repro, not just "works."
 
 - [ ] **Android repeat transfer**: iOS → Android **twice in a row**, no restart →
-      transfer 2 stands up its hotspot; no "hotspot already running" in logcat
+      transfer 2 stands up its hotspot; no "hotspot already running" in logcat; the
+      Bluetooth switch stays **on** between legs (2026-07-25: a leftover pre-bond GATT
+      client received iOS's teardown Service Changed after stop() and flipped it off —
+      field guide §2c; expect "Ignoring service change after teardown" in logcat instead)
 - [ ] **Android GATT teardown**: back-to-back hotspot transfers → no phantom
       "Wrote OS to peer" / "Device connected" churn between transfers (logcat)
 - [ ] **Apple central teardown**: macOS/iOS as **receiver** (central), then a second

@@ -88,22 +88,30 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         // left here would let an unrelated bond event connect to the previous transfer's peer.
         bluetoothReceiver.bonded = false
         bluetoothReceiver.result = null
+        // From here until the next scan()/advertise(), no transfer owns the BLE stack, and
+        // any callback that still arrives — ours or the peer's teardown — must read as
+        // noise, not as a failure that flips the Bluetooth switch off (see bluetoothFailed
+        // in MainViewModel). Set before the closes below so their own callbacks are covered.
+        bluetoothReceiver.tearingDown = true
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
             && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
         {
             return
         }
         _status.postValue(false)
-        // central: disconnect AND close the client connection. Nulling the reference alone
-        // left the underlying BluetoothGatt connected with its callback registered, so it
-        // would reconnect and re-run the whole OS exchange (connect -> discover -> write OS
-        // -> connectToPeer -> startHotspot) after the transfer had ended.
+        // central: disconnect AND close every client connection this transfer opened.
+        // Nulling the reference alone left the underlying BluetoothGatt connected with its
+        // callback registered, so it would reconnect and re-run the whole OS exchange after
+        // the transfer had ended — and closing only `bluetoothGatt` (the most recently
+        // connected client) left the *other* one of the deliberately coexisting pre-bond and
+        // post-bond pair registered and holding the ACL. Confirmed 2026-07-25, iOS→Android:
+        // the leftover pre-bond client received iOS's teardown Service Changed right after
+        // this method had cleared exchangeComplete, re-discovered, found the service gone,
+        // and turned the Bluetooth switch off via bluetoothFailed().
         if (this::bluetoothLeScanner.isInitialized) {
             bluetoothLeScanner.stopScan(leScanCallback)
         }
-        bluetoothReceiver.bluetoothGatt?.disconnect()
-        bluetoothReceiver.bluetoothGatt?.close()
-        bluetoothReceiver.bluetoothGatt = null
+        bluetoothReceiver.closeAllConnections()
         // peripheral. adapter and bluetoothLeAdvertiser are null when Bluetooth is off or
         // unsupported — a user flipping Bluetooth off mid-transfer must not crash teardown.
         if (this::bluetoothManager.isInitialized) {
@@ -296,6 +304,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         {
             return
         }
+        // new transfer (peripheral role): re-arm bluetoothFailed(), which stop() disarms —
+        // the peripheral never calls scan(), so it must clear the flag here
+        bluetoothReceiver.tearingDown = false
         // BluetoothLeAdvertiser. null when Bluetooth is off: report and fail the transfer
         // rather than crash — this used to be an unguarded platform-type dereference.
         val bluetoothLeAdvertiser = bluetoothManager.adapter?.bluetoothLeAdvertiser
@@ -363,10 +374,12 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             // this was actually the culprit
             // .setLegacy(false)
             .build()
-        // new transfer: allow the credential exchange (and its retry) to run again, and let
-        // this transfer's pairing (if one happens) open its own post-bond connection
+        // new transfer: allow the credential exchange (and its retry) to run again, let
+        // this transfer's pairing (if one happens) open its own post-bond connection, and
+        // re-arm bluetoothFailed() — this transfer's BLE events are real again
         bluetoothReceiver.exchangeComplete = false
         bluetoothReceiver.bonded = false
+        bluetoothReceiver.tearingDown = false
         bluetoothLeScanner.startScan(listOf(scanFilter), scanSettings, leScanCallback)
         _status.postValue(true)
         outputText("Scanning for Bluetooth peripherals...")
@@ -395,12 +408,12 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     bluetoothReceiver.result = result
 
 //                    if (result.device.bondState == BOND_BONDED) {
-                    result.device.connectGatt(
+                    bluetoothReceiver.trackConnection(result.device.connectGatt(
                         application.applicationContext,
                         false,
                         bluetoothReceiver.gattCallback,
                         BluetoothDevice.TRANSPORT_LE,
-                    )
+                    ))
                     Log.i("Bluetooth", "Called connectGatt()")
 //                    } else {
 //                        result.device.createBond()
@@ -453,6 +466,47 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         // axes: connectToPeer() for the host, gotPassword() for either kind of joiner.
         // Cleared in scan() and, for roles that never scan, in stop().
         var exchangeComplete = false
+
+        // True from stop() until the next scan() or advertise() — i.e. whenever no transfer
+        // owns the BLE stack. Gates bluetoothFailed() (MainViewModel) the same way
+        // exchangeComplete does, but for the window *between* transfers, which
+        // exchangeComplete can't cover because stop() clears it: between transfers a late
+        // BLE callback is a log line, never a reason to flip the Bluetooth switch off.
+        // Starts true because no transfer is active until one starts.
+        var tearingDown = true
+
+        // Every GATT client this transfer opened, in the order opened. The pre-bond and
+        // post-bond connections deliberately coexist (see onConnectionStateChange), and
+        // `bluetoothGatt` only tracks the most recently connected one — so a teardown that
+        // closes only `bluetoothGatt` strands the other client, still registered and still
+        // holding the ACL between transfers (law 9 in docs/bluetooth-field-guide.md).
+        private val openConnections = mutableListOf<BluetoothGatt>()
+
+        fun trackConnection(gatt: BluetoothGatt?) {
+            if (gatt != null) {
+                synchronized(openConnections) { openConnections.add(gatt) }
+            }
+        }
+
+        private fun untrackConnection(gatt: BluetoothGatt) {
+            synchronized(openConnections) { openConnections.remove(gatt) }
+        }
+
+        // Close every client, not just the last-connected one — callbacks stop after
+        // close(), which is what makes stop() actually final.
+        @SuppressLint("MissingPermission")
+        fun closeAllConnections() {
+            val toClose = synchronized(openConnections) {
+                val copy = openConnections.toList()
+                openConnections.clear()
+                copy
+            }
+            for (gatt in toClose) {
+                gatt.disconnect()
+                gatt.close()
+            }
+            bluetoothGatt = null
+        }
 
         // For delays that used to be Thread.sleep() on the GATT binder thread: sleeping
         // there stalls every other callback behind it (Apple's equivalent was converted to
@@ -647,6 +701,15 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     Log.i("Bluetooth", "Ignoring service change; credential exchange already complete")
                     return
                 }
+                // Between transfers this is the peer's teardown removing its service —
+                // re-discovering would find the service gone and fail a transfer that no
+                // longer exists. This is the callback that flipped the Bluetooth switch off
+                // on 2026-07-25 (iOS→Android), delivered to a leftover client after stop()
+                // had cleared exchangeComplete.
+                if (tearingDown) {
+                    Log.i("Bluetooth", "Ignoring service change after teardown")
+                    return
+                }
                 startDiscovery(gatt, "service change")
             }
 
@@ -679,8 +742,8 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     // pure waste — the transfer is over TCP now — and the autoConnect=true
                     // link re-establishing mid-transfer would otherwise re-run the whole chain.
                     // So skip discovery once the exchange is done; until then, keep retrying.
-                    if (exchangeComplete) {
-                        Log.i("Bluetooth", "Skipping rediscovery; credential exchange already complete")
+                    if (exchangeComplete || tearingDown) {
+                        Log.i("Bluetooth", "Skipping rediscovery; credential exchange complete or transfer torn down")
                         return
                     }
                     // this was the reason android couldn't connect to macOS? no, was the setLegacy(false). diagnosed by comparing nRF Connect logs from Flying Carpet pairings to nRF Connect pairings.
@@ -714,6 +777,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     // stays broken until the app is restarted.
                     val current = bluetoothGatt
                     gatt?.close()
+                    gatt?.let { untrackConnection(it) }
                     if (current === gatt) {
                         bluetoothGatt = null
                         // a discovery on a link that is gone will never call back, so don't let
@@ -725,6 +789,10 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                         // moved to TCP. Expected — Linux now does exactly this.
                         exchangeComplete ->
                             Log.i("Bluetooth", "Disconnected after exchange (status $status)")
+                        // Between stop() and the next transfer, disconnects are teardown
+                        // fallout — ours or the peer's — never a failure.
+                        tearingDown ->
+                            Log.i("Bluetooth", "Disconnected during teardown (status $status)")
                         // Pairing in flight. The first connection's encrypted read only
                         // *triggers* bonding, and the link commonly drops doing it; the
                         // ACTION_BOND_STATE_CHANGED receiver then opens the connection that
@@ -795,7 +863,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             }
             if (!bonded) {
                 bonded = true
-                result!!.device.connectGatt(
+                trackConnection(result!!.device.connectGatt(
                     application.applicationContext,
                     true,
                     gattCallback,
@@ -806,7 +874,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     // made BlueZ page classic and fail with br-connection-canceled against a
                     // peer that serves no GATT there (docs/bluetooth-field-guide.md).
                     BluetoothDevice.TRANSPORT_LE,
-                )
+                ))
             } else {
                 Log.e("Bluetooth", "Received ACTION_BOND_STATE_CHANGED but already bonded")
             }

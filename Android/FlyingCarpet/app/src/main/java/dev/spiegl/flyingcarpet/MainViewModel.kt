@@ -939,6 +939,16 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             Log.i("Flying Carpet", "Bluetooth failed after the credential exchange; not failing the transfer")
             return
         }
+        // Same idea for the window *between* transfers, which exchangeComplete can't cover
+        // because stop() clears it: from stop() until the next scan()/advertise(), no
+        // transfer owns the BLE stack, so a late callback — the peer's teardown landing on
+        // a leftover client, or the disconnect for a client stop() closed — must not flip
+        // the Bluetooth switch off. Observed 2026-07-25 after a completed iOS→Android
+        // transfer: the switch turned itself off between two successful transfers.
+        if (bluetooth.bluetoothReceiver.tearingDown) {
+            Log.i("Flying Carpet", "Bluetooth event between transfers; not failing the transfer")
+            return
+        }
         enableBluetoothUi(false)
         cleanUpTransfer()
     }

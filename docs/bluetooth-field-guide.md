@@ -401,6 +401,42 @@ synchronously. The boolean or `BluetoothStatusCodes` return is the only notice y
 callback you are about to wait for will never arrive. Discarding it is how a transfer comes to
 hang with an empty log — the same shape as §2, one layer down.
 
+### 2c. ~~A completed transfer flipped the Bluetooth switch off~~ — fixed 2026-07-25
+
+Observed running the release test plan's iOS → Android repeat-transfer row: both transfers
+worked, and between them the Bluetooth switch turned itself off — the reliable
+`bluetoothFailed()` indicator (§6), firing after a transfer that had finished cleanly. The
+logcat trace made the mechanism unambiguous:
+
+1. Fresh pairing mid-transfer means **two** GATT clients by design (§2): the pre-bond
+   connect from the scan and the post-bond connect from the bond receiver. `bluetoothGatt`
+   tracks only the most recently connected one.
+2. `Bluetooth.stop()` closed only `bluetoothGatt` — one `close()`/`unregisterApp()` in the
+   log, two clients in existence. The pre-bond client stayed registered and kept the ACL up
+   (the GATT server logged "Device connected" again *immediately after* stop()). Law 9,
+   Android edition.
+3. iOS's own teardown (`removeService`) then delivered a Service Changed indication to the
+   leftover client — *after* stop() had cleared `exchangeComplete`, so the §2a guard was
+   disarmed. Re-discovery found 9 services instead of 10, took the missing-service exit,
+   and `bluetoothFailed()` turned the switch off. The stranded client was still alive a
+   full transfer later: during leg 2, *two* clients logged the peer's status-19 disconnect.
+
+Fixed twice over, because the two halves cover different windows:
+
+- **Every `connectGatt()` return is tracked** (`openConnections`) and `stop()` closes them
+  all — a closed client delivers no callbacks, which is what makes stop() final.
+- **`tearingDown`** is true from `stop()` until the next `scan()`/`advertise()` and gates
+  `bluetoothFailed()` the same way `exchangeComplete` does, but for the between-transfers
+  window that `exchangeComplete` cannot cover *because stop() clears it*. It also short-
+  circuits `onServiceChanged` and the reconnect-rediscovery path, so a late peer teardown
+  is a log line ("Ignoring service change after teardown"), not a discovery of a database
+  with no Flying Carpet service in it.
+
+**The lesson generalizes §2a's:** a guard cleared at teardown protects nothing that happens
+after teardown. Every event the peer can still send after `stop()` — Service Changed,
+disconnect, an in-flight read completing — needs a gate whose lifetime matches the gap
+between transfers, not the transfer.
+
 ### 3. ~~The two unilateral-unpair paths violate law 4~~ — fixed 2026-07-25
 
 Windows had **eight** `central.unpair()` sites, not one: enumeration failure (both branches),
@@ -456,7 +492,7 @@ codebase.
 | **"Already connected"**, then a ~120 s stall and a retry that repeats verbatim | a link inherited from the previous transfer, on the wrong bearer (§3a) | did either side `disconnect()` last time? is the guard checking `Connected` where it means `ServicesResolved`? |
 | Android goes quiet right after **"Stopped scanning"** | the GATT *connect* failed — not service discovery, which reports every exit | `adb logcat -s Bluetooth` for the status in `onConnectionStateChange`; 133 after repeated attempts means leaked clients, so restart the app |
 | A BLE error **seconds after** the credentials were exchanged — "services changed" then a missing service, or a disconnect | the peer's deliberate teardown, not a failure; a post-exchange guard that isn't set for this device's role (§2a) | is `exchangeComplete` set on *this* role's path? does the peer remove its service and disconnect after handing over credentials? |
-| Bluetooth switch flips itself off and the peer-OS chooser reappears | `bluetoothFailed()` ran — that is `enableBluetoothUi(false)`, and nothing else in the app does it | treat it as a reliable "a BLE callback failed the transfer" indicator, even when the transfer looked finished |
+| Bluetooth switch flips itself off and the peer-OS chooser reappears | `bluetoothFailed()` ran — that is `enableBluetoothUi(false)`, and nothing else in the app does it | a reliable "a BLE callback failed the transfer" indicator. Since §2c it can only fire *during* a transfer — a flip after a finished one is a §2c regression (a leftover client or a disarmed `tearingDown` gate) |
 | macOS: **CBError 14** | peer deleted its half of the bond | law 4 |
 | Windows: `0x8000FFFF` on enumeration | unresolved; retry ladder | `docs/windows-ble-gatt-0x8000ffff.md` |
 
