@@ -335,6 +335,83 @@ disconnects (post-exchange, mid-bonding, and a stale overlapping connection) fro
 **Diagnostic value:** if Android goes quiet right after "Stopped scanning", it is failing to
 connect, not failing to find the service — those are different callbacks with different causes.
 
+That diagnostic immediately paid for itself, and against the previous entry: on the next run the
+connect *succeeded* and the hang did not reproduce. The failure had moved one stage later, which
+is the next item.
+
+### 2a. ~~A joining Android never set `exchangeComplete`, so the peer's teardown read as a failure~~ — fixed 2026-07-25
+
+Android→Linux succeeded, then Linux→Android reached `Joining flyingCarpet_79e9` — the exchange
+was **complete**, the password was in hand — and two seconds later printed "Did not find the
+Flying Carpet service on the peer" and aborted. The peer had done nothing wrong. Linux, having
+handed over its credentials, sleeps one second, drops its GATT service and disconnects, exactly
+as `core/src/linux/bluetooth.rs` intends. Android's central saw the Service Changed indication,
+re-ran `discoverServices()`, got 3 services instead of 4, and took the missing-service exit that
+`6b29695` had just wired to `bluetoothFailed()`.
+
+The re-discovery in `onServiceChanged` (added in `b84911b`) is guarded on `exchangeComplete`
+precisely to prevent this. The guard never fired, because **`exchangeComplete` was only ever set
+on the hosting path** (`connectToPeer()`), and this device was joining. Android is central when
+receiving and joins whenever the peer is Linux or Windows — so "Android receives from a PC", one
+of the most ordinary configurations there is, ran every transfer with all three
+`exchangeComplete` guards disarmed, including the post-exchange guard added in `3d2545a` one
+commit earlier. Two of the three would have aborted this transfer; the service-changed one
+simply got there first.
+
+Fixed at the flag, in two places, rather than at either call site:
+
+- `gotPassword()` sets it. That is the joiner's last BLE step, and both joiner roles pass
+  through it — the central by reading the characteristic, the peripheral by having it written —
+  so one assignment covers both. Not on an empty password: that means the peer's hotspot isn't
+  up yet, and the replay this flag suppresses is the retry that recovers.
+- `bluetoothFailed()` returns early when it is set. The teardown arrives as a Service Changed,
+  then a disconnect, then whatever a read or write already in flight returns, and those reach
+  three different call sites out of about ten. Once the transfer is on Wi-Fi, no BLE event should
+  be able to kill it — gate the teardown once instead of auditing every caller.
+- `Bluetooth.stop()` clears it, not just `scan()`. `scan()` runs for the central role only, so a
+  peripheral transfer following a completed one would otherwise inherit `true` and ignore real
+  failures for its whole duration. This is the bug the fix above would have introduced.
+
+**The lesson is the flag's name.** `exchangeComplete` was set where the *host* finishes, and
+read in three places that all meant "is BLE done with this transfer". Any predicate consumed by
+guards that fail open needs to be true for every role that reaches them, and the roles here are
+four independent axes (§1) — "hosting" is not "central" is not "sending".
+
+### 2b. ~~Every GATT request Android issues could be dropped without a trace~~ — fixed 2026-07-25
+
+Visible in the same log, and benign only by luck: the first `onServiceChanged` (Linux *adding*
+its service) arrived while the `discoverServices()` from `onConnectionStateChange` was still in
+flight, so two discoveries completed 13 ms apart and both called `read(OS)`. The second
+`readCharacteristic()` returned false — queue busy — and `read()` ignored the return. One chain
+died silently. It didn't matter because the two chains were identical, but two concurrent walks
+of read-OS → write-OS → connectToPeer is not a state this code reasons about, and a silently
+dropped GATT request is this project's signature failure mode.
+
+`read()` had **three** ways to do nothing at all, none printing anything:
+
+| | why it was silent |
+|---|---|
+| `bluetoothGatt` null | `bluetoothGatt?.readCharacteristic(...)` — the `?.` swallowed the whole call |
+| characteristic null | unknown UUID fell through a `when` with no `else` |
+| `readCharacteristic()` false | return value discarded |
+
+`write()` had the same three, plus a `characteristic!!` on the Tiramisu path that would have
+thrown rather than reported. And `discoverServices()` reports busy identically — false return,
+no callback, nothing logged.
+
+All of them now print. **Reported, not fatal**, deliberately: a false return is legitimately
+transient here, because the two GATT connections after bonding are *meant* to coexist (§2) and
+can each be walking the exchange, so one finding the queue busy is not grounds for killing a
+transfer the other is about to finish. The overlap itself is gone too — both discovery call sites
+go through one `startDiscovery()` that refuses to start a second while one is outstanding, and
+clears the flag on connect, on disconnect, and in `onServicesDiscovered` before its permission
+gate so it can never latch on.
+
+**The general rule for this platform:** every Android GATT call is asynchronous *and* fallible
+synchronously. The boolean or `BluetoothStatusCodes` return is the only notice you get that the
+callback you are about to wait for will never arrive. Discarding it is how a transfer comes to
+hang with an empty log — the same shape as §2, one layer down.
+
 ### 3. ~~The two unilateral-unpair paths violate law 4~~ — fixed 2026-07-25
 
 Windows had **eight** `central.unpair()` sites, not one: enumeration failure (both branches),
@@ -389,6 +466,8 @@ codebase.
 | Works on first pairing, fails on reuse | bonded-vs-unbonded divergence | test both bond provenances (see below) |
 | **"Already connected"**, then a ~120 s stall and a retry that repeats verbatim | a link inherited from the previous transfer, on the wrong bearer (§3a) | did either side `disconnect()` last time? is the guard checking `Connected` where it means `ServicesResolved`? |
 | Android goes quiet right after **"Stopped scanning"** | the GATT *connect* failed — not service discovery, which reports every exit | `adb logcat -s Bluetooth` for the status in `onConnectionStateChange`; 133 after repeated attempts means leaked clients, so restart the app |
+| A BLE error **seconds after** the credentials were exchanged — "services changed" then a missing service, or a disconnect | the peer's deliberate teardown, not a failure; a post-exchange guard that isn't set for this device's role (§2a) | is `exchangeComplete` set on *this* role's path? does the peer remove its service and disconnect after handing over credentials? |
+| Bluetooth switch flips itself off and the peer-OS chooser reappears | `bluetoothFailed()` ran — that is `enableBluetoothUi(false)`, and nothing else in the app does it | treat it as a reliable "a BLE callback failed the transfer" indicator, even when the transfer looked finished |
 | macOS: **CBError 14** | peer deleted its half of the bond | law 4 |
 | Windows: `0x8000FFFF` on enumeration | unresolved; retry ladder | `docs/windows-ble-gatt-0x8000ffff.md` |
 

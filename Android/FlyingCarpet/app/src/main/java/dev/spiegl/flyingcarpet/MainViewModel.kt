@@ -661,6 +661,20 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             val (ssid, _) = getSsidAndKey(password)
             this.ssid = ssid
         }
+        // The joiner's last BLE step, and where its half of the exchange is complete — the
+        // counterpart to connectToPeer() setting this on the host path. Without it, a joining
+        // device never set the flag at all and so ran the whole transfer with every
+        // exchangeComplete guard disarmed: the peer's deliberate teardown (Linux removes its
+        // GATT service a second after we read the password, then hangs up) arrived looking like
+        // a live failure, and the service-changed rediscovery in Bluetooth.onServiceChanged
+        // re-ran into a database with no Flying Carpet service in it and failed the transfer.
+        // Both joiner roles land here — central by reading this characteristic, peripheral by
+        // having it written to us — so this one assignment covers both. Skip an empty password:
+        // that means the peer's hotspot isn't up yet, the exchange is *not* done, and the
+        // replay this flag suppresses is the retry we need.
+        if (password != "") {
+            bluetooth.bluetoothReceiver.exchangeComplete = true
+        }
         joinHotspot()
     }
 
@@ -911,6 +925,20 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 //        }
     }
     override fun bluetoothFailed() {
+        // Once the credential exchange is done, BLE has nothing left to contribute to this
+        // transfer — but the peer's BLE teardown is still to come, and from here it is
+        // indistinguishable from a failure. Linux removes its GATT service a second after we
+        // read the password and then disconnects the link (core/src/linux/bluetooth.rs), which
+        // lands as a Service Changed indication, then a disconnect, plus whatever any read or
+        // write already in flight returns. Each of those reaches a different one of the ~ten
+        // bluetoothFailed() call sites, so gate the teardown itself rather than every caller:
+        // after the exchange a BLE failure is a log line, not a reason to kill a transfer that
+        // is running over Wi-Fi. Observed 2026-07-25 aborting a Linux->Android transfer between
+        // "Joining flyingCarpet_79e9" and the hotspot association.
+        if (bluetooth.bluetoothReceiver.exchangeComplete) {
+            Log.i("Flying Carpet", "Bluetooth failed after the credential exchange; not failing the transfer")
+            return
+        }
         enableBluetoothUi(false)
         cleanUpTransfer()
     }

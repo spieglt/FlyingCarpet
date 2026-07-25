@@ -18,6 +18,7 @@ import android.bluetooth.BluetoothGattServerCallback
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
@@ -72,6 +73,12 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         get() = _status
 
     fun stop(application: Context) {
+        // Per-transfer state, so clear it at the per-transfer teardown rather than only in
+        // scan(): scan() runs for the central role alone, and a peripheral transfer following
+        // one that had completed its exchange would inherit `true` and spend the whole transfer
+        // ignoring genuine Bluetooth failures. Before the permission gate below because this is
+        // just a flag — nothing here needs a permission we might not have.
+        bluetoothReceiver.exchangeComplete = false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
             && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
         {
@@ -408,13 +415,48 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         var passwordCharacteristic: BluetoothGattCharacteristic? = null
         var waitingForConnection = false
         private var bonded = false
-        // Set once the credential exchange has actually completed (connectToPeer has run).
-        // Gates the post-bond connection's replay: the replay must stay available as a retry
-        // until the exchange succeeds once, then be suppressed so a reconnect doesn't re-run
-        // read-OS → write-OS → connectToPeer against a transfer already in progress. Set only
-        // *after* success (not on connect, which was the exchangeStarted mistake), so this can
-        // only ever remove a redundant replay, never a needed retry. Reset per transfer in scan().
+        // Set once the credential exchange has actually completed. Gates the post-bond
+        // connection's replay: the replay must stay available as a retry until the exchange
+        // succeeds once, then be suppressed so a reconnect doesn't re-run read-OS → write-OS →
+        // connectToPeer against a transfer already in progress. Set only *after* success (not on
+        // connect, which was the exchangeStarted mistake), so it can only ever remove a redundant
+        // replay, never a needed retry. Also gates bluetoothFailed(), since the peer's teardown
+        // arrives after this point and is indistinguishable from a failure.
+        //
+        // It must be set for **every role that reaches those guards**, which is the mistake worth
+        // remembering: it was originally set only in connectToPeer()'s isHosting() branch, so a
+        // *joining* device — Android receiving from Linux or Windows, an entirely ordinary
+        // configuration — ran with all of them disarmed. Two writers now cover the four role
+        // axes: connectToPeer() for the host, gotPassword() for either kind of joiner.
+        // Cleared in scan() and, for roles that never scan, in stop().
         var exchangeComplete = false
+
+        // True from the moment discoverServices() is accepted until onServicesDiscovered fires
+        // for it. Two call sites start a discovery — onConnectionStateChange after its settle,
+        // and onServiceChanged when the peer's database changes — and nothing stopped them
+        // overlapping. A peripheral that registers its service right as we connect makes them
+        // overlap every time: observed 2026-07-25 on Linux→Android, two discoveries completing
+        // 13 ms apart, each calling read(OS), the second silently dropped by the busy GATT
+        // queue. Both chains were identical so it didn't matter, but two concurrent walks of
+        // read-OS → write-OS → connectToPeer is not a state this code reasons about.
+        private var discoveryOutstanding = false
+
+        // Single door for discoverServices(), so both call sites get the overlap guard and
+        // neither can ignore the return value. discoverServices() reports "busy" the same way
+        // readCharacteristic() does — a false return, no callback, nothing logged — and the
+        // discovery is what produces the characteristics, so dropping one silently strands the
+        // transfer with an empty log.
+        private fun startDiscovery(gatt: BluetoothGatt, reason: String) {
+            if (discoveryOutstanding) {
+                Log.i("Bluetooth", "Discovery already outstanding; not starting another ($reason)")
+                return
+            }
+            if (!gatt.discoverServices()) {
+                outputText("Could not start Bluetooth service discovery ($reason).")
+                return
+            }
+            discoveryOutstanding = true
+        }
 
         val gattCallback = object : BluetoothGattCallback() {
             // this is called when we as central have read a characteristic from the peer's peripheral
@@ -489,6 +531,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             }
 
             override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+                // before the permission gate: the discovery finished either way, and latching
+                // this flag on would suppress every later re-discovery on this connection
+                discoveryOutstanding = false
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
                     && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
                 {
@@ -513,10 +558,13 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 outputText("Discovered ${gatt.services.size} services")
                 val service = gatt.getService(SERVICE_UUID)
                 if (service == null) {
-                    // Android caches the GATT database for bonded devices and never
-                    // invalidates it here (onServiceChanged is a no-op), while every
-                    // peripheral removes its service at teardown — so a stale cache lands
-                    // exactly here.
+                    // Android caches the GATT database for bonded devices, and every peripheral
+                    // removes its service at teardown, so a stale cache lands exactly here.
+                    // Reaching this *after* the credential exchange means the opposite, though:
+                    // the peer really did remove its service, on purpose, and the transfer has
+                    // already moved to Wi-Fi. bluetoothFailed() is gated on exchangeComplete for
+                    // that case (MainViewModel), so getting here is genuinely a pre-exchange
+                    // failure and the unpair advice below applies.
                     outputText(
                         "Did not find the Flying Carpet service on the peer. If the other " +
                         "device has started its transfer, try unpairing the two devices from " +
@@ -567,7 +615,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     Log.i("Bluetooth", "Ignoring service change; credential exchange already complete")
                     return
                 }
-                gatt.discoverServices()
+                startDiscovery(gatt, "service change")
             }
 
             override fun onConnectionStateChange(
@@ -583,6 +631,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 }
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     bluetoothGatt = gatt
+                    // a fresh connection has no discovery outstanding on it, whatever the
+                    // previous one left behind
+                    discoveryOutstanding = false
                     outputText("Connected")
                     // Both GATT connections we open — the autoConnect=false one from
                     // onScanResult and the autoConnect=true one the bond receiver opens after
@@ -602,7 +653,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     }
                     // this was the reason android couldn't connect to macOS? no, was the setLegacy(false). diagnosed by comparing nRF Connect logs from Flying Carpet pairings to nRF Connect pairings.
                     Thread.sleep(1600)
-                    gatt?.discoverServices()
+                    gatt?.let { startDiscovery(it, "connected") }
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     // This was a bare Log.i that ignored `status` entirely — the last silent
                     // failure on the Android central path. 6b29695 instrumented every exit
@@ -622,6 +673,9 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     gatt?.close()
                     if (current === gatt) {
                         bluetoothGatt = null
+                        // a discovery on a link that is gone will never call back, so don't let
+                        // it latch the guard on and block the next connection's discovery
+                        discoveryOutstanding = false
                     }
                     when {
                         // The peer hangs up once it has our credentials and the transfer has
@@ -708,6 +762,16 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             }
         }
 
+        // Which characteristic a UUID refers to on the peer, once discovery has resolved them.
+        private fun characteristicFor(characteristicUuid: UUID): BluetoothGattCharacteristic? {
+            return when (characteristicUuid) {
+                OS_CHARACTERISTIC_UUID -> osCharacteristic
+                SSID_CHARACTERISTIC_UUID -> ssidCharacteristic
+                PASSWORD_CHARACTERISTIC_UUID -> passwordCharacteristic
+                else -> null
+            }
+        }
+
         // use to read peripheral's characteristic
         fun read(characteristicUuid: UUID) {
             // outputText("Reading $characteristicUuid")
@@ -717,10 +781,25 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                 outputText("No permission")
                 return
             }
-            when (characteristicUuid) {
-                OS_CHARACTERISTIC_UUID -> bluetoothGatt?.readCharacteristic(osCharacteristic)
-                SSID_CHARACTERISTIC_UUID -> bluetoothGatt?.readCharacteristic(ssidCharacteristic)
-                PASSWORD_CHARACTERISTIC_UUID -> bluetoothGatt?.readCharacteristic(passwordCharacteristic)
+            // Three ways this used to do nothing whatsoever, none of them printing anything: a
+            // null bluetoothGatt (the `?.` swallowed the entire call), a null characteristic (an
+            // unknown UUID fell through the `when` with no else), and readCharacteristic()
+            // returning false because the GATT queue was busy or the link was gone. Each read is
+            // what triggers the callback that issues the next step, so any drop stalls the
+            // exchange for good — and one was observed doing exactly that on 2026-07-25.
+            //
+            // Reported, not fatal. A false return is legitimately transient: the two GATT
+            // connections after bonding deliberately coexist and can each be walking the
+            // exchange, so one of them finding the queue busy is not grounds for killing a
+            // transfer the other is about to complete.
+            val gatt = bluetoothGatt
+            val characteristic = characteristicFor(characteristicUuid)
+            if (gatt == null) {
+                outputText("Could not read $characteristicUuid: no Bluetooth connection.")
+            } else if (characteristic == null) {
+                outputText("Could not read $characteristicUuid: characteristic not discovered.")
+            } else if (!gatt.readCharacteristic(characteristic)) {
+                outputText("Bluetooth read of $characteristicUuid was rejected (queue busy or link dropped).")
             }
         }
 
@@ -734,25 +813,29 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             {
                 return
             }
-            val characteristic = when (characteristicUuid) {
-                OS_CHARACTERISTIC_UUID -> osCharacteristic
-                SSID_CHARACTERISTIC_UUID -> ssidCharacteristic
-                PASSWORD_CHARACTERISTIC_UUID -> passwordCharacteristic
-                else -> {
-                    outputText("Bad characteristic: $characteristicUuid")
-                    return
-                }
+            // Same three silent drops as read() above, plus a `characteristic!!` on the Tiramisu
+            // path that would have thrown instead of reporting. Reported, not fatal, for the same
+            // reason.
+            val gatt = bluetoothGatt
+            val characteristic = characteristicFor(characteristicUuid)
+            if (gatt == null) {
+                outputText("Could not write $characteristicUuid: no Bluetooth connection.")
+                return
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                bluetoothGatt?.writeCharacteristic(
-                    characteristic!!,
-                    value,
-                    writeType
-                )
+            if (characteristic == null) {
+                outputText("Could not write $characteristicUuid: characteristic not discovered.")
+                return
+            }
+            val queued = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                gatt.writeCharacteristic(characteristic, value, writeType) == BluetoothStatusCodes.SUCCESS
             } else {
-                characteristic?.value = value
-                characteristic?.writeType = writeType
-                bluetoothGatt?.writeCharacteristic(characteristic)
+                characteristic.value = value
+                characteristic.writeType = writeType
+                @Suppress("DEPRECATION")
+                gatt.writeCharacteristic(characteristic)
+            }
+            if (!queued) {
+                outputText("Bluetooth write of $characteristicUuid was rejected (queue busy or link dropped).")
             }
         }
 
