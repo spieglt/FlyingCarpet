@@ -264,11 +264,14 @@ impl BluetoothCentral {
                 );
             }
             // we need to receive javascript's answer here... which means we need ble_ui_rx here, which means we can't use it from the struct and clone it, which means we have to wrap it in an arc<mutex>?
+            // A canceled transfer drops the sender, which surfaces here as None: treat it
+            // as a decline rather than panicking inside a COM callback (a panic can't
+            // unwind across the WinRT boundary).
             let approved = ble_ui_rx
                 .lock()
                 .expect("Could not lock ble_ui_rx mutex.")
                 .blocking_recv()
-                .expect("ble_ui_rx reply from js was None");
+                .unwrap_or(false);
             if approved {
                 args.Accept()?;
                 if thread_tx
@@ -324,43 +327,39 @@ impl BluetoothCentral {
         Ok(())
     }
 
-    pub fn stop_watching(&self) -> windows::core::Result<()> {
-        let status = self.watcher.Status()?;
-        if status == BluetoothLEAdvertisementWatcherStatus::Started {
+    pub fn stop_watching(&mut self) -> windows::core::Result<()> {
+        // The Received handler stops the watcher itself when it finds the peer, so by the
+        // time this runs the watcher is usually stopped already -- but a failed or canceled
+        // transfer can leave it running, still willing to pair with any Flying Carpet peer
+        // that appears. Stop it if needed, then unregister the callbacks either way: the
+        // old version did nothing at all unless the watcher was still running, which left
+        // the handlers registered on every normal exit.
+        if self.watcher.Status()? == BluetoothLEAdvertisementWatcherStatus::Started {
             println!("stopping watcher");
             self.watcher.Stop()?;
             println!("watcher is stopped");
+        }
+        {
             let pairing = self
                 .custom_pairing
                 .lock() // had a deadlock here, couldn't lock custom pairing because it was still open in pair_device(), fixed by putting those locks in blocks
                 .expect("Could not lock custom pairing mutex");
-            let pairing = pairing.as_ref();
-            println!("pairing.as_ref(): {:?}", pairing);
-            match pairing {
-                Some(custom_pairing) => {
-                    println!("custom_pairing is Some");
-                    let pct = self
-                        .pair_callback_token
-                        .lock()
-                        .expect("Could not lock callback mutex");
-                    if let Some(pair_callback_token) = *pct {
-                        println!("pair_callback_token is Some");
-                        custom_pairing.RemovePairingRequested(pair_callback_token)?;
-                    }
+            if let Some(custom_pairing) = pairing.as_ref() {
+                let mut pct = self
+                    .pair_callback_token
+                    .lock()
+                    .expect("Could not lock callback mutex");
+                if let Some(pair_callback_token) = pct.take() {
+                    println!("removing pairing callback");
+                    custom_pairing.RemovePairingRequested(pair_callback_token)?;
                 }
-                None => (),
             }
-            if let Some(scan_callback_token) = self.scan_callback_token {
-                println!("self.scan_callback_token is Some");
-                self.watcher.RemoveReceived(scan_callback_token)
-            } else {
-                println!("self.scan_callback_token was None");
-                Ok(())
-            }
-        } else {
-            println!("watcher wasn't started. status: {:?}", status);
-            Ok(())
         }
+        if let Some(scan_callback_token) = self.scan_callback_token.take() {
+            println!("removing scan callback");
+            self.watcher.RemoveReceived(scan_callback_token)?;
+        }
+        Ok(())
     }
 
     // Used after dropping a stale bond: clear the old device object so the
@@ -516,6 +515,19 @@ impl BluetoothCentral {
         };
         let info = device.DeviceInformation()?;
         unpair(info)
+    }
+}
+
+// A canceled transfer aborts the task at an await without reaching the explicit
+// stop_watching() call, leaving the watcher scanning and its Received handler free to
+// pair with the next Flying Carpet peer that advertises -- against a channel nobody
+// reads. Idempotent with the explicit call: by then the watcher is stopped and the
+// callback tokens are taken.
+impl Drop for BluetoothCentral {
+    fn drop(&mut self) {
+        if let Err(e) = self.stop_watching() {
+            println!("Could not stop watching on drop: {}", e);
+        }
     }
 }
 

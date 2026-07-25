@@ -151,9 +151,6 @@ pub async fn negotiate_bluetooth<T: UI>(
         ui.output("Scanning for Bluetooth peripherals...");
         central.scan(ble_ui_rx)?;
 
-        central.stop_watching()?;
-        println!("stopped watching");
-
         // Windows sometimes can't enumerate GATT services of a device it's still bonded
         // to from an earlier transfer (E_UNEXPECTED, 0x8000FFFF), especially when the BLE
         // roles were reversed last time (we were the peripheral, so the bond predates the
@@ -252,6 +249,15 @@ pub async fn negotiate_bluetooth<T: UI>(
             }
         }
         println!("after get_services_and_characteristics");
+
+        // The Received handler stopped the watcher when it found the peer; unregister the
+        // scan and pairing callbacks now that no recovery rung can need a rescan. This call
+        // used to sit directly after scan(), where it could only have killed every scan
+        // before the first advertisement arrived -- it didn't only because WinRT hadn't yet
+        // flipped Status() to Started at that instant, making it a no-op by timing luck
+        // (an old TODO next to it suspected as much). Failure paths are covered by the
+        // Drop impl on BluetoothCentral.
+        central.stop_watching()?;
 
         // Nothing below unpairs on failure. Once enumeration has succeeded the bond is
         // demonstrably fine and the link is up, so a failing characteristic read or write is

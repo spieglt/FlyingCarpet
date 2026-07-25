@@ -220,16 +220,20 @@ impl BluetoothPeripheral {
                 let request = args.GetRequestAsync()?.get()?;
                 let writer = DataWriter::new()?;
                 let callback_password = callback_password.blocking_lock();
-                let callback_password = match callback_password.as_ref() {
-                    Some(p) => p,
-                    None => &"".to_string(), // bizarre
-                };
-                writer.WriteBytes(callback_password.as_bytes())?;
+                let password = callback_password.as_ref().cloned().unwrap_or_default();
+                writer.WriteBytes(password.as_bytes())?;
                 request.RespondWithValue(&writer.DetachBuffer()?)?;
-                println!("peer read our password: {}", callback_password);
-                if let Err(e) = callback_tx.blocking_send(BluetoothMessage::PeerReadPassword) {
-                    println!("Could not send on Bluetooth tx: {}", e);
-                };
+                println!("peer read our password: {}", password);
+                // An empty read means the peer's read raced the main thread setting the
+                // password after the OS exchange. The peer treats an empty credential as
+                // "not ready yet" and re-reads, so don't report the password as read --
+                // the main thread takes PeerReadPassword as "exchange done" and would stop
+                // waiting while the peer still has nothing, deadlocking both sides.
+                if !password.is_empty() {
+                    if let Err(e) = callback_tx.blocking_send(BluetoothMessage::PeerReadPassword) {
+                        println!("Could not send on Bluetooth tx: {}", e);
+                    };
+                }
                 deferral.Complete()?;
                 Ok(())
             },
@@ -326,5 +330,27 @@ impl BluetoothPeripheral {
                 .RemoveAdvertisementStatusChanged(token)?;
         }
         Ok(())
+    }
+}
+
+// negotiate_bluetooth only reaches its explicit stop_advertising() call on the success
+// path; every error return and every cancellation (the transfer task is aborted at an
+// await) skips it, and per the note on stop_advertising, dropping our reference is not
+// documented to stop the advertisement. Without this, one failed or canceled send leaves
+// the machine advertising a Flying Carpet service whose handlers feed a dead channel and
+// serve empty credentials, and the next transfer registers a second provider for the same
+// UUID -- a peer's central can then enumerate and read the stale one.
+impl Drop for BluetoothPeripheral {
+    fn drop(&mut self) {
+        let status = self.service_provider.AdvertisementStatus();
+        if matches!(
+            status,
+            Ok(GattServiceProviderAdvertisementStatus::Started)
+                | Ok(GattServiceProviderAdvertisementStatus::StartedWithoutAllAdvertisementData)
+        ) {
+            if let Err(e) = self.stop_advertising() {
+                println!("Could not stop advertising on drop: {}", e);
+            }
+        }
     }
 }
