@@ -233,7 +233,7 @@ Verified by reading the code on 2026-07-25. ✅ correct · ⚠️ works but frag
 
 | | Mechanism | Stops between transfers | Address type |
 |---|---|---|---|
-| **Windows** | `GattServiceProvider.StartAdvertising` | ✅ explicit `stop_advertising()` (`012d00b`) | static random |
+| **Windows** | `GattServiceProvider.StartAdvertising` | ✅ explicit `stop_advertising()` (`012d00b`), plus a `Drop` guard for error/cancel paths — WinRT holds its own reference, so dropping ours is not documented to stop it | static random |
 | **Linux** | bluer `Advertisement` | ✅ `drop(adv_handle)` after the OS exchange | adapter (usually public) |
 | **Android** | `bluetoothLeAdvertiser` | ✅ `stopAdvertising` + GATT server closed | random |
 | **iOS** | `CBPeripheralManager` | ✅ `stopAdvertising` + `removeService` | random |
@@ -255,7 +255,7 @@ Verified by reading the code on 2026-07-25. ✅ correct · ⚠️ works but frag
 | **Windows** | n/a — `BluetoothLEDevice` is LE by definition | ✅ immune |
 | **iOS/macOS** | n/a — CoreBluetooth is LE-only | ✅ immune |
 | **Linux** | BlueZ `select_conn_bearer` | ✅ forced LE via L2CAP socket, unbonded *and* bonded, and now on inherited links too (§3a) |
-| **Android** | `TRANSPORT_LE` on the scan path… | ❌ **`TRANSPORT_AUTO` on the post-bond path** — see §5 |
+| **Android** | `TRANSPORT_LE` on both paths | ✅ post-bond path fixed in `6b29695` — see §5.1 |
 
 ### Bond retention
 
@@ -276,8 +276,8 @@ try everything else first and tell the user what to do on the other device.
 | **Windows** | registered per transfer | ✅ `Uncached` + `Status()` checked |
 | **Linux** | per transfer (`drop(app_handle)`) | ✅ connects to re-resolve when cached UUIDs look wrong |
 | **Android** | ⚠️ **permanent** — `stop()` calls `initializePeripheral()`, which reopens the server *and re-adds the service* | ✅ `onServiceChanged` → `discoverServices()`, gated on `exchangeComplete` |
-| **iOS** | per transfer (`removeService`) | ❌ `didModifyServices` is a print-only stub |
-| **macOS** | per transfer | ❌ `didModifyServices` not implemented |
+| **iOS** | per transfer (`removeService`) | ✅ shared `didModifyServices` re-discovers (`FlyingCarpetApple` `4c59af6`, pending an Xcode build) |
+| **macOS** | per transfer | ✅ same shared helper, same caveat |
 
 Every stack that does re-discover depends on the peer sending a Service Changed indication.
 Where one isn't sent, no stack learns its cache is stale — see §5.4.
@@ -286,29 +286,18 @@ Where one isn't sent, no stack learns its cache is stale — see §5.4.
 
 ## 5. Outstanding, ranked
 
-### 1. Android uses `TRANSPORT_AUTO` immediately after bonding — same bug, same class
+### 1. ~~Android uses `TRANSPORT_AUTO` immediately after bonding~~ — fixed in `6b29695`
 
-`Bluetooth.kt`, the `ACTION_BOND_STATE_CHANGED` receiver:
+`Bluetooth.kt`'s `ACTION_BOND_STATE_CHANGED` receiver passed `TRANSPORT_AUTO` to the
+post-bond `connectGatt` while the scan path five hundred lines earlier correctly passed
+`TRANSPORT_LE`. The post-bond call fires the moment bonding completes — precisely when CTKD
+has just created a dual-transport bond, the exact condition that made BlueZ pick BR/EDR — so
+against a dual-mode peer (any desktop, and macOS especially) Android could connect over
+classic, which serves no GATT. The direct analogue of the bug that cost the 2026-07-25
+session; both paths now pass `TRANSPORT_LE`.
 
-```kotlin
-result!!.device.connectGatt(
-    application.applicationContext,
-    true,
-    gattCallback,
-    BluetoothDevice.TRANSPORT_AUTO,   // <-- lets Android pick the bearer
-)
-```
-
-The scan path five hundred lines earlier correctly passes `TRANSPORT_LE`. This one fires the
-moment bonding completes — precisely when CTKD has just created a dual-transport bond, which
-is the exact condition that made BlueZ pick BR/EDR. Against a dual-mode peer (any desktop, and
-macOS especially) Android can connect over classic, which serves no GATT.
-
-**Fix: change it to `TRANSPORT_LE`.** One token. This is the highest-value outstanding item in
-this document, and it is the direct analogue of the bug that cost this session.
-
-The unchecked Android↔Windows and Android↔Linux hotspot rows in the test plan are exactly the
-ones that would expose it.
+The Android↔Windows and Android↔Linux hotspot rows in the test plan are the ones that
+exercise it.
 
 ### 2. ~~Android fails silently when the service or characteristics are missing~~ — fixed
 
@@ -427,19 +416,19 @@ Linux's poisoned-bond `remove_device` was written for the bearer problem that
 last: retry once with the bond intact, and only then remove and re-pair, with the same
 warning.
 
-### 4. ~~Android~~ and Apple never invalidate their GATT cache — Android fixed 2026-07-25
+### 4. ~~Android and Apple never invalidate their GATT cache~~ — Android fixed 2026-07-25, Apple fixed in `4c59af6`
 
 Android's `onServiceChanged` now calls `discoverServices()`, gated on `exchangeComplete` — the
 TODO asked whether enabling it causes problems, and it does if ungated, because
 `onServicesDiscovered` restarts the credential exchange. That's the same re-entrancy hazard
 `onConnectionStateChange` already guards the same way.
 
-**Apple was written up as fixed in the same change and is not.** Verified in
-`FlyingCarpetApple` at `328dfc8` on 2026-07-25: iOS's `didModifyServices` is a `print`-only
-stub (`iOS/FlyingCarpet/ViewController.swift`), macOS does not implement the delegate method at
-all, and the only `discoverServices` call in the whole repo is the one in `didConnect`
-(`shared/Bluetooth.swift:170`). There is no shared re-discovery helper. So both Apple centrals
-still serve a stale snapshot when a peer re-registers its service, and this item stays open.
+Apple was once written up as fixed when it was not (verified stub at `328dfc8`); the real fix
+is `FlyingCarpetApple` `4c59af6` (2026-07-25): a shared `didModifyServices` in
+`shared/Bluetooth.swift` re-discovers when our service is among the invalidated ones, and both
+targets' delegate methods now call it (macOS previously did not implement the method at all).
+**Caveat: written on Windows, not yet compiled — verify with an Xcode build on both targets
+before treating this as closed.**
 
 **Remaining limitation, by design:** this only helps when the peer *sends* a Service Changed
 indication. If it doesn't, neither stack learns its cache is stale. Android's only other lever

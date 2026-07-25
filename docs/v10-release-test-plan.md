@@ -161,14 +161,14 @@ Each row has a specific repro that previously failed — test the repro, not jus
       never been exercised. Failure looks like a connect that succeeds with no Flying Carpet
       service.
 - [ ] **Android as central, twice in a row, bonded** — Android↔Windows and Android↔Linux,
-      Android **receiving** both legs, no app restart between them. Android never invalidates
-      its GATT cache (`onServiceChanged` logs but its `discoverServices()` is commented out)
-      while every peripheral removes its service at teardown, so a stale cached database is
-      predicted here. It would present as a **silent hang**: `onServicesDiscovered` returns
-      without calling `bluetoothFailed()` when the service or a characteristic is missing, and
-      three of those four exits print nothing. Watch logcat for "Did not find service", and
-      treat *any* hang after "Discovered services" as this. See
-      `docs/ble-bond-asymmetries.md`.
+      Android **receiving** both legs, no app restart between them. This row was written when
+      Android never invalidated its GATT cache and predicted a silent hang; both halves of
+      that prediction have since been fixed (`onServiceChanged` now re-discovers, gated on
+      `exchangeComplete`, and every `onServicesDiscovered` exit reports and calls
+      `bluetoothFailed()`). Expected now: leg 2 logs "Services changed" followed by a
+      successful re-discovery and a normal transfer. A "Did not find the Flying Carpet
+      service" abort or any hang after "Discovered services" is a regression in that fix,
+      not the previously predicted stale-cache hang. See `docs/ble-bond-asymmetries.md`.
 - [ ] **Poisoned-bond self-heal still works** (Linux as central): the deliberate
       `remove_device` on characteristic-discovery failure was kept; confirm a genuinely bad
       bond still recovers via the "retrying with a fresh pairing" path.
@@ -306,7 +306,7 @@ items are not new in v10 and should not block release.
 
 - [x] Tier 0 fully green (**hard blocker**: Apple must build)
 - [x] Tier 1 green
-- [ ] Tier 2 core cycle + hotspot pairs green
+- [x] Tier 2 core cycle + hotspot pairs green
 - [ ] Tier 3 green (wrong password + version mismatch are must-pass)
 - [ ] Tier 4 green (lifecycle regressions — highest-risk new code)
 - [ ] Tier 5 green or documented known-issue per platform

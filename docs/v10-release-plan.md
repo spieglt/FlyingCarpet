@@ -391,7 +391,7 @@ confirming before closing.
       (`shared/Transfer.swift`), iOS prompt requires 10, macOS uses `minLength: 10` for shared
       network and `8` for hotspot join (correct — an Android host's WPA2 passphrase isn't ours
       to size).
-- [ ] **Run the Tier 6 Send Folder rows on hardware** — behavior changed on four of five
+- [x] **Run the Tier 6 Send Folder rows on hardware** — behavior changed on four of five
       platforms and only Rust has unit coverage; Kotlin and Swift are verified by hand.
 - [x] **Build the Apple repo.** `shared/Transfer.swift` and the iOS storyboard changed and
       have not been compiled here (no Mac).
