@@ -315,19 +315,32 @@ through:
 
 What the UI log records on a failure, and how to read it:
 
-- `Couldn't read Bluetooth services (attempt N/3, took X.Xs): <error>` — one line per
-  failed attempt. The timing distinguishes an immediate stack rejection (<1 s) from the
-  ~7 s connect-timeout shape of mechanism 1; the error text distinguishes HRESULT
-  failures from a missing-service list.
-- `Diagnostic info: {reused|new} bond; peer {was already|was not} connected when
-  discovered` — printed with the first failure; settles which `AlreadyPaired` branch
-  fired (the still-connected short-circuit vs. reconnect-to-bonded-device).
+- `Couldn't read Bluetooth services (attempt N/3, X.Xs), retrying...` — one line per
+  failed attempt (no `, retrying...` on the last one). The timing distinguishes an
+  immediate stack rejection (<1 s) from the ~7 s connect-timeout shape of mechanism 1.
+  The error text itself is **not** here — see stdout below.
 - `Reading Bluetooth services succeeded on attempt N` — the money line. If this appears,
   a benign mechanism (1/2) is confirmed for that occurrence and no PIN dialog was
   needed.
 - `Couldn't read services of already-paired Bluetooth device. Unpairing and pairing
   again...` — the unpair rung fired; if the transfer then completes, that occurrence is
   evidence the bond itself was the problem (mechanism 3).
+- `Could not establish Bluetooth connection: <error>` (from `start_transfer`) — the
+  ladder ran out of rungs. This is the only place the full error text, with its
+  one-sided-bond explanation, reaches the UI, and the only failure the user must act on.
+
+Trimmed on 2026-07-25: each attempt used to repeat the full multi-sentence error, plus a
+`Diagnostic info:` line, in the UI — three paragraphs of bond-troubleshooting prose for a
+transfer that then succeeded on attempt 3 and was fine. Both now go to stdout:
+
+- `attempt N failed after X.Xs: <error>` — distinguishes HRESULT failures from a
+  missing-service list.
+- `diagnostic info: {reused|new} bond; peer {was already|was not} connected when
+  discovered` — printed with the first failure; settles which `AlreadyPaired` branch
+  fired (the still-connected short-circuit vs. reconnect-to-bonded-device).
+
+So a field report that only has the UI log still shows which rung fixed it and the shape
+of each failure; ask for stdout when the *cause* is in question.
 
 Interpretation over time: if field logs show rung 1 succeeding, the unpair rung can be
 demoted to rarely-hit insurance; if rung 1 never succeeds and rung 2 always does,

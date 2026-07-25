@@ -161,8 +161,10 @@ pub async fn negotiate_bluetooth<T: UI>(
         //    internal RPA/IRK resolution;
         // 2. drop the bond, rescan, and pair fresh, the way a manual restart of the
         //    transfer would. One unpair only.
-        // The attempt/timing/diagnostic output is deliberately chatty so field reports of
-        // this failure show which rung fixed it (and whether rung 2 is ever needed).
+        // Which rung fixed it is still recoverable from a field report, but the detail
+        // lives on stdout now: a ladder that recovers on its own shouldn't dump a wall of
+        // bond-troubleshooting prose into the UI on the way (observed 2026-07-25, where
+        // attempt 3 succeeded and the transfer was fine).
         const ENUMERATION_ATTEMPTS: u32 = 3;
         let mut retried_after_unpair = false;
         'pairing: loop {
@@ -193,16 +195,36 @@ pub async fn negotiate_bluetooth<T: UI>(
                         break 'pairing;
                     }
                     Err(e) => {
+                        // Keep the UI line short: a retry that later succeeds is a
+                        // non-event for the user, and the explanation of what the failure
+                        // means only applies if the ladder runs out of rungs -- at which
+                        // point the error is reported in full, once, by the caller. The
+                        // attempt count and elapsed time stay because they're what
+                        // distinguish an immediate stack rejection (<1s) from the ~7s
+                        // connect-timeout shape, and they're cheap to read.
                         ui.output(&format!(
-                            "Couldn't read Bluetooth services (attempt {}/{}, took {:.1}s): {}",
+                            "Couldn't read Bluetooth services (attempt {}/{}, {:.1}s){}",
                             attempt,
                             ENUMERATION_ATTEMPTS,
                             start.elapsed().as_secs_f32(),
-                            e
+                            if attempt < ENUMERATION_ATTEMPTS {
+                                ", retrying..."
+                            } else {
+                                ""
+                            },
                         ));
+                        println!(
+                            "attempt {} failed after {:.1}s: {}",
+                            attempt,
+                            start.elapsed().as_secs_f32(),
+                            e
+                        );
                         if attempt == 1 {
-                            ui.output(&format!(
-                                "Diagnostic info: {} bond; peer {} connected when discovered",
+                            // Settles which AlreadyPaired branch fired (still-connected
+                            // short-circuit vs. reconnect-to-bonded-device). stdout only:
+                            // it's for a field report on a failure, not for the user.
+                            println!(
+                                "diagnostic info: {} bond; peer {} connected when discovered",
                                 if msg == BluetoothMessage::AlreadyPaired {
                                     "reused"
                                 } else {
@@ -213,7 +235,7 @@ pub async fn negotiate_bluetooth<T: UI>(
                                 } else {
                                     "was not"
                                 },
-                            ));
+                            );
                         }
                         last_error = Some(e);
                         if attempt < ENUMERATION_ATTEMPTS {
