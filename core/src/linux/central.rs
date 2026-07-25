@@ -94,7 +94,10 @@ pub async fn find_characteristics<T: UI>(
         // the LE link and runs SMP pairing (numeric comparison, answered by our agent and
         // the dialog on the peer) before the connection attempt, which is then refused —
         // nothing listens on this PSM; the bond is the point. Random-address peers
-        // (Windows/Android/iOS) always connect over LE anyway and keep the old behavior.
+        // (Windows/Android/iOS) connect over LE while *unbonded*, so they don't need this.
+        // They do need ensure_le_link() once a bond exists — a bond made while we were the
+        // peripheral is dual-transport and hands the bearer choice back to BR/EDR regardless
+        // of address type. See ensure_le_link().
         if !device.is_paired().await?
             && device.address_type().await? == AddressType::LePublic
             && !device.is_connected().await?
@@ -122,6 +125,11 @@ pub async fn find_characteristics<T: UI>(
 
         if !device.is_connected().await? {
             println!("    Connecting...");
+            // For an already-bonded peer the bond may be dual-transport, in which case
+            // Connect() would page BR/EDR and fail; bring the LE link up first.
+            if device.is_paired().await.unwrap_or(false) {
+                ensure_le_link(device).await;
+            }
             let mut retries = 2;
             loop {
                 match device.connect().await {
@@ -208,9 +216,73 @@ pub async fn find_characteristics<T: UI>(
     }
 }
 
+// Raise an LE ACL link to the peer so BlueZ cannot choose the BR/EDR bearer.
+//
+// Device1.Connect() selects its bearer as "prefer the bonded bearer when exactly one is
+// bonded, else most recently seen, BR/EDR winning ties" (device.c select_conn_bearer). A bond
+// created while we were the *peripheral* is dual-transport: the peer pairs over LE and
+// cross-transport key derivation mints BR/EDR keys as well, so both bearers are bonded, the
+// tiebreak hands it to classic, and Connect() fails with br-connection-canceled against a peer
+// that serves GATT only over LE. Observed 2026-07-25 against Windows.
+//
+// Opening an L2CAP LE socket makes the kernel bring the LE link up first; the socket connect
+// itself is expected to be refused, since nothing listens on this PSM — the link is the point.
+// Once it is up, Connect() and service resolution ride the existing LE ACL.
+//
+// This is the same mechanism as the bonding socket in find_characteristics, but it applies to
+// *already-paired* peers of any address type. The bonding socket is gated on LePublic because
+// only a Mac's public-address advertisement poisons the bearer choice pre-bond; this hazard is
+// created by the bond itself, so address type is irrelevant to it.
+async fn ensure_le_link(device: &Device) {
+    match device.is_connected().await {
+        Ok(true) => return,
+        Ok(false) => (),
+        Err(e) => {
+            println!("    Could not read connection state: {}", e);
+            return;
+        }
+    }
+    let addr_type = match device.address_type().await {
+        Ok(t) => t,
+        Err(e) => {
+            println!("    Could not read address type: {}", e);
+            return;
+        }
+    };
+    let socket = match Socket::<SeqPacket>::new_seq_packet() {
+        Ok(s) => s,
+        Err(e) => {
+            println!("    Could not open LE socket: {}", e);
+            return;
+        }
+    };
+    if let Err(e) = socket.bind(SocketAddr::new(Address::any(), AddressType::LePublic, 0)) {
+        println!("    Could not bind LE socket: {}", e);
+        return;
+    }
+    if let Err(e) = socket.set_security(Security {
+        level: SecurityLevel::High,
+        key_size: 16,
+    }) {
+        println!("    Could not set LE socket security: {}", e);
+        return;
+    }
+    let target = SocketAddr::new(device.address(), addr_type, BOND_PSM);
+    println!("    Raising LE link to {} ({:?})...", device.address(), addr_type);
+    match timeout(Duration::from_secs(15), socket.connect(target)).await {
+        Ok(Ok(_)) => println!("    LE link socket connected"),
+        Ok(Err(e)) => println!("    LE link socket refused: {} (expected; the link is the point)", e),
+        Err(_) => println!("    LE link socket timed out"),
+    }
+    println!("    connected over LE afterward: {:?}", device.is_connected().await);
+}
+
 // Connect and ask BlueZ to resolve the peer's GATT database, then report whether our service
 // is actually there. Used when the cached UUIDs property can't be trusted (bonded peers).
 async fn probe_for_service(device: &Device, fc_uuid: &Uuid) -> bluer::Result<bool> {
+    if !device.is_connected().await? {
+        ensure_le_link(device).await;
+    }
     if !device.is_connected().await? {
         device.connect().await?;
     }

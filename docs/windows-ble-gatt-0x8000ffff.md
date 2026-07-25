@@ -171,6 +171,48 @@ paths from unbonded ones, on every stack**, and each platform's discovery/enumer
 was written and tested against the unbonded path first. Keeping bonds (the fix above) makes
 the bonded path the normal one, so it needs the same scrutiny.
 
+**2026-07-25, resolution: it was the bearer, not the cache.** The fix above (and two
+iterations after it) chased the wrong property. `Device1.UUIDs` is BlueZ's *resolved GATT
+service list*, not advertisement data — bluer documents it as "the available remote services",
+with `ServiceData` as the separate advertisement property — so for a bonded peer it reflects a
+cached attribute database and no read of it, polled or event-driven, could ever show the
+service appearing. That much was right. But the fix built on it, connecting to force
+re-resolution, failed with the error that gave the real answer:
+
+```
+Paired device E8:48:B8:C8:20:00 doesn't list our service; connecting to re-resolve its GATT database
+    Could not probe E8:48:B8:C8:20:00: Bluetooth operation failed: br-connection-canceled
+```
+
+`br-` is BR/EDR. `Device1.Connect()` was paging **classic Bluetooth** at a peer that serves
+GATT only over LE — the failure this document's own Linux section already describes for macOS,
+now reproduced against Windows.
+
+Mechanism, and it explains the provenance asymmetry exactly:
+
+- A bond created while Linux is the **central** is made by the LE L2CAP bonding socket in
+  `find_characteristics`, and is therefore **LE-only**. `select_conn_bearer`'s "prefer the
+  bonded bearer when exactly one is bonded" rule then pins every later `Connect()` to LE.
+- A bond created while Linux is the **peripheral** is made by the peer pairing in over LE,
+  and **cross-transport key derivation mints BR/EDR keys too**. Both bearers are now bonded,
+  the tiebreak falls through to "most recently seen", and BR/EDR wins.
+
+The LE bonding socket was gated on `address_type() == LePublic`, with the comment "random
+-address peers (Windows/Android/iOS) always connect over LE anyway". Windows advertises from
+`E8:48:…` — `0xE8` is `0b11101000`, a **static random** address — so it was excluded, and the
+assumption holds only while a peer is *unbonded*. A dual-transport bond re-poisons the bearer
+choice for any address type.
+
+Fix: `ensure_le_link()` raises the LE ACL link with an L2CAP LE socket before `Connect()` for
+any already-paired peer, regardless of address type — the same mechanism as the bonding
+socket, applied to a hazard the bond itself creates rather than one that predates it.
+
+Two lessons worth keeping. **First: read the error string's prefix.** Three fixes were built
+on a theory that `br-connection-canceled` would have refuted immediately. **Second: this
+codebase already knew.** `967ed6b` documented the bearer tiebreak, CTKD producing dual bonds,
+and the L2CAP-socket cure a month earlier; the only thing missing was applying it to bonded
+peers. When a BLE failure looks novel here, check the Linux Bluetooth history first.
+
 The `0x8000FFFF` recovery ladder has still **not been exercised against the failure it was
 built for**; the iPhone case remains intermittent and unreproduced since.
 
