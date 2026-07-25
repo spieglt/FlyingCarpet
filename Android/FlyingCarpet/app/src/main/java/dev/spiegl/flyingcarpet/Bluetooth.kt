@@ -550,8 +550,24 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     return
                 }
                 outputText("Services changed")
-                // TODO: should this be enabled? does it cause problems? https://developer.android.com/reference/android/bluetooth/BluetoothGattCallback#onServiceChanged(android.bluetooth.BluetoothGatt)
-                // gatt.discoverServices()
+                // This is the peer telling us its GATT database changed, and it is the only
+                // signal Android gives us that its cache for a *bonded* device is stale.
+                // Every peripheral removes its Flying Carpet service when a transfer ends and
+                // re-adds it on the next one, so without re-discovering here a bonded central
+                // can keep serving a snapshot that has no Flying Carpet service in it.
+                //
+                // The TODO this replaces asked whether enabling it causes problems. It does,
+                // if left ungated: onServicesDiscovered re-reads the characteristics and calls
+                // read(OS_CHARACTERISTIC_UUID), which restarts the credential exchange. That
+                // is the same re-entrancy hazard onConnectionStateChange already guards with
+                // exchangeComplete, so guard it the same way — before the exchange finishes we
+                // want the re-discovery, after it the transfer is on TCP and this is pure
+                // interference.
+                if (exchangeComplete) {
+                    Log.i("Bluetooth", "Ignoring service change; credential exchange already complete")
+                    return
+                }
+                gatt.discoverServices()
             }
 
             override fun onConnectionStateChange(

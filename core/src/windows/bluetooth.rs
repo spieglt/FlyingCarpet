@@ -228,43 +228,45 @@ pub async fn negotiate_bluetooth<T: UI>(
             let last_error = last_error.expect("enumeration attempts exhausted without an error");
 
             if msg == BluetoothMessage::AlreadyPaired && !retried_after_unpair {
+                // The only unpair left in this file, and the only one with positive evidence
+                // that the *bond* is the problem: we reused an existing bond and enumeration
+                // failed every attempt. Unpairing is one-sided — the peer keeps its half and
+                // we cannot tell it — so say so plainly, because that is the user's only way
+                // out if the re-pair below also fails, and Apple peers cannot clear their
+                // half programmatically at all.
                 retried_after_unpair = true;
                 ui.output(
                     "Couldn't read services of already-paired Bluetooth device. Unpairing and pairing again...",
+                );
+                ui.output(
+                    "Note: this removes the pairing on this device only. If the transfer still fails, remove this device from the other device's Bluetooth settings as well, then try again.",
                 );
                 if let Err(unpair_error) = central.unpair().await {
                     println!("Error unpairing: {}", unpair_error);
                 }
                 central.rescan().await?;
             } else {
-                if let Err(unpair_error) = central.unpair().await {
-                    println!("Error unpairing: {}", unpair_error);
-                }
+                // A fresh pairing that still can't enumerate is not a stale-bond problem, so
+                // leave the bond alone and report the error.
                 Err(last_error)?
             }
         }
         println!("after get_services_and_characteristics");
 
+        // Nothing below unpairs on failure. Once enumeration has succeeded the bond is
+        // demonstrably fine and the link is up, so a failing characteristic read or write is
+        // a timing or peer-side problem — dropping the bond can't fix it, and it leaves the
+        // peer holding a key we discarded, which is strictly worse for the next attempt (see
+        // "never unpair unilaterally" in docs/bluetooth-field-guide.md). These six call sites
+        // used to unpair; against an Apple peer that is unrecoverable without the user
+        // removing the pairing in System Settings, because CoreBluetooth exposes no API to
+        // clear its half.
         ui.output("Reading peer's OS");
-        // read peer's OS
-        let peer = match central.read(OS_CHARACTERISTIC_UUID).await {
-            Ok(p) => p,
-            Err(e) => {
-                if let Err(unpair_error) = central.unpair().await {
-                    println!("Error unpairing: {}", unpair_error);
-                }
-                Err(e)?
-            }
-        };
+        let peer = central.read(OS_CHARACTERISTIC_UUID).await?;
         ui.output(&format!("Peer OS: {:?}", peer));
 
         // write OS
-        if let Err(e) = central.write(OS_CHARACTERISTIC_UUID, OS).await {
-            if let Err(unpair_error) = central.unpair().await {
-                println!("Error unpairing: {}", unpair_error);
-            }
-            Err(e)?
-        };
+        central.write(OS_CHARACTERISTIC_UUID, OS).await?;
         println!("wrote OS");
 
         // read or write ssid and password
@@ -273,45 +275,18 @@ pub async fn negotiate_bluetooth<T: UI>(
             println!("hosting, writing wifi info to peer");
             let password = generate_password();
             let (_, ssid) = get_key_and_ssid(&password);
-            if let Err(e) = central.write(SSID_CHARACTERISTIC_UUID, &ssid).await {
-                if let Err(unpair_error) = central.unpair().await {
-                    println!("Error unpairing: {}", unpair_error);
-                }
-                Err(e)?
-            }
-            if let Err(e) = central.write(PASSWORD_CHARACTERISTIC_UUID, &password).await {
-                if let Err(unpair_error) = central.unpair().await {
-                    println!("Error unpairing: {}", unpair_error);
-                }
-                Err(e)?
-            }
+            central.write(SSID_CHARACTERISTIC_UUID, &ssid).await?;
+            central
+                .write(PASSWORD_CHARACTERISTIC_UUID, &password)
+                .await?;
             (ssid, password)
         } else {
             println!("joining, reading wifi info from peer");
-            let ssid = match central.read(SSID_CHARACTERISTIC_UUID).await {
-                Ok(s) => s,
-                Err(e) => {
-                    if let Err(unpair_error) = central.unpair().await {
-                        println!("Error unpairing: {}", unpair_error);
-                    }
-                    Err(e)?
-                }
-            };
-            let password = match central.read(PASSWORD_CHARACTERISTIC_UUID).await {
-                Ok(p) => p,
-                Err(e) => {
-                    if let Err(unpair_error) = central.unpair().await {
-                        println!("Error unpairing: {}", unpair_error);
-                    }
-                    Err(e)?
-                }
-            };
+            let ssid = central.read(SSID_CHARACTERISTIC_UUID).await?;
+            let password = central.read(PASSWORD_CHARACTERISTIC_UUID).await?;
             (ssid, password)
         };
-        // We stay paired after the transfer, like every other platform. When Windows then
-        // has trouble enumerating services of the already-paired device on a later
-        // transfer, the loop above unpairs and re-pairs once, so we don't unpair
-        // unconditionally here (which would cost a PIN confirmation on every transfer).
+        // We stay paired after the transfer, like every other platform.
         Ok((peer, ssid, password))
     }
 }

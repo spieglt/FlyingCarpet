@@ -224,27 +224,47 @@ pub async fn negotiate_bluetooth<T: UI>(
     } else {
         // acting as central
         ui.output("Started Bluetooth scan, waiting for sending device...");
-        let mut retried = false;
+        // Two rungs, and the bond-destroying one is now the second rather than the first.
+        //
+        // This retry was written for a poisoned bond — classic-only or dual-transport, left
+        // over from a pairing that went over BR/EDR — which makes BlueZ keep dialing the
+        // wrong bearer. That is now handled without touching the bond: ensure_le_link()
+        // raises the LE ACL link before every Connect() against a paired peer, which is what
+        // actually fixed the Windows->Linux failure. So retry once as-is first; the bond
+        // survives and, in the case this rung was built for, the retry now succeeds.
+        //
+        // remove_device is kept only as a last resort, because it is one-sided: the peer
+        // keeps its half of the bond and cannot be told, which is the failure mode described
+        // in docs/bluetooth-field-guide.md (law 4) and the bug fixed in 6039d53. Apple peers
+        // cannot clear their half programmatically at all, so the user is told what to do.
+        let mut attempt = 0;
         let (_device, characteristics) = loop {
             let device = central::scan(&adapter).await?;
             ui.output("Found device");
             match find_characteristics(&device, ui).await {
                 Ok(c) => break (device, c),
-                Err(e) if !retried => {
-                    // A poisoned bond (classic-only or dual-transport, e.g. left over from a
-                    // pairing that went over BR/EDR) makes BlueZ keep connecting the wrong
-                    // bearer. Remove the device — bond included — and retry once; the fresh
-                    // attempt bonds over LE, the state Flying Carpet needs.
-                    retried = true;
-                    println!("    Device failed: {}. Removing device and retrying...", e);
-                    ui.output("Bluetooth connection failed; retrying with a fresh pairing...");
-                    if let Err(remove_error) = adapter.remove_device(device.address()).await {
-                        println!("    Could not remove device: {}", remove_error);
-                    }
-                }
                 Err(e) => {
-                    println!("    Device failed: {}", e);
-                    Err(e)?
+                    attempt += 1;
+                    println!("    Device failed (attempt {}): {}", attempt, e);
+                    match attempt {
+                        1 => {
+                            ui.output("Bluetooth connection failed; retrying...");
+                        }
+                        2 => {
+                            ui.output(
+                                "Bluetooth connection still failing; removing the pairing and pairing again.",
+                            );
+                            ui.output(
+                                "Note: this removes the pairing on this device only. If the transfer still fails, remove this device from the other device's Bluetooth settings as well, then try again.",
+                            );
+                            if let Err(remove_error) =
+                                adapter.remove_device(device.address()).await
+                            {
+                                println!("    Could not remove device: {}", remove_error);
+                            }
+                        }
+                        _ => Err(e)?,
+                    }
                 }
             }
         };

@@ -190,22 +190,26 @@ Verified by reading the code on 2026-07-25. ✅ correct · ⚠️ works but frag
 
 | | After a successful transfer | On failure recovery |
 |---|---|---|
-| **Windows** | ✅ keeps (unpairing deliberately disabled) | ⚠️ ladder rung 2 unpairs unilaterally |
-| **Linux** | ✅ keeps (`6039d53`) | ⚠️ poisoned-bond self-heal calls `remove_device` |
+| **Windows** | ✅ keeps (unpairing deliberately disabled) | ✅ one unpair, last resort, warns the user |
+| **Linux** | ✅ keeps (`6039d53`) | ✅ retry first; `remove_device` last resort, warns the user |
 | **Android** | ✅ keeps (no `removeBond` anywhere) | ✅ none |
 | **iOS/macOS** | ✅ keeps (no API to remove) | ✅ none possible |
 
-All five now agree on the happy path. The two ⚠️s violate law 4 and are the remaining hazard.
+All five agree on the happy path, and the two failure paths that could still strand a peer now
+try everything else first and tell the user what to do on the other device.
 
 ### GATT service registration and cache invalidation
 
 | | Service lifetime | Central-side cache handling |
 |---|---|---|
-| **Windows** | registered per transfer | ✅ `Uncached` + `Status()` checked — the only fully correct one |
-| **Linux** | per transfer (`drop(app_handle)`) | ⚠️ connects to re-resolve when cached UUIDs look wrong |
-| **Android** | per transfer (server closed) | ❌ `onServiceChanged` → `discoverServices()` **commented out** |
-| **iOS** | per transfer (`removeService`) | ❌ `didModifyServices` logs only |
-| **macOS** | per transfer | ❌ `didModifyServices` not implemented at all |
+| **Windows** | registered per transfer | ✅ `Uncached` + `Status()` checked |
+| **Linux** | per transfer (`drop(app_handle)`) | ✅ connects to re-resolve when cached UUIDs look wrong |
+| **Android** | per transfer (server closed) | ✅ `onServiceChanged` → `discoverServices()`, gated on `exchangeComplete` |
+| **iOS** | per transfer (`removeService`) | ✅ `didModifyServices` re-discovers |
+| **macOS** | per transfer | ✅ same, via the shared helper |
+
+All five depend on the peer sending a Service Changed indication. Where one isn't sent, no
+stack learns its cache is stale — see §5.4.
 
 ---
 
@@ -242,25 +246,44 @@ Four exits from `onServicesDiscovered` — three printing nothing, none calling
 calls `cleanUpTransfer()`; Android hangs. Any of the bugs above, hit on Android, presents as
 "it just hangs" with nothing in the log. Fix regardless of whether item 1 is real.
 
-### 3. The two unilateral-unpair paths violate law 4
+### 3. ~~The two unilateral-unpair paths violate law 4~~ — fixed 2026-07-25
 
-Windows' recovery ladder rung 2 and Linux's poisoned-bond self-heal both destroy a bond the
-peer keeps. That's bug 1, re-created on demand. Now that bug 4 is fixed they should fire far
-less — but when they do, they should at minimum tell the user to remove the pairing on the
-*other* device too, since that's the only way out and Apple peers can't be fixed any other
-way.
+Windows had **eight** `central.unpair()` sites, not one: enumeration failure (both branches),
+plus every characteristic read and write. Six of those fired *after* enumeration had already
+succeeded, where the bond is demonstrably fine and the link is up — a failing read is a timing
+or peer-side problem that dropping the bond cannot fix, and the peer is left holding a key we
+discarded. Those six are gone. The one that remains has positive evidence the bond is at
+fault (a *reused* bond that failed every enumeration attempt) and now tells the user to remove
+the pairing on the other device too.
 
-### 4. Android and Apple never invalidate their GATT cache
+Linux's poisoned-bond `remove_device` was written for the bearer problem that
+`ensure_le_link()` now solves without touching the bond, so it was demoted from first rung to
+last: retry once with the bond intact, and only then remove and re-pair, with the same
+warning.
 
-`onServiceChanged` commented out; `didModifyServices` a no-op on iOS and absent on macOS.
-Every peripheral removes its service at teardown, so a bonded central can hold a stale
-snapshot. Apple degrades to a clean error (the `didUpdateValueFor` error path added recently);
-Android degrades to item 2's silent hang.
+### 4. ~~Android and Apple never invalidate their GATT cache~~ — fixed 2026-07-25
 
-### 5. macOS `didModifyServices` missing entirely
+Android's `onServiceChanged` now calls `discoverServices()`, gated on `exchangeComplete` — the
+TODO asked whether enabling it causes problems, and it does if ungated, because
+`onServicesDiscovered` restarts the credential exchange. That's the same re-entrancy hazard
+`onConnectionStateChange` already guards the same way.
 
-Two targets sharing `Bluetooth.swift` that differ on a delegate method. Implement it to match
-iOS even if it only logs.
+Apple now re-discovers in `didModifyServices`, implemented once in `shared/Bluetooth.swift`
+and called from both ViewControllers (the delegate method has to live on them, since they are
+the `CBPeripheralDelegate`). macOS previously didn't implement it at all — that gap closes in
+the same change.
+
+**Remaining limitation, by design:** this only helps when the peer *sends* a Service Changed
+indication. If it doesn't, neither stack learns its cache is stale. Android's only other lever
+is the hidden `BluetoothGatt.refresh()` via reflection — non-public API, breaks across
+versions, discouraged by Play policy — so the gap is documented rather than papered over.
+
+### 5. Still open: nothing blocking
+
+The `0x8000FFFF` enumeration failure against a bonded iPhone (`§3`, the original subject of
+`docs/windows-ble-gatt-0x8000ffff.md`) remains unexplained and unreproduced since 2026-07-24.
+The retry rung covers it; the unpair rung behind it is now the only unpair left in the
+codebase.
 
 ---
 
