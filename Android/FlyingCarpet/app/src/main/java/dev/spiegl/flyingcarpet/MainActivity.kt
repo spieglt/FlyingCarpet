@@ -390,7 +390,7 @@ class MainActivity : AppCompatActivity() {
                 bluetoothCheckedBeforeShared = bluetoothSwitch.isChecked
             }
             bluetoothSwitch.isChecked = false
-            bluetoothSwitch.isEnabled = false
+            setBluetoothSwitchEnabled(false)
             bluetoothIcon.isVisible = false
             // peer OS is found via discovery, so no peer group either. set after the
             // switch listener has run, since it makes the peer group visible.
@@ -399,7 +399,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             // usable if initialized, or if only permissions are missing (tapping the
             // switch then re-requests them, #101)
-            bluetoothSwitch.isEnabled = bluetoothAvailable || bluetoothPermissionsMissing
+            setBluetoothSwitchEnabled(bluetoothAvailable || bluetoothPermissionsMissing)
             bluetoothCheckedBeforeShared?.let {
                 bluetoothSwitch.isChecked = bluetoothAvailable && it
                 bluetoothCheckedBeforeShared = null
@@ -511,9 +511,25 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(id.cancelButton).isInvisible = enabled
 
         findViewById<TextView>(id.aboutButton).isClickable = enabled
-        findViewById<SwitchCompat>(id.bluetoothSwitch).isEnabled =
+        setBluetoothSwitchEnabled(
             enabled && (bluetoothAvailable || bluetoothPermissionsMissing) &&
             viewModel.connectionMode == ConnectionMode.Hotspot
+        )
+    }
+
+    // The switch paints its thumb, track and label from state lists keyed on the view's
+    // drawable state, and the Material switch drawables animate between those states. Setting
+    // isEnabled updates the state but the repaint could be dropped — a transition started while
+    // the transfer was running, or while the window wasn't drawing, left the switch showing the
+    // disabled colors after the transfer ended and only correcting itself on the next drawable
+    // state change, i.e. when the user touched it. Re-resolve the state and snap the drawables
+    // (and any half-finished thumb animation) to it so a change to the switch is always visible
+    // immediately. Every isEnabled write goes through here so no call site can reintroduce it.
+    private fun setBluetoothSwitchEnabled(enabled: Boolean) {
+        bluetoothSwitch.isEnabled = enabled
+        bluetoothSwitch.refreshDrawableState()
+        bluetoothSwitch.jumpDrawablesToCurrentState()
+        bluetoothSwitch.invalidate()
     }
 
     // The output box is a bare TextView, not a ScrollView. android:gravity="bottom" keeps the
@@ -565,8 +581,7 @@ class MainActivity : AppCompatActivity() {
         outState.putBoolean("transferRunning", transferRunning)
         val progressBarValue = findViewById<ProgressBar>(id.progressBar).progress
         outState.putInt("progress", progressBarValue)
-        val bluetoothEnabled = findViewById<SwitchCompat>(id.bluetoothSwitch).isEnabled
-        outState.putBoolean("bluetoothEnabled", bluetoothEnabled)
+        outState.putBoolean("bluetoothEnabled", bluetoothSwitch.isEnabled)
         outState.putBoolean("sharedNetwork", viewModel.connectionMode == ConnectionMode.SharedNetwork)
     }
 
@@ -596,8 +611,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         findViewById<ProgressBar>(id.progressBar).progress = savedInstanceState.getInt("progress")
-        val bluetoothEnabled = savedInstanceState.getBoolean("bluetoothEnabled")
-        findViewById<SwitchCompat>(id.bluetoothSwitch).isEnabled = bluetoothEnabled
+        setBluetoothSwitchEnabled(savedInstanceState.getBoolean("bluetoothEnabled"))
         // restore connection mode last: checking the button fires the listener, which
         // reapplies peer group visibility and the bluetooth switch state
         connectionGroup.check(
@@ -662,8 +676,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         bluetoothIcon = findViewById(id.bluetoothIcon)
-        viewModel.bluetooth.status.observe(this) {
-            bluetoothIcon.drawable.setTint(if (it) { Color.BLUE } else { Color.BLACK })
+        viewModel.bluetooth.status.observe(this) { connected ->
+            // the idle tint has to come from the theme rather than a hardcoded black: the
+            // icon's resting color is @color/bluetoothColor, which is white in dark mode.
+            // Hardcoding black left it invisible against the dark background from the end of
+            // the first transfer (when status goes back to false) onward.
+            bluetoothIcon.drawable.setTint(
+                if (connected) Color.BLUE else getColor(R.color.bluetoothColor)
+            )
         }
         bluetoothSwitch = findViewById(id.bluetoothSwitch)
         bluetoothSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -694,7 +714,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             viewModel.outputText("Device can't use Bluetooth")
             bluetoothSwitch.isChecked = false
-            bluetoothSwitch.isEnabled = false
+            setBluetoothSwitchEnabled(false)
         }
     }
 
@@ -743,12 +763,16 @@ class MainActivity : AppCompatActivity() {
         return initialized
     }
 
-    // disable Bluetooth if a callback fails
+    // disable Bluetooth if a callback fails. every caller is a BLE callback, which the OS
+    // delivers on a binder thread, so hop to the UI thread before touching these views —
+    // unchecking the switch fires its listener, which changes the peer group's visibility and
+    // would hit ViewRootImpl's thread check.
     private fun enableBluetoothUi(enabled: Boolean) {
-        viewModel.outputText("fired")
-        bluetoothSwitch.isChecked = enabled
-        bluetoothSwitch.isEnabled = enabled
-        bluetoothIcon.isVisible = enabled
+        runOnUiThread {
+            bluetoothSwitch.isChecked = enabled
+            setBluetoothSwitchEnabled(enabled)
+            bluetoothIcon.isVisible = enabled
+        }
     }
 }
 
