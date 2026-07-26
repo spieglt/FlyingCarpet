@@ -22,12 +22,15 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.ActivityCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.documentfile.provider.DocumentFile
@@ -209,7 +212,19 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Android 15 forces edge-to-edge when targeting SDK 35+: the system bars go
+        // transparent and the window draws behind them. enable it on every version for a
+        // consistent look, and pad the root view by the bar insets so content (especially
+        // the QR code, which is pinned to the top corner) stays out from under the bars.
+        enableEdgeToEdge()
         setContentView(layout.activity_main)
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById<View>(id.root)) { root, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            root.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            WindowInsetsCompat.CONSUMED
+        }
 
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
 
