@@ -667,7 +667,7 @@ verification is still pending real devices, but the shared cacophony/app KATs ar
 interop guarantee.
 
 ### Phase 3 — Apple (hand-rolled on CryptoKit) — **done**
-In the FlyingCarpetApple repo (`shared/Noise.swift`), the same shape as the other two:
+In the Swift port (`Apple/shared/Noise.swift`), the same shape as the other two:
 1. Hand-rolled `NNpsk0` symmetric state + handshake using **CryptoKit** — X25519
    (`Curve25519.KeyAgreement`), ChaCha20-Poly1305 (`ChaChaPoly`), SHA-256, HMAC — and
    **CommonCrypto** PBKDF2 for the PSK (UTF-8 password, identical salt/iters). No

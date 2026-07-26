@@ -31,7 +31,7 @@ macOS was the only platform that created the folder; the other four dumped the c
 
 ## Where each platform implements it
 
-**macOS** — `FlyingCarpetApple/shared/Transfer.swift`, `handleFileSelection`:
+**macOS** — `Apple/shared/Transfer.swift`, `handleFileSelection`:
 `sendDir = urls[0].deletingLastPathComponent()`, with `sendFolder = true` hardcoded. Unchanged.
 
 **iOS** — same function, iOS branch. Was `sendDir = urls[0]` (the folder itself); now
@@ -136,7 +136,7 @@ neither has a unit-test seam over its platform file APIs (SAF `DocumentFile`,
 
 ## Cross-repo note
 
-The iOS/macOS half of this lives in `FlyingCarpetApple` (`shared/Transfer.swift`,
+The iOS/macOS half of this lives in `Apple/` (`shared/Transfer.swift`,
 `macOS/…/AppDelegate.swift`, `iOS/…/Main.storyboard`) and must land with the changes here.
 No wire-format bytes changed, so this is not a protocol break and needs no version bump —
 but shipping one repo without the other would restore exactly the user-visible inconsistency

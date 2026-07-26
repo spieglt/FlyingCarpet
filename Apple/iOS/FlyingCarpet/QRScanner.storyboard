@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="21701" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="Y6W-OH-hqX">
+    <device id="retina4_7" orientation="landscape" appearance="light"/>
+    <dependencies>
+        <deployment identifier="iOS"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="21679"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="System colors in document resources" minToolsVersion="11.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <!--Scanner View Controller-->
+        <scene sceneID="s0d-6b-0kx">
+            <objects>
+                <viewController id="Y6W-OH-hqX" customClass="ScannerViewController" customModule="FlyingCarpet" customModuleProvider="target" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="5EZ-qb-Rvc">
+                        <rect key="frame" x="0.0" y="0.0" width="667" height="375"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="C1S-y8-E0r" userLabel="QRView">
+                                <rect key="frame" x="163.5" y="-5" width="340" height="385"/>
+                                <subviews>
+                                    <textView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" text="Start the transfer on the other device and scan the QR code" textAlignment="center" translatesAutoresizingMaskIntoConstraints="NO" id="Rdd-VI-c6T">
+                                        <rect key="frame" x="20" y="285" width="300" height="100"/>
+                                        <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                        <constraints>
+                                            <constraint firstAttribute="width" constant="300" id="13b-YV-5Xz"/>
+                                            <constraint firstAttribute="height" constant="100" id="SPv-lc-2Lr"/>
+                                        </constraints>
+                                        <color key="textColor" systemColor="labelColor"/>
+                                        <fontDescription key="fontDescription" type="boldSystem" pointSize="18"/>
+                                        <textInputTraits key="textInputTraits" autocapitalizationType="sentences"/>
+                                    </textView>
+                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="qrcode.viewfinder" catalog="system" translatesAutoresizingMaskIntoConstraints="NO" id="kVm-ek-hYN">
+                                        <rect key="frame" x="30" y="20.5" width="280" height="278.5"/>
+                                        <constraints>
+                                            <constraint firstAttribute="height" constant="280" id="Cfh-pz-XaO"/>
+                                            <constraint firstAttribute="width" constant="280" id="daq-ch-rYg"/>
+                                        </constraints>
+                                    </imageView>
+                                </subviews>
+                                <constraints>
+                                    <constraint firstItem="Rdd-VI-c6T" firstAttribute="centerX" secondItem="kVm-ek-hYN" secondAttribute="centerX" id="Bn0-aw-iee"/>
+                                    <constraint firstAttribute="bottom" secondItem="Rdd-VI-c6T" secondAttribute="bottom" constant="5.6843418860808015e-14" id="IA6-aL-zYP"/>
+                                    <constraint firstItem="Rdd-VI-c6T" firstAttribute="centerX" secondItem="C1S-y8-E0r" secondAttribute="centerX" id="cuz-Ug-h7y"/>
+                                    <constraint firstAttribute="width" constant="340" id="eeB-kS-wyz"/>
+                                    <constraint firstAttribute="height" constant="385" id="jTJ-wI-1Q7"/>
+                                    <constraint firstItem="kVm-ek-hYN" firstAttribute="top" secondItem="C1S-y8-E0r" secondAttribute="top" constant="20.000000000000007" id="ugz-As-Kn9"/>
+                                </constraints>
+                            </view>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="vDu-zF-Fre"/>
+                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <constraints>
+                            <constraint firstItem="C1S-y8-E0r" firstAttribute="centerX" secondItem="5EZ-qb-Rvc" secondAttribute="centerX" id="Xl7-0b-T9Y"/>
+                            <constraint firstItem="C1S-y8-E0r" firstAttribute="centerY" secondItem="5EZ-qb-Rvc" secondAttribute="centerY" id="pf4-Yx-yYx"/>
+                        </constraints>
+                    </view>
+                    <connections>
+                        <outlet property="QRIcon" destination="kVm-ek-hYN" id="1YH-st-Imk"/>
+                        <outlet property="QRLabel" destination="Rdd-VI-c6T" id="soV-we-7RZ"/>
+                        <outlet property="QRView" destination="C1S-y8-E0r" id="R4o-Bd-OfV"/>
+                    </connections>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="Ief-a0-LHa" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="79.534883720930239" y="-35.407725321888414"/>
+        </scene>
+    </scenes>
+    <resources>
+        <image name="qrcode.viewfinder" catalog="system" width="128" height="115"/>
+        <systemColor name="labelColor">
+            <color red="0.0" green="0.0" blue="0.0" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+        </systemColor>
+        <systemColor name="systemBackgroundColor">
+            <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+        </systemColor>
+    </resources>
+</document>

@@ -1,0 +1,651 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		914890902C44AF2A00B3342D /* Receive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9148908F2C44AF2A00B3342D /* Receive.swift */; };
+		9179246B2C169DE100978A4D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9179246A2C169DE100978A4D /* AppDelegate.swift */; };
+		9179246D2C169DE100978A4D /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9179246C2C169DE100978A4D /* ViewController.swift */; };
+		9179246F2C169DE300978A4D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9179246E2C169DE300978A4D /* Assets.xcassets */; };
+		917924722C169DE300978A4D /* Base in Resources */ = {isa = PBXBuildFile; fileRef = 917924712C169DE300978A4D /* Base */; };
+		9179247D2C169DE300978A4D /* FlyingCarpetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9179247C2C169DE300978A4D /* FlyingCarpetTests.swift */; };
+		917924872C169DE300978A4D /* FlyingCarpetUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 917924862C169DE300978A4D /* FlyingCarpetUITests.swift */; };
+		917924892C169DE300978A4D /* FlyingCarpetUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 917924882C169DE300978A4D /* FlyingCarpetUITestsLaunchTests.swift */; };
+		9189FF682C2BD67800B3A94F /* Network.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9189FF632C2BD67800B3A94F /* Network.swift */; };
+		9189FF6A2C2BD67800B3A94F /* Transfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9189FF652C2BD67800B3A94F /* Transfer.swift */; };
+		9189FF6B2C2BD67800B3A94F /* Bluetooth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9189FF662C2BD67800B3A94F /* Bluetooth.swift */; };
+		9189FF6C2C2BD67800B3A94F /* Send.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9189FF672C2BD67800B3A94F /* Send.swift */; };
+		919603A82C7CFE6A00198FFE /* SsidBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919603A72C7CFE6A00198FFE /* SsidBox.swift */; };
+		91DB343D2F34433A00E73CFD /* Discovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DB343C2F34433A00E73CFD /* Discovery.swift */; };
+		91DB343F2F34433A00E73CFD /* Noise.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DB343E2F34433A00E73CFD /* Noise.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		917924792C169DE300978A4D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9179245F2C169DE100978A4D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 917924662C169DE100978A4D;
+			remoteInfo = FlyingCarpet;
+		};
+		917924832C169DE300978A4D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9179245F2C169DE100978A4D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 917924662C169DE100978A4D;
+			remoteInfo = FlyingCarpet;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		9129807D2C1A9BC300F31E82 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		9148908F2C44AF2A00B3342D /* Receive.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Receive.swift; path = ../../shared/Receive.swift; sourceTree = "<group>"; };
+		917924672C169DE100978A4D /* FlyingCarpet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FlyingCarpet.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9179246A2C169DE100978A4D /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		9179246C2C169DE100978A4D /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		9179246E2C169DE300978A4D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		917924712C169DE300978A4D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		917924732C169DE300978A4D /* FlyingCarpet.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlyingCarpet.entitlements; sourceTree = "<group>"; };
+		917924782C169DE300978A4D /* FlyingCarpetTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FlyingCarpetTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9179247C2C169DE300978A4D /* FlyingCarpetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlyingCarpetTests.swift; sourceTree = "<group>"; };
+		917924822C169DE300978A4D /* FlyingCarpetUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FlyingCarpetUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		917924862C169DE300978A4D /* FlyingCarpetUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlyingCarpetUITests.swift; sourceTree = "<group>"; };
+		917924882C169DE300978A4D /* FlyingCarpetUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlyingCarpetUITestsLaunchTests.swift; sourceTree = "<group>"; };
+		9189FF632C2BD67800B3A94F /* Network.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Network.swift; path = ../../shared/Network.swift; sourceTree = "<group>"; };
+		9189FF652C2BD67800B3A94F /* Transfer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Transfer.swift; path = ../../shared/Transfer.swift; sourceTree = "<group>"; };
+		9189FF662C2BD67800B3A94F /* Bluetooth.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Bluetooth.swift; path = ../../shared/Bluetooth.swift; sourceTree = "<group>"; };
+		9189FF672C2BD67800B3A94F /* Send.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Send.swift; path = ../../shared/Send.swift; sourceTree = "<group>"; };
+		919603A72C7CFE6A00198FFE /* SsidBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SsidBox.swift; sourceTree = "<group>"; };
+		91DB343C2F34433A00E73CFD /* Discovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Discovery.swift; path = ../shared/Discovery.swift; sourceTree = SOURCE_ROOT; };
+		91DB343E2F34433A00E73CFD /* Noise.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Noise.swift; path = ../shared/Noise.swift; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		917924642C169DE100978A4D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		917924752C169DE300978A4D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9179247F2C169DE300978A4D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		9179245E2C169DE100978A4D = {
+			isa = PBXGroup;
+			children = (
+				917924692C169DE100978A4D /* FlyingCarpet */,
+				9179247B2C169DE300978A4D /* FlyingCarpetTests */,
+				917924852C169DE300978A4D /* FlyingCarpetUITests */,
+				917924682C169DE100978A4D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		917924682C169DE100978A4D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				917924672C169DE100978A4D /* FlyingCarpet.app */,
+				917924782C169DE300978A4D /* FlyingCarpetTests.xctest */,
+				917924822C169DE300978A4D /* FlyingCarpetUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		917924692C169DE100978A4D /* FlyingCarpet */ = {
+			isa = PBXGroup;
+			children = (
+				9129807D2C1A9BC300F31E82 /* Info.plist */,
+				9179246A2C169DE100978A4D /* AppDelegate.swift */,
+				9179246C2C169DE100978A4D /* ViewController.swift */,
+				9189FF662C2BD67800B3A94F /* Bluetooth.swift */,
+				9189FF672C2BD67800B3A94F /* Send.swift */,
+				9148908F2C44AF2A00B3342D /* Receive.swift */,
+				9189FF632C2BD67800B3A94F /* Network.swift */,
+				9189FF652C2BD67800B3A94F /* Transfer.swift */,
+				91DB343C2F34433A00E73CFD /* Discovery.swift */,
+				91DB343E2F34433A00E73CFD /* Noise.swift */,
+				9179246E2C169DE300978A4D /* Assets.xcassets */,
+				917924702C169DE300978A4D /* Main.storyboard */,
+				917924732C169DE300978A4D /* FlyingCarpet.entitlements */,
+				919603A72C7CFE6A00198FFE /* SsidBox.swift */,
+			);
+			path = FlyingCarpet;
+			sourceTree = "<group>";
+		};
+		9179247B2C169DE300978A4D /* FlyingCarpetTests */ = {
+			isa = PBXGroup;
+			children = (
+				9179247C2C169DE300978A4D /* FlyingCarpetTests.swift */,
+			);
+			path = FlyingCarpetTests;
+			sourceTree = "<group>";
+		};
+		917924852C169DE300978A4D /* FlyingCarpetUITests */ = {
+			isa = PBXGroup;
+			children = (
+				917924862C169DE300978A4D /* FlyingCarpetUITests.swift */,
+				917924882C169DE300978A4D /* FlyingCarpetUITestsLaunchTests.swift */,
+			);
+			path = FlyingCarpetUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		917924662C169DE100978A4D /* FlyingCarpet */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9179248C2C169DE300978A4D /* Build configuration list for PBXNativeTarget "FlyingCarpet" */;
+			buildPhases = (
+				917924632C169DE100978A4D /* Sources */,
+				917924642C169DE100978A4D /* Frameworks */,
+				917924652C169DE100978A4D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FlyingCarpet;
+			productName = FlyingCarpet;
+			productReference = 917924672C169DE100978A4D /* FlyingCarpet.app */;
+			productType = "com.apple.product-type.application";
+		};
+		917924772C169DE300978A4D /* FlyingCarpetTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9179248F2C169DE300978A4D /* Build configuration list for PBXNativeTarget "FlyingCarpetTests" */;
+			buildPhases = (
+				917924742C169DE300978A4D /* Sources */,
+				917924752C169DE300978A4D /* Frameworks */,
+				917924762C169DE300978A4D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				9179247A2C169DE300978A4D /* PBXTargetDependency */,
+			);
+			name = FlyingCarpetTests;
+			productName = FlyingCarpetTests;
+			productReference = 917924782C169DE300978A4D /* FlyingCarpetTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		917924812C169DE300978A4D /* FlyingCarpetUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 917924922C169DE300978A4D /* Build configuration list for PBXNativeTarget "FlyingCarpetUITests" */;
+			buildPhases = (
+				9179247E2C169DE300978A4D /* Sources */,
+				9179247F2C169DE300978A4D /* Frameworks */,
+				917924802C169DE300978A4D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				917924842C169DE300978A4D /* PBXTargetDependency */,
+			);
+			name = FlyingCarpetUITests;
+			productName = FlyingCarpetUITests;
+			productReference = 917924822C169DE300978A4D /* FlyingCarpetUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		9179245F2C169DE100978A4D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1540;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					917924662C169DE100978A4D = {
+						CreatedOnToolsVersion = 15.4;
+					};
+					917924772C169DE300978A4D = {
+						CreatedOnToolsVersion = 15.4;
+						TestTargetID = 917924662C169DE100978A4D;
+					};
+					917924812C169DE300978A4D = {
+						CreatedOnToolsVersion = 15.4;
+						TestTargetID = 917924662C169DE100978A4D;
+					};
+				};
+			};
+			buildConfigurationList = 917924622C169DE100978A4D /* Build configuration list for PBXProject "FlyingCarpet" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 9179245E2C169DE100978A4D;
+			productRefGroup = 917924682C169DE100978A4D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				917924662C169DE100978A4D /* FlyingCarpet */,
+				917924772C169DE300978A4D /* FlyingCarpetTests */,
+				917924812C169DE300978A4D /* FlyingCarpetUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		917924652C169DE100978A4D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9179246F2C169DE300978A4D /* Assets.xcassets in Resources */,
+				917924722C169DE300978A4D /* Base in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		917924762C169DE300978A4D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		917924802C169DE300978A4D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		917924632C169DE100978A4D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				91DB343D2F34433A00E73CFD /* Discovery.swift in Sources */,
+				91DB343F2F34433A00E73CFD /* Noise.swift in Sources */,
+				914890902C44AF2A00B3342D /* Receive.swift in Sources */,
+				9179246D2C169DE100978A4D /* ViewController.swift in Sources */,
+				9189FF6B2C2BD67800B3A94F /* Bluetooth.swift in Sources */,
+				9189FF682C2BD67800B3A94F /* Network.swift in Sources */,
+				919603A82C7CFE6A00198FFE /* SsidBox.swift in Sources */,
+				9179246B2C169DE100978A4D /* AppDelegate.swift in Sources */,
+				9189FF6C2C2BD67800B3A94F /* Send.swift in Sources */,
+				9189FF6A2C2BD67800B3A94F /* Transfer.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		917924742C169DE300978A4D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9179247D2C169DE300978A4D /* FlyingCarpetTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9179247E2C169DE300978A4D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				917924892C169DE300978A4D /* FlyingCarpetUITestsLaunchTests.swift in Sources */,
+				917924872C169DE300978A4D /* FlyingCarpetUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		9179247A2C169DE300978A4D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 917924662C169DE100978A4D /* FlyingCarpet */;
+			targetProxy = 917924792C169DE300978A4D /* PBXContainerItemProxy */;
+		};
+		917924842C169DE300978A4D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 917924662C169DE100978A4D /* FlyingCarpet */;
+			targetProxy = 917924832C169DE300978A4D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		917924702C169DE300978A4D /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				917924712C169DE300978A4D /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		9179248A2C169DE300978A4D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		9179248B2C169DE300978A4D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		9179248D2C169DE300978A4D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = FlyingCarpet/FlyingCarpet.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = YES;
+				ENABLE_RESOURCE_ACCESS_LOCATION = YES;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FlyingCarpet/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Flying Carpet";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Flying Carpet needs Bluetooth to exchange WiFi information with the other device";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Theron Spiegl. All rights reserved.";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MARKETING_VERSION = 10.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.spiegl.FlyingCarpet;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		9179248E2C169DE300978A4D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = FlyingCarpet/FlyingCarpet.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = YES;
+				ENABLE_RESOURCE_ACCESS_LOCATION = YES;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FlyingCarpet/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Flying Carpet";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Flying Carpet needs Bluetooth to exchange WiFi information with the other device";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Theron Spiegl. All rights reserved.";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MARKETING_VERSION = 10.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.spiegl.FlyingCarpet;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		917924902C169DE300978A4D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.spiegl.FlyingCarpetTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FlyingCarpet.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FlyingCarpet";
+			};
+			name = Debug;
+		};
+		917924912C169DE300978A4D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.spiegl.FlyingCarpetTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FlyingCarpet.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FlyingCarpet";
+			};
+			name = Release;
+		};
+		917924932C169DE300978A4D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.spiegl.FlyingCarpetUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = FlyingCarpet;
+			};
+			name = Debug;
+		};
+		917924942C169DE300978A4D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.spiegl.FlyingCarpetUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = FlyingCarpet;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		917924622C169DE100978A4D /* Build configuration list for PBXProject "FlyingCarpet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9179248A2C169DE300978A4D /* Debug */,
+				9179248B2C169DE300978A4D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9179248C2C169DE300978A4D /* Build configuration list for PBXNativeTarget "FlyingCarpet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9179248D2C169DE300978A4D /* Debug */,
+				9179248E2C169DE300978A4D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9179248F2C169DE300978A4D /* Build configuration list for PBXNativeTarget "FlyingCarpetTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				917924902C169DE300978A4D /* Debug */,
+				917924912C169DE300978A4D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		917924922C169DE300978A4D /* Build configuration list for PBXNativeTarget "FlyingCarpetUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				917924932C169DE300978A4D /* Debug */,
+				917924942C169DE300978A4D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 9179245F2C169DE100978A4D /* Project object */;
+}

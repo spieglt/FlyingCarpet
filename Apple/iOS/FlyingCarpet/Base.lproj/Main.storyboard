@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="24128" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="BYZ-38-t0r">
+    <device id="retina4_7" orientation="portrait" appearance="light"/>
+    <dependencies>
+        <deployment identifier="iOS"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="24063"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="System colors in document resources" minToolsVersion="11.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <!--View Controller-->
+        <scene sceneID="tne-QT-ifu">
+            <objects>
+                <viewController id="BYZ-38-t0r" customClass="ViewController" customModule="FlyingCarpet" customModuleProvider="target" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="8bC-Xf-vdC">
+                        <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Flying Carpet" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="Kfz-ou-Pll">
+                                <rect key="frame" x="16" y="20" width="239" height="74"/>
+                                <constraints>
+                                    <constraint firstAttribute="height" constant="74" id="Pkk-8p-xsv"/>
+                                </constraints>
+                                <fontDescription key="fontDescription" type="boldSystem" pointSize="33"/>
+                                <nil key="textColor"/>
+                                <nil key="highlightedColor"/>
+                            </label>
+                            <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="leading" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="HuX-1I-Kpj">
+                                <rect key="frame" x="171" y="79" width="84" height="33"/>
+                                <state key="normal" title="Button"/>
+                                <buttonConfiguration key="configuration" style="plain" title="About">
+                                    <fontDescription key="titleFontDescription" type="system" pointSize="12"/>
+                                </buttonConfiguration>
+                                <connections>
+                                    <segue destination="fy7-34-RAC" kind="presentation" modalTransitionStyle="flipHorizontal" id="cWY-y0-i9F"/>
+                                </connections>
+                            </button>
+                            <progressView opaque="NO" contentMode="scaleToFill" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="kUx-EE-l1h">
+                                <rect key="frame" x="16" y="641" width="343" height="4"/>
+                            </progressView>
+                            <segmentedControl opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="top" segmentControlStyle="plain" selectedSegmentIndex="0" translatesAutoresizingMaskIntoConstraints="NO" id="201-2D-N9K">
+                                <rect key="frame" x="16" y="111" width="343" height="32"/>
+                                <segments>
+                                    <segment title="Send"/>
+                                    <segment title="Receive"/>
+                                </segments>
+                                <connections>
+                                    <action selector="modeToggled:" destination="BYZ-38-t0r" eventType="valueChanged" id="V5a-Rd-2DZ"/>
+                                </connections>
+                            </segmentedControl>
+                            <button opaque="NO" contentMode="scaleAspectFit" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="pIc-nN-0g8">
+                                <rect key="frame" x="132" y="187" width="111" height="35"/>
+                                <state key="normal" title="Button"/>
+                                <buttonConfiguration key="configuration" style="filled" title="Select Files"/>
+                                <connections>
+                                    <action selector="startTransferWithSender:" destination="BYZ-38-t0r" eventType="touchUpInside" id="jDo-Lh-n1p"/>
+                                </connections>
+                            </button>
+                            <textView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" editable="NO" translatesAutoresizingMaskIntoConstraints="NO" id="rc2-HQ-ifM" userLabel="outputField">
+                                <rect key="frame" x="16" y="230" width="343" height="404"/>
+                                <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                                <color key="textColor" systemColor="labelColor"/>
+                                <fontDescription key="fontDescription" name=".AppleSystemUIFont" family=".AppleSystemUIFont" pointSize="14"/>
+                                <textInputTraits key="textInputTraits" autocapitalizationType="sentences"/>
+                                <dataDetectorType key="dataDetectorTypes" link="YES"/>
+                            </textView>
+                            <button hidden="YES" opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="hHE-Ap-XGD">
+                                <rect key="frame" x="149" y="187" width="77" height="34.5"/>
+                                <state key="normal" title="Button"/>
+                                <buttonConfiguration key="configuration" style="filled" title="Cancel">
+                                    <color key="baseBackgroundColor" systemColor="systemRedColor"/>
+                                </buttonConfiguration>
+                                <connections>
+                                    <action selector="cancelTransfer:" destination="BYZ-38-t0r" eventType="touchUpInside" id="4cU-WO-EOE"/>
+                                </connections>
+                            </button>
+                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Version 10" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="eWe-B0-LHy" userLabel="Version 10">
+                                <rect key="frame" x="16" y="88" width="59" height="15"/>
+                                <fontDescription key="fontDescription" type="system" pointSize="12"/>
+                                <nil key="textColor"/>
+                                <nil key="highlightedColor"/>
+                            </label>
+                            <switch opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="750" verticalHuggingPriority="750" contentHorizontalAlignment="center" contentVerticalAlignment="center" on="YES" translatesAutoresizingMaskIntoConstraints="NO" id="xRw-OP-ZFX">
+                                <rect key="frame" x="21" y="193" width="63" height="28"/>
+                                <connections>
+                                    <action selector="bluetoothSwitchFlipped:" destination="BYZ-38-t0r" eventType="valueChanged" id="LYK-1m-hck"/>
+                                </connections>
+                            </switch>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="bluetooth" translatesAutoresizingMaskIntoConstraints="NO" id="qwj-Jl-l0D">
+                                <rect key="frame" x="88" y="185" width="36" height="36"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" constant="36" id="D01-KX-YFD"/>
+                                </constraints>
+                            </imageView>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="Image" translatesAutoresizingMaskIntoConstraints="NO" id="5ac-rd-49f">
+                                <rect key="frame" x="285" y="20" width="74" height="74"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" constant="74" id="iCb-QZ-VYJ"/>
+                                </constraints>
+                            </imageView>
+                            <segmentedControl opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="top" segmentControlStyle="plain" selectedSegmentIndex="0" translatesAutoresizingMaskIntoConstraints="NO" id="Oxj-xD-G4T">
+                                <rect key="frame" x="16" y="150" width="343" height="32"/>
+                                <segments>
+                                    <segment title="Hotspot"/>
+                                    <segment title="Shared Network"/>
+                                </segments>
+                                <connections>
+                                    <action selector="connectionModeSwitched:" destination="BYZ-38-t0r" eventType="valueChanged" id="ZIt-z6-VAW"/>
+                                </connections>
+                            </segmentedControl>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
+                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <constraints>
+                            <constraint firstItem="5ac-rd-49f" firstAttribute="trailing" secondItem="201-2D-N9K" secondAttribute="trailing" id="2aj-Gm-JRJ"/>
+                            <constraint firstItem="xRw-OP-ZFX" firstAttribute="leading" secondItem="6Tk-OE-BBY" secondAttribute="leading" constant="21" id="3NM-5F-HJX"/>
+                            <constraint firstItem="rc2-HQ-ifM" firstAttribute="leading" secondItem="kUx-EE-l1h" secondAttribute="leading" id="3dy-wE-jFO"/>
+                            <constraint firstItem="rc2-HQ-ifM" firstAttribute="top" secondItem="xRw-OP-ZFX" secondAttribute="bottom" constant="9" id="5dI-ld-wQG"/>
+                            <constraint firstItem="HuX-1I-Kpj" firstAttribute="baseline" secondItem="eWe-B0-LHy" secondAttribute="firstBaseline" id="6Gh-dp-ixm"/>
+                            <constraint firstItem="rc2-HQ-ifM" firstAttribute="top" secondItem="pIc-nN-0g8" secondAttribute="bottom" constant="8" id="6qz-wP-sVC"/>
+                            <constraint firstItem="Oxj-xD-G4T" firstAttribute="centerX" secondItem="hHE-Ap-XGD" secondAttribute="centerX" id="6uK-z4-JPu"/>
+                            <constraint firstItem="HuX-1I-Kpj" firstAttribute="top" secondItem="6Tk-OE-BBY" secondAttribute="top" constant="59" id="8cj-n2-OIi"/>
+                            <constraint firstItem="201-2D-N9K" firstAttribute="leading" secondItem="Oxj-xD-G4T" secondAttribute="leading" id="8lS-Sz-o1k"/>
+                            <constraint firstItem="Kfz-ou-Pll" firstAttribute="trailing" secondItem="HuX-1I-Kpj" secondAttribute="trailing" id="F80-vI-iy2"/>
+                            <constraint firstItem="rc2-HQ-ifM" firstAttribute="trailing" secondItem="kUx-EE-l1h" secondAttribute="trailing" id="FNS-3e-n2v"/>
+                            <constraint firstItem="eWe-B0-LHy" firstAttribute="leading" secondItem="201-2D-N9K" secondAttribute="leading" id="Ggc-Mx-yXr"/>
+                            <constraint firstItem="5ac-rd-49f" firstAttribute="trailing" secondItem="8bC-Xf-vdC" secondAttribute="trailingMargin" id="I35-ta-snQ"/>
+                            <constraint firstItem="Kfz-ou-Pll" firstAttribute="top" secondItem="6Tk-OE-BBY" secondAttribute="top" id="I4h-8Z-izd"/>
+                            <constraint firstItem="pIc-nN-0g8" firstAttribute="baseline" secondItem="hHE-Ap-XGD" secondAttribute="firstBaseline" id="LAp-PB-ls1"/>
+                            <constraint firstItem="qwj-Jl-l0D" firstAttribute="top" secondItem="Oxj-xD-G4T" secondAttribute="bottom" constant="4" id="Neq-vn-0Xo"/>
+                            <constraint firstItem="Oxj-xD-G4T" firstAttribute="top" secondItem="201-2D-N9K" secondAttribute="bottom" constant="8" id="P8R-cj-4dm"/>
+                            <constraint firstItem="Oxj-xD-G4T" firstAttribute="trailing" secondItem="rc2-HQ-ifM" secondAttribute="trailing" id="QND-Rx-TEr"/>
+                            <constraint firstItem="6Tk-OE-BBY" firstAttribute="bottom" secondItem="kUx-EE-l1h" secondAttribute="bottom" constant="22" id="QiQ-nq-lRB"/>
+                            <constraint firstItem="Kfz-ou-Pll" firstAttribute="bottom" secondItem="5ac-rd-49f" secondAttribute="bottom" id="Wdy-lf-7zQ"/>
+                            <constraint firstItem="pIc-nN-0g8" firstAttribute="centerX" secondItem="hHE-Ap-XGD" secondAttribute="centerX" id="YcC-2w-1Rb"/>
+                            <constraint firstItem="eWe-B0-LHy" firstAttribute="centerY" secondItem="HuX-1I-Kpj" secondAttribute="centerY" id="Z0h-C5-sz3"/>
+                            <constraint firstItem="Kfz-ou-Pll" firstAttribute="top" secondItem="5ac-rd-49f" secondAttribute="top" id="aBZ-LF-a3P"/>
+                            <constraint firstItem="201-2D-N9K" firstAttribute="top" secondItem="Kfz-ou-Pll" secondAttribute="bottom" constant="17" id="bPB-Vp-8ql"/>
+                            <constraint firstItem="eWe-B0-LHy" firstAttribute="firstBaseline" secondItem="HuX-1I-Kpj" secondAttribute="firstBaseline" id="bqa-x3-0P5"/>
+                            <constraint firstItem="5ac-rd-49f" firstAttribute="leading" secondItem="Kfz-ou-Pll" secondAttribute="trailing" constant="30" id="cSr-Pp-XPk"/>
+                            <constraint firstItem="Kfz-ou-Pll" firstAttribute="leading" secondItem="8bC-Xf-vdC" secondAttribute="leadingMargin" id="cgd-xR-Rty"/>
+                            <constraint firstItem="Oxj-xD-G4T" firstAttribute="leading" secondItem="rc2-HQ-ifM" secondAttribute="leading" id="kL6-0U-hYX"/>
+                            <constraint firstItem="201-2D-N9K" firstAttribute="trailing" secondItem="Oxj-xD-G4T" secondAttribute="trailing" id="lDT-vl-awf"/>
+                            <constraint firstItem="hHE-Ap-XGD" firstAttribute="top" secondItem="Oxj-xD-G4T" secondAttribute="bottom" constant="6" id="o0g-iX-vIg"/>
+                            <constraint firstItem="kUx-EE-l1h" firstAttribute="top" secondItem="rc2-HQ-ifM" secondAttribute="bottom" constant="7" id="pQE-Mf-XFi"/>
+                            <constraint firstItem="xRw-OP-ZFX" firstAttribute="bottom" secondItem="qwj-Jl-l0D" secondAttribute="bottom" id="qqd-pl-axX"/>
+                            <constraint firstItem="Kfz-ou-Pll" firstAttribute="leading" secondItem="eWe-B0-LHy" secondAttribute="leading" id="tAV-VD-o00"/>
+                            <constraint firstItem="qwj-Jl-l0D" firstAttribute="leading" secondItem="xRw-OP-ZFX" secondAttribute="trailing" constant="6" id="tNU-Ma-6xq"/>
+                            <constraint firstItem="HuX-1I-Kpj" firstAttribute="leading" secondItem="eWe-B0-LHy" secondAttribute="trailing" constant="96" id="u47-MM-aaQ"/>
+                        </constraints>
+                    </view>
+                    <connections>
+                        <outlet property="CancelButton" destination="hHE-Ap-XGD" id="3uk-Yz-Ey1"/>
+                        <outlet property="ModeSwitch" destination="201-2D-N9K" id="sGo-Yp-Q1y"/>
+                        <outlet property="ProgressBar" destination="kUx-EE-l1h" id="eGx-rU-gCZ"/>
+                        <outlet property="StartTransferButton" destination="pIc-nN-0g8" id="tl4-eO-xZr"/>
+                        <outlet property="bluetoothIcon" destination="qwj-Jl-l0D" id="Pon-iL-QHz"/>
+                        <outlet property="bluetoothSwitch" destination="xRw-OP-ZFX" id="vHN-FV-Ub8"/>
+                        <outlet property="cancelButton" destination="hHE-Ap-XGD" id="1rv-gO-byx"/>
+                        <outlet property="connectionModeSwitch" destination="Oxj-xD-G4T" id="NsF-JJ-IP8"/>
+                        <outlet property="logoImageView" destination="5ac-rd-49f" id="Lg0-Qr-Cd1"/>
+                        <outlet property="modeSwitch" destination="201-2D-N9K" id="Q42-lq-usv"/>
+                        <outlet property="outputField" destination="rc2-HQ-ifM" id="W50-kq-Uf2"/>
+                        <outlet property="progressBar" destination="kUx-EE-l1h" id="3ZA-vf-WyM"/>
+                        <outlet property="startTransferButton" destination="pIc-nN-0g8" id="Ukf-GV-iKe"/>
+                        <segue destination="PEv-Jx-E2O" kind="presentation" identifier="goToQRScanner" id="1zc-X6-15l"/>
+                    </connections>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="dkx-z0-nzr" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="66.400000000000006" y="89.505247376311857"/>
+        </scene>
+        <!--QRScanner-->
+        <scene sceneID="PSN-Kx-kEz">
+            <objects>
+                <viewControllerPlaceholder storyboardName="QRScanner" id="PEv-Jx-E2O" sceneMemberID="viewController">
+                    <navigationItem key="navigationItem" id="EpB-LJ-fPe"/>
+                </viewControllerPlaceholder>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="H04-ZF-6Rw" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="44" y="514"/>
+        </scene>
+        <!--About View Controller-->
+        <scene sceneID="J6M-BH-sy9">
+            <objects>
+                <viewController storyboardIdentifier="aboutViewController" id="fy7-34-RAC" customClass="AboutViewController" customModule="FlyingCarpet" customModuleProvider="target" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="jVc-VP-Lba">
+                        <rect key="frame" x="0.0" y="0.0" width="375" height="657"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="About Flying Carpet iOS" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="izA-Uy-Vn7">
+                                <rect key="frame" x="16" y="20" width="343" height="36"/>
+                                <constraints>
+                                    <constraint firstAttribute="height" constant="36" id="N4B-Li-FSo"/>
+                                </constraints>
+                                <fontDescription key="fontDescription" type="system" pointSize="20"/>
+                                <nil key="textColor"/>
+                                <nil key="highlightedColor"/>
+                            </label>
+                            <textView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" editable="NO" translatesAutoresizingMaskIntoConstraints="NO" id="H7j-eN-h1D">
+                                <rect key="frame" x="16" y="64" width="343" height="573"/>
+                                <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                                <string key="text">https://flyingcarpet.spiegl.dev
+Version: 10.0.0
+theron@spiegl.dev
+Copyright (c) 2026, Theron Spiegl
+All rights reserved.
+
+Flying Carpet transfers files between two Android, iOS, Linux, macOS, and Windows devices: either over ad hoc WiFi with one device acting as a hotspot, or over a WiFi or wired network the devices already share. In hotspot mode, no access point or internet connection is required, just two devices with WiFi cards in close range.
+
+Apple does not allow hotspots to be started programmatically, so Apple-to-Apple transfers (between macOS and iOS devices) require Shared Network mode. The shared network can itself be a Personal Hotspot made manually on one device and joined from the other before starting the transfer.
+
+INSTRUCTIONS
+
+Select Sending on one device and Receiving on the other, and select the same connection mode (Hotspot or Shared Network) on both.
+
+Hotspot mode: Turn Bluetooth on or off on both devices. If one side fails to initialize Bluetooth or has it turned off, the other side must disable the "Use Bluetooth" switch in Flying Carpet.
+
+Shared network mode: Join both devices to the same WiFi or wired network first. Bluetooth is not used in this mode.
+
+Press the "Select Files"/"Select Folder" button on each device. On the sending device, select the files, photos/videos, or folder to send. On the receiving device, select the folder in which to receive files. A folder you send is recreated inside the destination folder on the receiving device, with its contents inside it.
+
+In hotspot mode, if using Bluetooth, the WiFi connection will be configured automatically. Otherwise you will need to scan a QR code. If prompted to join a WiFi network, choose Allow.
+
+In shared network mode, the receiving device displays a password: enter it on the sending device when prompted, and the devices will find each other on the network automatically. If asked to allow Flying Carpet to find devices on the local network, say Allow.
+
+TROUBLESHOOTING
+
+iOS and Android devices must be kept awake with Flying Carpet in the foreground for the duration of the transfer, or the WiFi connection may drop.
+
+If using Bluetooth fails, try manually unpairing the devices from one another and starting a new transfer.
+
+In shared network mode, if the devices can't find each other, make sure both are on the same network and that the password was entered correctly. Some public or guest networks don't allow devices on them to communicate with each other.
+
+Licensed under the GPL3: https://www.gnu.org/licenses/gpl-3.0.html#license-text.
+
+Thanks for using it and please provide feedback on the App Store or GitHub!</string>
+                                <color key="textColor" systemColor="labelColor"/>
+                                <fontDescription key="fontDescription" name=".AppleSystemUIFont" family=".AppleSystemUIFont" pointSize="14"/>
+                                <textInputTraits key="textInputTraits" autocapitalizationType="sentences"/>
+                                <dataDetectorType key="dataDetectorTypes" link="YES"/>
+                            </textView>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="zgW-w3-6ar"/>
+                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <constraints>
+                            <constraint firstItem="izA-Uy-Vn7" firstAttribute="trailing" secondItem="jVc-VP-Lba" secondAttribute="trailingMargin" id="9fV-Xd-I8C"/>
+                            <constraint firstItem="izA-Uy-Vn7" firstAttribute="leading" secondItem="jVc-VP-Lba" secondAttribute="leadingMargin" id="AJH-eh-rcq"/>
+                            <constraint firstItem="H7j-eN-h1D" firstAttribute="top" secondItem="izA-Uy-Vn7" secondAttribute="bottom" constant="8" id="Bte-hc-Otn"/>
+                            <constraint firstItem="izA-Uy-Vn7" firstAttribute="leading" secondItem="H7j-eN-h1D" secondAttribute="leading" id="RRh-iZ-ZCp"/>
+                            <constraint firstItem="izA-Uy-Vn7" firstAttribute="top" secondItem="zgW-w3-6ar" secondAttribute="top" constant="20" id="SQD-EX-LFE"/>
+                            <constraint firstItem="zgW-w3-6ar" firstAttribute="bottom" secondItem="H7j-eN-h1D" secondAttribute="bottom" constant="20" id="jmn-O7-TOE"/>
+                            <constraint firstItem="izA-Uy-Vn7" firstAttribute="trailing" secondItem="H7j-eN-h1D" secondAttribute="trailing" id="mME-2u-LUu"/>
+                        </constraints>
+                    </view>
+                    <navigationItem key="navigationItem" id="PeG-j1-qN9"/>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="Rx3-ca-jEW" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="1005.6" y="89.505247376311857"/>
+        </scene>
+    </scenes>
+    <resources>
+        <image name="Image" width="2048" height="2048"/>
+        <image name="bluetooth" width="2000" height="2000"/>
+        <systemColor name="labelColor">
+            <color white="0.0" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+        </systemColor>
+        <systemColor name="systemBackgroundColor">
+            <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+        </systemColor>
+        <systemColor name="systemRedColor">
+            <color red="1" green="0.23137254900000001" blue="0.18823529410000001" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+        </systemColor>
+    </resources>
+</document>

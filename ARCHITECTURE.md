@@ -109,7 +109,7 @@ Beyond the hosting decision, knowing the peer OS in hotspot-without-BT also driv
 
 ### Could it be removed?
 
-Not on host-capable platforms (Windows/Linux/Android) in hotspot-without-BT: the hosting decision genuinely needs the peer OS, and there's no earlier channel to negotiate it. The control *is* effectively the manual stand-in for the BLE OS exchange. The realistic ways to shrink it are to lean harder on the two automatic paths (Bluetooth or shared network) rather than to drop the manual fallback. On Apple platforms the picture is different — see `FlyingCarpetApple`'s `CLAUDE.md`, since Apple never hosts and so never needs the peer OS to decide hosting at all.
+Not on host-capable platforms (Windows/Linux/Android) in hotspot-without-BT: the hosting decision genuinely needs the peer OS, and there's no earlier channel to negotiate it. The control *is* effectively the manual stand-in for the BLE OS exchange. The realistic ways to shrink it are to lean harder on the two automatic paths (Bluetooth or shared network) rather than to drop the manual fallback. On Apple platforms the picture is different — see `Apple/CLAUDE.md`, since Apple never hosts and so never needs the peer OS to decide hosting at all.
 
 ---
 

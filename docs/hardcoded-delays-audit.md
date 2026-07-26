@@ -2,7 +2,7 @@
 
 Date: 2026-07-25. Scope: every `sleep`, `delay`, `Task.sleep`, `Thread.sleep`,
 `asyncAfter`, `postDelayed`, and bounded `timeout` in `FlyingCarpet` (Rust, Kotlin, JS) and
-`FlyingCarpetApple` (Swift). 45 sites found, plus 4 commented-out ones.
+`Apple/` (Swift). 45 sites found, plus 4 commented-out ones.
 
 ## Verdict
 

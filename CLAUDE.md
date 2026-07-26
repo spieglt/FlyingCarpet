@@ -2,26 +2,29 @@
 
 Encrypted, no-internet file transfer between **Android, iOS, Linux, macOS, and Windows**, over either an ad-hoc Wi-Fi hotspot (one device hosts) or a **shared network** both devices are already on. Two devices, Wi-Fi (or ethernet), optionally Bluetooth. Port **3290** throughout.
 
-## Two repos, one wire protocol (critical)
+## Three implementations, one wire protocol (critical)
 
-Flying Carpet is split across two repositories that **must stay wire-compatible** — a change to the on-the-wire protocol in one is a breaking change unless mirrored in the other:
+All five platforms live in this repo, in **three independent implementations of the same wire protocol**. A change to the on-the-wire format in one is a breaking change unless mirrored in the other two:
 
-- **This repo** (`~/Desktop/FlyingCarpet`) — Rust core (`core/`), Tauri desktop app (`Flying Carpet/`), Android app (`Android/FlyingCarpet/`, Kotlin).
-- **`~/Desktop/FlyingCarpetApple`** — iOS/macOS apps (Swift); shared protocol code in `shared/`. Not public. Build only on a Mac.
+- **Rust** (`core/`) — the **reference implementation** the other two are tested against. Ships the Tauri desktop app (`Flying Carpet/`) for Windows + Linux.
+- **Kotlin** (`Android/FlyingCarpet/`) — Android.
+- **Swift** (`Apple/`) — iOS + macOS. A full port, **not** a binding over the Rust core. Build only on a Mac; see `Apple/CLAUDE.md`.
 
-When touching the protocol (discovery bytes, version/mode preamble, Noise handshake, framing), update **all three implementations** (Rust, Kotlin, Swift) and their cross-platform known-answer tests together. The Rust core is the reference the other two are tested against.
+When touching the protocol (discovery bytes, version/mode preamble, Noise handshake, framing), update **all three implementations** and their cross-platform known-answer tests together.
 
 ### Where code lives vs. where binaries ship (don't conflate these)
 
-- **Code in this repo builds for Windows and Linux only.** `core/src/` has just `windows/` and `linux/`; `lib.rs` cfg-selects `network`/`bluetooth` on those two `target_os` values, and there is no `target_os = "macos"` anywhere in `core/`. A Tauri/`wry`/`webkit2gtk` change here therefore affects **two** desktop platforms, not three.
-- **But macOS and iOS binaries are released from this repo's Releases page**, even though their source is in `FlyingCarpetApple`. So `README.md` documenting a macOS `.dmg` download is **correct, not stale** — don't "fix" it, and don't infer from it that the Rust code targets macOS.
+- **The Rust code builds for Windows and Linux only.** `core/src/` has just `windows/` and `linux/`; `lib.rs` cfg-selects `network`/`bluetooth` on those two `target_os` values, and there is no `target_os = "macos"` anywhere in `core/`. A Tauri/`wry`/`webkit2gtk` change therefore affects **two** desktop platforms, not three — macOS is served by the Swift app in `Apple/`, which shares no code with `core/`.
+- **macOS and iOS binaries are released from this repo's Releases page** (and the App Store for iOS). `README.md` documenting a macOS `.dmg` download is **correct, not stale** — don't "fix" it, and don't infer from it that the Rust code targets macOS.
 - `tauri.conf.json` still lists `icons/icon.icns` — genuinely stale, intentionally left alone. Not evidence of macOS support either.
+- The Swift code was developed in a separate `FlyingCarpetApple` repo and imported without history at the v10 release, so `git log` on `Apple/` starts at the import commit. Commit hashes cited for Swift changes in the older docs (e.g. `4c59af6` in `docs/bluetooth-field-guide.md`, `4a6b889`/`b7e9b59` in `ARCHITECTURE.md`) belong to that repo and won't resolve here.
 
 ## Layout
 
 - `core/` — Rust core crate `flying-carpet-core` (v10). Platform-split: `core/src/{windows,linux}/` for network/bluetooth/peripheral/central; the `bluetooth` module is `cfg`-selected per-OS in `lib.rs`. Key files: `lib.rs` (`start_transfer` entry point), `discovery.rs`, `noise.rs`, `sending.rs`/`receiving.rs`.
 - `Flying Carpet/` — Tauri desktop app. Rust backend in `Flying Carpet/src-tauri/` (workspace member), JS/HTML frontend in `Flying Carpet/src/` (`main.js`, `index.html`). **Note the space in the directory name** — quote it in shell commands.
 - `Android/FlyingCarpet/` — Android app (Kotlin). Noise/discovery ports in `app/src/main/java/dev/spiegl/flyingcarpet/`.
+- `Apple/` — iOS + macOS apps (Swift). Protocol code shared by both in `Apple/shared/`, per-platform UI in `Apple/iOS/` and `Apple/macOS/`. **Read `Apple/CLAUDE.md` before changing anything under it** — the Apple platforms have constraints the others don't (no programmatic hotspot, so Apple-to-Apple requires shared network mode; BLE can't pair iPhone↔Mac).
 - `docs/` — design docs (see below). `ARCHITECTURE.md` — connection role model.
 
 ## Build & test
@@ -31,6 +34,7 @@ Rust is a Cargo **workspace** (`core` + `Flying Carpet/src-tauri`):
 - `cargo test` — run all Rust tests (includes the Noise/discovery known-answer vectors in `core/src/noise.rs` and `core/src/discovery.rs`). `cargo build` to compile.
 - Desktop app: `cargo tauri dev` (run) / `cargo tauri build` (release). Needs the Tauri CLI and the Linux deps listed in `README.md`.
 - Android: from `Android/FlyingCarpet/`, `./gradlew assembleDebug` / `./gradlew test`. **Set `JAVA_HOME` to the Android Studio JBR** (the bundled JDK) or Gradle fails.
+- Apple: **macOS only**, and outside the Cargo workspace — `cargo build` never touches it. From `Apple/`, `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project <iOS|macOS>/FlyingCarpet.xcodeproj -scheme "FlyingCarpet" build`. `DEVELOPMENT_TEAM` is blank in both projects, so signing fails until you set your team in Xcode or pass `DEVELOPMENT_TEAM=YOURTEAMID`. Details in `Apple/CLAUDE.md`.
 
 ## Architecture & design docs — read before changing these areas
 
@@ -41,9 +45,9 @@ Rust is a Cargo **workspace** (`core` + `Flying Carpet/src-tauri`):
 ## Load-bearing invariants (don't "simplify" these)
 
 - **v10 = Noise.** Every transfer (both modes) runs a `Noise_NNpsk0_25519_ChaChaPoly_SHA256` handshake; the PSK is `PBKDF2-HMAC-SHA256(password, salt="Flying Carpet v10 shared network PSK", 600_000)`. Noise is the **sole** cipher — the old inner per-chunk AES is gone. v10 is a clean break; v9 peers are rejected. If v10 ships before a later Noise wire change, that change must bump to v11.
-- **Preamble → prologue binding.** Version/mode are negotiated in a plaintext preamble, then every preamble byte is bound into the Noise prologue. Both platforms of any pair must build the prologue identically (`build_prologue`/`buildPrologue`). Cross-platform KATs guard this — keep them in sync (Rust `core/src/noise.rs`, Kotlin `NoiseUnitTest`, Swift `NoiseTests`; discovery vector: `core/src/discovery.rs` `test_cross_platform_vector` == Android `DiscoveryUnitTest.kt`).
+- **Preamble → prologue binding.** Version/mode are negotiated in a plaintext preamble, then every preamble byte is bound into the Noise prologue. Both platforms of any pair must build the prologue identically (`build_prologue`/`buildPrologue`). Cross-platform KATs guard this — keep all three in sync (Rust `core/src/noise.rs`, Kotlin `NoiseUnitTest`, Swift `Apple/macOS/FlyingCarpetTests/FlyingCarpetTests.swift`; discovery vector: `core/src/discovery.rs` `test_cross_platform_vector` == Android `DiscoveryUnitTest.kt` == the Swift discovery test in the same file). Note the Swift KATs run only under `xcodebuild` on a Mac, so `cargo test` and `./gradlew test` passing is **not** evidence the Swift side still agrees.
 - **Passwords: single-use + CSPRNG.** The receiver mints a fresh random password per transfer and displays it; never reuse, never user-chosen, never "remember." The entire "offline crack is worthless" security argument depends on this (see the crypto doc §7). The discovery HMAC key is derived from the stretched PSK, so no fast hash of the password goes on the wire.
-- **Bluetooth is hotspot-only.** Shared network mode exchanges the password manually (display + type/QR); do **not** re-add BLE to shared mode. Apple-to-Apple can't pair iPhone↔Mac over BLE by design, which is exactly the pair that would need it. Rationale is recorded in `ARCHITECTURE.md` ("Bluetooth + Shared Network Mode").
+- **Bluetooth is hotspot-only.** Shared network mode exchanges the password manually (display + type/QR); do **not** re-add BLE to shared mode. Apple-to-Apple can't pair iPhone↔Mac over BLE by design, which is exactly the pair that would need it. Rationale is recorded in `ARCHITECTURE.md` ("Bluetooth + Shared Network Mode"). Every platform greys out its BT switch in shared network mode; on Apple that goes through `bluetoothSwitchShouldBeEnabled()`, since restoring the switch on hardware capability alone re-enabled it after a transfer.
 - **Receiver is the anchor.** In both modes the receiver generates the password and is the TCP server (Noise responder); the sender is the TCP client (Noise initiator).
 
 ## Conventions & gotchas

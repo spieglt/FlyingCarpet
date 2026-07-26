@@ -461,7 +461,7 @@ TODO asked whether enabling it causes problems, and it does if ungated, because
 
 Apple was once written up as fixed when it was not (verified stub at `328dfc8`); the real fix
 is `FlyingCarpetApple` `4c59af6` (2026-07-25): a shared `didModifyServices` in
-`shared/Bluetooth.swift` re-discovers when our service is among the invalidated ones, and both
+`Apple/shared/Bluetooth.swift` re-discovers when our service is among the invalidated ones, and both
 targets' delegate methods now call it (macOS previously did not implement the method at all).
 **Caveat: written on Windows, not yet compiled — verify with an Xcode build on both targets
 before treating this as closed.**
