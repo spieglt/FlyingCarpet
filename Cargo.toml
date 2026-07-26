@@ -11,3 +11,11 @@ members = [
     "core",
     "Flying Carpet/src-tauri",
 ]
+
+# Dependencies get full optimization even in dev builds: snow's ChaCha20-Poly1305 runs
+# ~20x slower at opt-level 0 — slow enough that a dev-build sender bottlenecks a transfer
+# below the network and looks like a wire problem (it cost a full day of misdirected
+# investigation; see FlyingCarpetApple/docs/apple-receive-throughput.md). App code in
+# this workspace stays at opt-level 0 and remains debuggable.
+[profile.dev.package."*"]
+opt-level = 3
