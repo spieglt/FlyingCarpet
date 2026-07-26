@@ -768,12 +768,6 @@ async fn confirm_version<S: AsyncRead + AsyncWrite + Unpin>(
 }
 
 // TODO:
-// [fixed] linux can't receive from windows or android if already paired/connected, service not
-//   found. The "but then it disconnects and next transfer works" note had the cure in it: the
-//   link was inherited from the previous transfer and could be the wrong bearer, while
-//   Device1.Connected -- being bearer-agnostic -- made every guard think it was fine. Both
-//   roles now disconnect when the exchange is done and ensure_le_link() keys off
-//   ServicesResolved. NOT by unpairing: see docs/bluetooth-field-guide.md §3a, laws 4 and 8-9.
 // don't write ssid over bluetooth till hotspot has started, so that peer (especially iOS) doesn't start trying too early.
 // test closing about window with x on linux: panic?
 // https://github.com/hbldh/bleak/issues/367#issuecomment-784375835

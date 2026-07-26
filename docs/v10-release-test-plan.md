@@ -245,7 +245,7 @@ Each row has a specific repro that previously failed — test the repro, not jus
 - [ ] Empty / zero-byte file
 - [ ] Filename with Unicode / spaces / emoji
 - [ ] Peer never starts → no infinite hang; cancellable; clean message
-- [ ] Receiver started long before sender → still connects (no premature timeout)
+- [x] Receiver started long before sender → still connects (no premature timeout)
 - [ ] Sender and receiver both pick the same mode (both Send / both Receive) → clean
       "both sides picked the same mode" error
 - [ ] Two transfers in a row in **shared network** mode on every platform (mirror the

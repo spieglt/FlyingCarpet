@@ -1,10 +1,12 @@
 ## Version 10 adds a Shared Network mode, for when you want to use a preexisting WiFi or wired network rather than create a hotspot.
 
+**Version 10 is a breaking change:** devices running version 10 cannot transfer with version 9 or earlier — you'll get a version-mismatch message instead. Update Flying Carpet on every device you transfer between.
+
 ### Download for Android:
 
 <a href="https://play.google.com/store/apps/details?id=dev.spiegl.flyingcarpet"><img alt="Get it on Google Play" src="screenshots/google-play.png" width="240"/></a>&nbsp;&nbsp;<a href="https://f-droid.org/packages/dev.spiegl.flyingcarpet"><img src="screenshots/f-droid.png" alt="Get it on F-Droid" width="240"></a>
 
-Or if you prefer to sideload, `android_FlyingCarpet_9.0.8.apk` is available on the [releases](https://github.com/spieglt/FlyingCarpet/releases/latest) page.
+Or if you prefer to sideload, the APK is available on the [releases](https://github.com/spieglt/FlyingCarpet/releases/latest) page.
 
 ### Download for iOS:
 
@@ -20,7 +22,7 @@ Send and receive files between Android, iOS, Linux, macOS, and Windows: either o
 
 Don't have a flash drive? Don't have access to a wireless network? Need to move a file larger than 2GB between different filesystems but don't want to set up a network share? Try it out!
 
-[Demo video](https://youtu.be/52Xkrx2BXrg)
+[Demo video](https://youtu.be/52Xkrx2BXrg) (predates version 10 — it shows hotspot mode only)
 
 ## Screenshots:
 
@@ -33,6 +35,10 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 **macOS:** Download the `.dmg` disk image file from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page. Double-click to mount it and drag the `.app` bundle inside to your Applications folder. Or if you use Homebrew, run `brew install flying-carpet`.
 
 **Windows:** Download the `.msi` installer from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page, or `FlyingCarpet.exe` for a standalone version.
+
+**Shared Network mode:** join both devices to the same network (WiFi or wired — a phone on WiFi can transfer with a desktop on ethernet), pick Shared Network mode and a direction on each device, and select what to send. The receiving device generates a one-time password and displays it with a QR code; type it on the sending device or scan it with a phone, and the devices find each other on the network and start the transfer. No Bluetooth is used and you don't need to know the other device's operating system.
+
+**Hotspot mode:** one device creates an ad hoc WiFi hotspot for the other to join. If both devices can use Bluetooth, they exchange the hotspot credentials automatically after you confirm a pairing code; otherwise the hosting device displays the password (and a QR code) to enter on the joining device.
 
 ## Compilation Instructions:
 

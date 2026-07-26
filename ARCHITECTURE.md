@@ -194,7 +194,7 @@ This is consistent with same-platform hotspot mode, where the receiver always ho
 
 Consistent with hotspot mode: the receiver is always the "anchor" role (host in hotspot, server + password generator in shared network).
 
-The password is stretched with PBKDF2-HMAC-SHA256 into the Noise pre-shared key (PSK); the discovery HMAC key is derived from that PSK, and the same PSK authenticates the Noise handshake that encrypts the whole transfer with ChaCha20-Poly1305. There is no separate password-derived AES key — the v10 inner per-chunk AES was removed and Noise is the sole cipher. See `docs/shared-network-crypto.md`.
+The password is stretched with PBKDF2-HMAC-SHA256 into the Noise pre-shared key (PSK); the discovery HMAC key is derived from that PSK, and the same PSK authenticates the Noise handshake that encrypts the whole transfer with ChaCha20-Poly1305. There is no separate password-derived AES key — v10 removed the old inner per-chunk AES and Noise is the sole cipher. See `docs/shared-network-crypto.md`.
 
 ### Bluetooth + Shared Network Mode
 

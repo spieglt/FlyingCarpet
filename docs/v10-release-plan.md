@@ -4,7 +4,7 @@ Companion to `docs/v10-release-test-plan.md` (what to test) and
 `docs/post-v10-maintenance.md` (what's deliberately deferred). This doc holds the **draft
 release notes** and the **ship checklist**.
 
-Branch: `shared-network`, both repos. 44 commits, ~8,400 insertions over `main`.
+Branch: `shared-network`, both repos. 74 commits, ~11,900 insertions over `main`.
 Versions already bumped: Rust core `10.0.0`, Tauri app `10.0.0`, Android `versionName 10.0.0`
 / `versionCode 22`. Apple repo versions still need checking (see checklist).
 
@@ -391,22 +391,35 @@ confirming before closing.
       (`shared/Transfer.swift`), iOS prompt requires 10, macOS uses `minLength: 10` for shared
       network and `8` for hotspot join (correct — an Android host's WPA2 passphrase isn't ours
       to size).
-- [x] **Run the Tier 6 Send Folder rows on hardware** — behavior changed on four of five
-      platforms and only Rust has unit coverage; Kotlin and Swift are verified by hand.
+- [x] **Run the Tier 6 Send Folder rows on hardware** — core rows done 2026-07-24/25
+      (Windows/Linux/Android send; all five receive). The remaining edge rows (iOS and
+      macOS send, flat multi-file, multi-directory drops, duplicate-name, Unicode
+      sub-folder) are still open in the test plan and tracked under "Finish the test
+      plan" below.
 - [x] **Build the Apple repo.** `shared/Transfer.swift` and the iOS storyboard changed and
       have not been compiled here (no Mac).
-- [ ] **Confirm both repos report the same protocol version constant** (wire-compat gate).
-- [ ] Finish `docs/v10-release-test-plan.md` — Tiers 2–6 and the release gate.
-- [ ] Re-run desktop smoke tests after the Tauri 2.9.5 → 2.11.1 / wry 0.53 → 0.55 bump
-      (62-package delta; flagged in `dbdfbb1`).
+- [ ] **One more Mac test run (⌘U on the macOS target).** The Swift discovery-announcement
+      KAT (`DiscoveryTests`, Apple commit `8d73710`) was written on Windows 2026-07-25 and
+      has never been compiled. Tier 0's "Apple unit tests pass" checkmark predates it.
+- [x] ~~Confirm both repos report the same protocol version constant~~ — done; re-verified
+      2026-07-25 in the test plan's Tier 0 (Rust/Kotlin/Swift all write the same 8-byte
+      big-endian `10`).
+- [ ] Finish `docs/v10-release-test-plan.md` — Tier 2 is green; Tiers 3–6 and the release
+      gate remain (Tier 3 lacks only wrong-password-over-hotspot).
+- [x] ~~Re-run desktop smoke tests after the Tauri 2.9.5 → 2.11.1 / wry 0.53 → 0.55 bump~~ —
+      covered: the bump landed 2026-07-23 and the Tier 0 desktop builds plus every Tier 2
+      interop row (Windows and Linux in both roles, both modes) ran on hardware 07-24/25,
+      after it.
 
 ## Versions and metadata
 
-- [ ] Apple repo: bump iOS and macOS `CFBundleShortVersionString` to 10.0 and increment build
-      numbers.
+- [x] ~~Apple repo: bump iOS and macOS `CFBundleShortVersionString` to 10.0~~ — both app
+      targets are at `MARKETING_VERSION = 10.0.0` (verified 2026-07-25 and re-checked).
+      `CURRENT_PROJECT_VERSION = 1` is fine for a new marketing version *unless* a 10.0.0
+      build was already uploaded to App Store Connect — bump it only in that case.
 - [ ] Android: confirm `versionCode 22` is greater than what's live on Play and F-Droid.
-- [ ] Update the README's sideload APK filename — still says
-      `android_FlyingCarpet_9.0.8.apk`.
+- [x] ~~Update the README's sideload APK filename~~ — now version-agnostic ("the APK is
+      available on the releases page"), so it can't go stale again.
 - [ ] Decide whether `tauri.conf.json`'s stale `icons/icon.icns` entry stays (per CLAUDE.md it
       is intentionally left alone — confirm, don't silently "fix").
 
@@ -426,20 +439,28 @@ password-box removal.
 - [ ] App Store: updated screenshots for every required device size (iPhone 6.9"/6.5", iPad
       if listed)
 - [ ] F-Droid metadata: screenshots and changelog entry
-- [ ] Re-record or re-caption the demo video (currently
-      https://youtu.be/52Xkrx2BXrg, hotspot-only) — or at minimum add a note in the README
-      that it predates shared network mode
+- [ ] Re-record the demo video (currently https://youtu.be/52Xkrx2BXrg, hotspot-only).
+      The minimum is done: the README now notes it predates v10 — so this no longer blocks
+      release, but the note is a stopgap.
 
 ## Documentation
 
 - [x] ~~Fix the stale "drag it onto the window" folder instructions~~ — done; each platform's
       help text now describes what it actually supports and states that a sent folder is
       recreated on the receiving end.
-- [ ] README: add a Shared Network mode section with the receiver-shows-password flow.
-- [ ] README: mention that a sent folder is recreated inside the receiver's destination.
-- [ ] README: state plainly that v10 can't talk to v9 and both devices must be updated.
-- [ ] Verify README crypto Q&A matches the shipped design (`docs/shared-network-crypto.md`).
-- [ ] Check `ARCHITECTURE.md` is accurate for the final state of the branch.
+- [x] ~~README: add a Shared Network mode section with the receiver-shows-password flow~~ —
+      done 2026-07-25 (Use section: Shared Network flow, Hotspot flow, folder behavior).
+- [x] ~~README: mention that a sent folder is recreated inside the receiver's destination~~
+- [x] ~~README: state plainly that v10 can't talk to v9 and both devices must be updated~~ —
+      breaking-change warning added under the headline.
+- [x] ~~Verify README crypto Q&A matches the shipped design~~ — verified 2026-07-25 against
+      code: NNpsk0 suite, 600k PBKDF2, prologue binding, discovery key from the stretched
+      PSK all match; `get_key_and_ssid`'s callers all discard the key half, so SHA-256 of
+      the password really is SSID-only.
+- [x] ~~Check `ARCHITECTURE.md` is accurate for the final state of the branch~~ — reviewed
+      2026-07-25; accurate (role axes, peer-OS-selection gating, shared-network section,
+      BLE-is-hotspot-only rationale all match the code). One wording slip fixed ("the v10
+      inner per-chunk AES" → the AES v10 *removed*).
 
 ## Build and packaging
 
