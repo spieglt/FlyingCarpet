@@ -187,14 +187,84 @@ existing multi-file path with empty `filePaths`.
   *reopens* the URI mid-transfer during the resume/skip check. If the Activity is gone by
   then, that fails — another argument for the foreground service in §2.
 
-**iOS parity**, for when it comes up: the equivalent is a Share Extension, a separate process
-with a small memory budget. The transfer would not run in it — it would write the URLs into a
-shared app-group container and `openURL` into the main app. Meaningfully more work than the
-Android side.
+iOS is a different design entirely — see §4.
 
 ---
 
-## 4. Dependency housekeeping notes
+## 4. iOS share menu
+
+Worth doing, but **do not assume it mirrors the Android design.** Two iOS-specific
+restrictions rule out the obvious approach, and between them they mean there is no single
+mechanism that both handles multiple files *and* lands the user in the app. Verified
+2026-07-26.
+
+### Restriction 1: a Share Extension cannot open the containing app
+
+The natural design — extension stages the files, then opens Flying Carpet to run the transfer
+— is **not supported and is an App Store risk.** From Apple's Frameworks Engineer on
+[forums/thread/773342](https://developer.apple.com/forums/thread/773342):
+
+> "There's no supported way for you to launch your app directly from App Extensions, except
+> Today and Widgets (which requires `OpenURLIntent` and is available to processes that can use
+> App Intents), with the APIs currently available."
+
+`NSExtensionContext.open(_:)` is documented for Today extensions only, and the responder-chain
+walk to reach `UIApplication.openURL` is the exact Objective-C runtime bypass Apple calls out
+as unsupported. Apple offers no sanctioned alternative — their suggestion is a local
+notification, or a Feedback Assistant enhancement request. **Don't build on this.**
+
+### Restriction 2: the document-types route is effectively single-file
+
+Declaring `CFBundleDocumentTypes` + `LSSupportsOpeningDocumentsInPlace` puts a "Copy to Flying
+Carpet" action in the share sheet, and that route *does* launch the app, delivering the file
+through `scene(_:openURLContexts:)`. No extension, no app group, no new target — much cheaper
+than a Share Extension. But open-URL requests are atomic and don't carry multiple URLs; iOS
+delivers only the first file even when several are shared. Multi-select in Photos may not
+offer the app at all.
+
+### The resulting shape
+
+| | Multi-file | Opens the app | Placement | Cost |
+|---|---|---|---|---|
+| **Document types** (`CFBundleDocumentTypes`) | No — first file only | **Yes** | Lower "actions" row | Info.plist only |
+| **Share Extension** | **Yes** | No — user must switch manually | Top app row | New target, app group, provisioning, App Store resubmit |
+
+**Suggested order.** Start with **document types** — it is an Info.plist change, it covers the
+single-file case (share one video to Flying Carpet, which is likely the common one), and it
+actually opens the app. Add the Share Extension later for multi-select, accepting that it can
+only stage files and show "N files ready — open Flying Carpet to send," leaving the user to
+switch apps.
+
+### If/when the Share Extension is built
+
+- **Stage into an App Group container, never the Documents directory.** `emptyDocsDir()`
+  (`iOS/FlyingCarpet/ViewController.swift:579`) sweeps `.documentDirectory` wholesale and runs
+  both at launch and before every transfer (`:65`, `:455`) — anything the extension dropped
+  there would be deleted before it could be sent. Files must land in the shared container and
+  be adopted deliberately into `transfer.fileList` on next foreground.
+- **Sweep the container too.** The extension has no way to know whether the user ever opened
+  the app, so staged files accumulate. Extend the `emptyDocsDir()` discipline to the group
+  container.
+- **Don't reuse the Live Photo staging pattern in the extension.** The PHPicker path reads a
+  whole asset resource into an in-memory `NSMutableData`
+  (`iOS/FlyingCarpet/ViewController.swift:~161-183`); extensions run under a far tighter memory
+  budget than the host app. Use `loadFileRepresentation` + a filesystem copy, which streams.
+- **Scope `NSExtensionActivationRule` deliberately.** `TRUEPREDICATE` offers Flying Carpet for
+  text and URLs, which it can't send. Use the
+  `NSExtensionActivationSupportsFileWithMaxCount` / `ImageWithMaxCount` / `MovieWithMaxCount`
+  keys with generous counts.
+- **Provisioning is the hidden cost.** A new bundle ID
+  (`dev.spiegl.FlyingCarpet.ShareExtension`), an App Group entitlement on both targets, and its
+  own profile — on top of `DEVELOPMENT_TEAM` already being deliberately blank in
+  `project.pbxproj` (see `Apple/CLAUDE.md`). The iOS app currently declares no URL scheme and
+  no app group, and shipped as 10.0.0 build 1, so this means a fresh App Store submission.
+
+macOS could take the same treatment via a Share Extension, but Macs have drag-and-drop and
+`NSSharingService` already; lower priority.
+
+---
+
+## 5. Dependency housekeeping notes
 
 The 2026-07-23 Dependabot sweep is done and its resolved-alert detail has been dropped from
 this doc. What's still worth carrying:
