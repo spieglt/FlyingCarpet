@@ -1,9 +1,9 @@
 # Post-v10 Maintenance Backlog
 
-Housekeeping deliberately deferred until **after v10 ships**. None of it is user-visible or
-blocking; all of it touches code that the v10 release testing already covers, so doing it
-mid-release would invalidate hardware testing for no benefit. Revisit once
-`docs/v10-release-test-plan.md` is signed off.
+Work deliberately deferred until **after v10 ships**, plus findings from post-release field
+reports. None of it is blocking. The housekeeping items touch code that the v10 release
+testing already covers, so doing them mid-release would invalidate hardware testing for no
+benefit; revisit once `docs/v10-release-test-plan.md` is signed off.
 
 ---
 
@@ -46,64 +46,174 @@ landing on the same version as Tauri is a pleasant side effect, not the objectiv
 
 ---
 
-## 2. Dependabot alerts — resolved 2026-07-23
+## 2. Mobile transfers die when the app is backgrounded or the screen sleeps
 
-All 7 open alerts were **Cargo** (none on Gradle). Note the desktop frontend's JS/CSS is
-vendored in `Flying Carpet/src/deps/` (`bootstrap.min.css`, `qrcode.js`) with no
-`package.json`, so it is **not** covered by Dependabot and must be refreshed by hand.
+Reported by users and reproduced informally. **Neither mobile app does anything to keep
+running when it loses the foreground** — this is not a bug in the transfer code, it's a
+missing platform integration on both sides. Confirmed by audit, 2026-07-26:
 
-**Toolchain upgraded as part of this: rustc 1.85.0 → 1.97.1.** Two alerts (`time`,
-`serde_with`) were blocked purely by the Rust version and could not be fixed without it.
-(`rustup update stable` first failed on the deprecated `rls-preview` component; remove it
-with `rustup component remove --toolchain stable rls-preview`, then retry.)
+- **Android** — `AndroidManifest.xml` declares no `<service>` at all, no `FOREGROUND_SERVICE`
+  permission, no `WakeLock`, no `WifiLock`, and no `FLAG_KEEP_SCREEN_ON`. The only lock
+  anywhere is the `MulticastLock` in `Discovery.kt:183`. Transfers run in bare
+  `GlobalScope.launch` coroutines off `MainViewModel` (`MainViewModel.kt:366`, `:566`,
+  `:906`), with UI callbacks bound to one Activity instance (`MainActivity.kt:240-244`).
+- **iOS** — `Apple/iOS/FlyingCarpet/Info.plist` has no `UIBackgroundModes` key.
+  `SceneDelegate.swift:44` `sceneDidEnterBackground` is still the empty Xcode template. No
+  `beginBackgroundTask`, no `isIdleTimerDisabled` anywhere in `Apple/`.
 
-| # | Package | Change | Status |
-|---|---|---|---|
-| 30 | `bytes` | 1.11.0 → **1.12.1** | ✅ Fixed |
-| 34 | `rand` (0.8 line) | 0.8.5 → **0.8.7** | ✅ Fixed (direct dep in `core/Cargo.toml`) |
-| 35 | `rand` (0.9 line) | 0.9.2 → **0.9.5** | ✅ Fixed |
-| 31 | `time` | 0.3.44 → **0.3.54** | ✅ Fixed (needed the toolchain bump) |
-| 37 | `serde_with` | 3.16.1 → **3.21.0** | ✅ Fixed (needed the toolchain bump) |
-| 36 | `tauri` | 2.9.5 → **2.11.1** | ✅ Fixed — required `--precise`; plain `-p` update can't bump its siblings |
-| 26 | `glib` | 0.18.5, needs 0.20.0 | ❌ **Still open — blocked upstream** |
+**Screen sleep and app-switch are the same event on both platforms.** Display timeout stops
+the Activity on Android and backgrounds the scene on iOS. Any fix has to cover both, and the
+screen-timeout case is almost certainly the bulk of the reports: user starts a transfer, puts
+the phone down, the display sleeps, the peer sees a dead socket.
 
-### What remains open, and why
+### iOS: structurally cannot continue in the background
 
-**#26 `glib`** — reached via `atk 0.18.2` → `gtk 0.18.2` → `muda` → `tauri`. Even Tauri
-2.11.1 still pins the **gtk-rs 0.18** family, and the fix needs gtk-rs 0.20. Nothing to do
-until Tauri's Linux stack moves. It is a **Linux/GTK-only** dependency, so Windows and macOS
-builds are unaffected. Re-check whenever Tauri is next upgraded.
+There is no way around this, and it should be treated as a constraint to communicate rather
+than a bug to fix. Apple DTS on this exact scenario ([forums/thread/715118](https://developer.apple.com/forums/thread/715118)):
 
-**#34 may remain partially open**: `rand` 0.7.3 is also in the lock and falls in the affected
-range, but it is pulled by `phf_generator` as a **build-time** dependency — not in the runtime
-graph and not updatable independently.
+> "The thing to keep in mind with networking in iOS is that the background/foreground state
+> isn't key, but rather the **suspended/running state**. Networking works just fine as long as
+> your process is running. Once it's suspended, everything just stops." … "When the app on
+> Device2 gets suspended, its TCP connections will likely be closed immediately." … "My
+> general advice is that, when your app moves to the background you should shut down your
+> networking, resuming it when you come back into the foreground."
 
-### Notes worth keeping
+No background mode covers a raw peer-to-peer TCP transfer. The list is audio, location, voip,
+external-accessory, bluetooth-central, bluetooth-peripheral, fetch, processing. `bluetooth-central`
+would only keep the BLE credential exchange alive, never the Wi-Fi transfer; `NSURLSession`
+background transfers only work against an HTTP server. In hotspot mode the
+`NEHotspotConfiguration` association to a no-internet network may also be dropped once
+suspended, so even resuming won't reliably find the peer.
 
-- **The `rand` advisories never threatened password generation.** They require the `log` +
-  `thread_rng` features *plus* a custom logger that calls RNG methods on `ThreadRng` during
-  reseed, with trace/warn logging on and `getrandom` failing. Flying Carpet defines no custom
-  logger. Called out because `rand` mints the single-use transfer passwords, a load-bearing
-  security invariant (`docs/shared-network-crypto.md` §7) — that invariant was never
-  compromised.
-- **#36 (`tauri`) was the only alert with a plausible attack path.** CVE-2026-42184:
-  `is_local_url()` misclassified remote URLs as trusted local origins on Windows/Android,
-  letting a remote page invoke local-only IPC commands. Exploitability here was low — the app
-  loads only local frontend assets (`frontendDist: "../src"`) and never navigates to a remote
-  URL — but it is a real fix.
-- The Tauri bump is a **62-package delta** (`wry` 0.53.5 → 0.55.1, `tray-icon`, `wasm-bindgen`,
-  `web-sys`, `webkit2gtk`, …). Desktop smoke tests should be re-run on all three platforms
-  before release.
+What can be done:
+
+1. **`UIApplication.shared.isIdleTimerDisabled = true` for the duration of a transfer.** The
+   single highest-value change on iOS — it eliminates the dominant cause outright. Roughly
+   five lines in `toggleUI(transferRunning:)`, set and cleared symmetrically with the rest of
+   the transfer UI state.
+2. **`beginBackgroundTask` around the transfer** buys ~30 seconds (iOS 13 cut the
+   from-foreground grant to about that). Enough to survive a glanced-at notification or a
+   quick app switch and back; nowhere near enough for a real transfer.
+3. **Fail loudly instead of hanging.** `sceneDidEnterBackground` currently does nothing, so
+   the user watches a frozen progress bar and then gets a generic socket error. Wire it to the
+   running `Transfer` and emit something explicit — "Flying Carpet was moved to the
+   background; iOS suspends apps and cannot continue transfers there." Turns a mystery bug
+   report into a comprehensible limitation.
+
+### Android: fixable, and worth fixing
+
+Android doesn't force-suspend the process, it *kills* it. Once no Activity is visible the
+process has no foreground component and drops to a **cached** process, eligible for kill at
+any moment under memory pressure. That explains the intermittent, device-dependent character
+of the reports. On top of that, screen-off puts the Wi-Fi radio into power save and lets the
+SoC suspend.
+
+**Checked and found false:** AOSP's current `WifiNetworkFactory` validates foreground status
+only at *request* time (`isRequestFromForegroundAppOrService` in `acceptRequest()`); there is
+no continuous importance monitoring that revokes an established `WifiNetworkSpecifier`
+connection when the app backgrounds. So the joined hotspot is not proactively torn down — the
+process dying is what kills it. Don't waste time chasing a framework teardown that isn't there.
+
+Four changes, in descending value-per-effort:
+
+1. **`FLAG_KEEP_SCREEN_ON` while a transfer runs.** One line, alongside the existing
+   orientation lock at `MainActivity.kt:317`. Same reasoning as iOS: mostly makes the problem
+   not happen.
+2. **A foreground service.** The actual fix. Type **`connectedDevice`** is the right one, and
+   its runtime prerequisite is already satisfied — it accepts `CHANGE_NETWORK_STATE`,
+   `CHANGE_WIFI_STATE`, or `CHANGE_WIFI_MULTICAST_STATE`, all three of which the manifest
+   already declares. Needs `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_CONNECTED_DEVICE`, plus
+   `POST_NOTIFICATIONS` for the notification on API 33+. Declaring a type is mandatory at
+   `targetSdk = 37` anyway. Starting it from the Start button is a legal foreground start, and
+   the notification doubles as progress display and a cancel action. (`dataSync` also matches
+   the description but carries Android 15's extra restrictions; `connectedDevice` is cleaner.)
+3. **A `PARTIAL_WAKE_LOCK`** for the transfer's duration. A foreground service does **not**
+   keep the CPU awake — a commonly missed point. With the screen off the SoC suspends and the
+   transfer threads stop.
+4. **A `WifiLock` in `WIFI_MODE_FULL_HIGH_PERF`.** Documented as keeping Wi-Fi at high
+   performance "even when the device screen is off." **Do not use
+   `WIFI_MODE_FULL_LOW_LATENCY` here** — AOSP documents it as activating only when the app
+   "is running in the foreground" *and* "the screen is on," precisely the case that needs no
+   help. HIGH_PERF is deprecated but is the mode that covers screen-off. This matters for
+   shared-network discovery too: the `MulticastLock` stops the driver filtering multicast, but
+   does nothing about the radio entering power save.
+
+**Sequencing.** Items 1, 3, and 4 are small and independently shippable; do them first. Item 2
+is a real refactor, not a drop-in: `MainViewModel` currently owns the sockets *and* calls back
+into a specific Activity for `displayQrCode`, `promptForPassword`, and `cleanUpUi`. Transfer
+state has to move into the service with the UI observing it, rather than the transfer holding
+an Activity reference.
 
 ---
 
-## 3. Side effect: rust-analyzer proc-macro crash (resolved)
+## 3. Android share sheet
 
-Before the toolchain upgrade, VS Code showed `all proc-macro server workers have exited` on
-every `#[tauri::command]` and `#[derive(...)]` in `Flying Carpet/src-tauri/src/main.rs`. This
-was **not** a code problem — rustc 1.85.0 (Feb 2025) had drifted ~17 months behind the
-auto-updating rust-analyzer bundled with the VS Code extension, and the proc-macro bridge ABI
-no longer matched, so the server crashed on startup. Upgrading the toolchain fixes it;
-restart rust-analyzer afterward ("Developer: Reload Window" or
-"rust-analyzer: Restart Server"). If this recurs, suspect toolchain/rust-analyzer version
-skew before suspecting the code.
+Long-standing TODO at `MainActivity.kt:795`. Sending a file would start from the sharing app
+rather than from Flying Carpet.
+
+**Manifest.** Add an intent filter to `MainActivity` for `ACTION_SEND` and
+`ACTION_SEND_MULTIPLE` with `category.DEFAULT` and `mimeType="*/*"`. Set
+`android:launchMode="singleTop"` and override `onNewIntent` — otherwise sharing into the app
+while a transfer is running spawns a **second** MainActivity with a fresh ViewModel while the
+first still holds the hotspot and sockets.
+
+**The refactor that makes it work.** `getFilePicker()` (`MainActivity.kt:66-108`) has the
+entire "we have files, now proceed" sequence inlined in its result callback: build
+`DocumentFile`s, open `InputStream`s, then either BLE advertise/scan or `connectToPeer()`.
+Extract that body into something like `stageFilesForSending(uris: List<Uri>)` so the picker
+and the share intent share one path. Read the URIs from `EXTRA_STREAM` via
+`IntentCompat.getParcelableExtra` / `getParcelableArrayListExtra` — the untyped overloads are
+deprecated at API 33+.
+
+**UX: don't auto-start.** In hotspot mode the user still has to choose peer OS and connection
+mode. Cleanest flow: the share intent lands, files are staged, the mode toggle flips to Send,
+the folder checkbox hides, the Start button reads "Start" instead of "Select Files", and the
+Start handler skips the picker when staged URIs exist. Folder sends don't apply — the share
+sheet hands over files, so `sendFolder` stays false and a multi-file share maps onto the
+existing multi-file path with empty `filePaths`.
+
+**Two real gotchas:**
+
+- **Shared URIs are not `ACTION_OPEN_DOCUMENT` URIs.** `DocumentFile.fromSingleUri` mostly
+  works on them by accident — `DocumentsContract.Document.COLUMN_DISPLAY_NAME` and
+  `COLUMN_SIZE` happen to be the same column strings as `OpenableColumns.DISPLAY_NAME`/`SIZE`
+  — but it isn't guaranteed, and `file://` URIs (still shared by some apps) fail outright.
+  `sendFile` depends on `file.name` (`Send.kt:69`, which throws "Could not get filename" on
+  null) and `file.length()` (`Send.kt:13`, `:20`, `:33`, `:81`). Worth a small
+  name/size/openStream abstraction, or at minimum a `file://` → `DocumentFile.fromFile` branch.
+- **The share grant is Activity-scoped** and revoked when the Activity finishes; unlike an
+  OPEN_DOCUMENT grant it cannot be persisted. Opening all the `InputStream`s eagerly (which
+  the current code already does) covers most of it, but `hashFile` (`Utilities.kt:114-116`)
+  *reopens* the URI mid-transfer during the resume/skip check. If the Activity is gone by
+  then, that fails — another argument for the foreground service in §2.
+
+**iOS parity**, for when it comes up: the equivalent is a Share Extension, a separate process
+with a small memory budget. The transfer would not run in it — it would write the URLs into a
+shared app-group container and `openURL` into the main app. Meaningfully more work than the
+Android side.
+
+---
+
+## 4. Dependency housekeeping notes
+
+The 2026-07-23 Dependabot sweep is done and its resolved-alert detail has been dropped from
+this doc. What's still worth carrying:
+
+- **`glib` (alert #26) remains open, blocked upstream.** Reached via `atk 0.18.2` →
+  `gtk 0.18.2` → `muda` → `tauri`. Even Tauri 2.11.1 still pins the gtk-rs **0.18** family and
+  the fix needs 0.20. **Linux/GTK-only**, so Windows and macOS builds are unaffected. Re-check
+  whenever Tauri is next upgraded.
+- **`rand` 0.7.3** is also in the lock and in an affected range, but it comes from
+  `phf_generator` as a **build-time** dependency — not in the runtime graph, not independently
+  updatable. Expect it to keep showing up.
+- **The desktop frontend's JS/CSS is not covered by Dependabot.** `Flying Carpet/src/deps/`
+  (`bootstrap.min.css`, `qrcode.js`) is vendored with no `package.json`, so it must be
+  refreshed by hand.
+- **Toolchain is now rustc 1.97.1** (up from 1.85.0). If `rustup update stable` fails on the
+  deprecated `rls-preview` component, remove it with
+  `rustup component remove --toolchain stable rls-preview` and retry.
+- **rust-analyzer proc-macro crashes are version skew, not code.** `all proc-macro server
+  workers have exited` on every `#[tauri::command]` and `#[derive(...)]` was rustc drifting
+  ~17 months behind the auto-updating rust-analyzer in the VS Code extension, breaking the
+  proc-macro bridge ABI. Fixed by the toolchain upgrade; restart the server afterward. If it
+  recurs, suspect toolchain/rust-analyzer skew before suspecting the code.
