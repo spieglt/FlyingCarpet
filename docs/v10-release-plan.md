@@ -398,7 +398,7 @@ confirming before closing.
       plan" below.
 - [x] **Build the Apple repo.** `shared/Transfer.swift` and the iOS storyboard changed and
       have not been compiled here (no Mac).
-- [ ] **One more Mac test run (⌘U on the macOS target).** The Swift discovery-announcement
+- [x] **One more Mac test run (⌘U on the macOS target).** The Swift discovery-announcement
       KAT (`DiscoveryTests`, Apple commit `8d73710`) was written on Windows 2026-07-25 and
       has never been compiled. Tier 0's "Apple unit tests pass" checkmark predates it.
 - [x] ~~Confirm both repos report the same protocol version constant~~ — done; re-verified
