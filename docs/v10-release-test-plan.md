@@ -113,12 +113,16 @@ Apple always guests; the peer hosts. Confirm the 6-digit pairing code and the tr
       byte-identical in `core/src/noise.rs`, `NoiseUnitTest.kt`, and
       `macOS/FlyingCarpetTests/FlyingCarpetTests.swift`, as is the discovery announcement
       vector between Rust and Kotlin.
-      - Two asymmetries in *coverage*, not in the vectors: Swift has the discovery **key**
-        KAT but no discovery **announcement** vector (the 108-byte layout + HMAC is pinned
-        only between Rust and Kotlin), and the iOS test target holds only the Xcode
-        template tests — the Noise KATs live in the macOS target. Both projects compile the
-        same `shared/Noise.swift`, so iOS's implementation is covered as long as the macOS
-        suite is run; nothing guards a Swift-side change to the announcement format.
+      - Swift had the discovery **key** KAT but no discovery **announcement** vector — the
+        93-byte layout + HMAC was pinned only between Rust and Kotlin. Closed 2026-07-25:
+        `DiscoveryTests` in `macOS/FlyingCarpetTests/FlyingCarpetTests.swift` now asserts the
+        same vector on serialize, on deserialize (field by field, plus HMAC verify), and on a
+        flipped bit in the signed prefix. **Written on Windows and never compiled** — it needs
+        one run on a Mac before Tier 0's Apple row can be re-checked.
+      - The iOS test target still holds only the Xcode template tests; the Noise and
+        discovery KATs live in the macOS target. Both projects compile the same
+        `shared/Noise.swift` and `shared/Discovery.swift`, so iOS's implementations are
+        covered as long as the **macOS** suite is the one that gets run.
 - [x] **Wrong password** (shared network): enter a mismatching password → clear
       "could not establish a secure connection / check the password" message, no hang
 - [ ] **Wrong password** (hotspot): same, via the BLE-exchanged password path
@@ -191,7 +195,7 @@ Each row has a specific repro that previously failed — test the repro, not jus
       This was the direct analogue of the Windows↔Linux `br-connection-canceled` bug and had
       never been exercised. Failure looks like a connect that succeeds with no Flying Carpet
       service.
-- [ ] **Android as central, twice in a row, bonded** — Android↔Windows and Android↔Linux,
+- [x] **Android as central, twice in a row, bonded** — Android↔Windows and Android↔Linux,
       Android **receiving** both legs, no app restart between them. This row was written when
       Android never invalidated its GATT cache and predicted a silent hang; both halves of
       that prediction have since been fixed (`onServiceChanged` now re-discovers, gated on
