@@ -9,6 +9,8 @@ import com.google.zxing.qrcode.QRCodeWriter
 import java.io.File
 import java.nio.ByteBuffer
 import java.security.MessageDigest
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.set
 
 fun getQrCodeBitmap(ssid: String, password: String): Bitmap {
     return getQrCodeBitmapFromContent("$ssid;$password")
@@ -18,10 +20,10 @@ fun getQrCodeBitmap(ssid: String, password: String): Bitmap {
 fun getQrCodeBitmapFromContent(qrCodeContent: String): Bitmap {
     val size = 1024 // pixels
     val bits = QRCodeWriter().encode(qrCodeContent, BarcodeFormat.QR_CODE, size, size)
-    return Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565).also {
+    return createBitmap(size, size, Bitmap.Config.RGB_565).also {
         for (x in 0 until size) {
             for (y in 0 until size) {
-                it.setPixel(x, y, if (bits[x, y]) Color.BLACK else Color.WHITE)
+                it[x, y] = if (bits[x, y]) Color.BLACK else Color.WHITE
             }
         }
     }
