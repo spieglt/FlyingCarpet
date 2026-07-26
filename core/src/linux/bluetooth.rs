@@ -257,7 +257,9 @@ pub async fn negotiate_bluetooth<T: UI>(
         //
         // Disconnect() drops every bearer, so the next transfer starts from nothing. The bond
         // is untouched -- this is not remove_device (law 4 in docs/bluetooth-field-guide.md).
-        let peer_address = *peer_address.lock().expect("Could not lock peer address mutex");
+        let peer_address = *peer_address
+            .lock()
+            .expect("Could not lock peer address mutex");
         match peer_address {
             Some(addr) => match adapter.device(addr) {
                 Ok(device) => match device.disconnect().await {
@@ -303,7 +305,10 @@ pub async fn negotiate_bluetooth<T: UI>(
                     // exactly this reason. Disconnect() drops every bearer, so the next round
                     // starts from no link and ensure_le_link picks LE.
                     if let Err(disconnect_error) = device.disconnect().await {
-                        println!("    Could not disconnect before retry: {}", disconnect_error);
+                        println!(
+                            "    Could not disconnect before retry: {}",
+                            disconnect_error
+                        );
                     }
                     match attempt {
                         1 => {
@@ -316,8 +321,7 @@ pub async fn negotiate_bluetooth<T: UI>(
                             ui.output(
                                 "Note: this removes the pairing on this device only. If the transfer still fails, remove this device from the other device's Bluetooth settings as well, then try again.",
                             );
-                            if let Err(remove_error) =
-                                adapter.remove_device(device.address()).await
+                            if let Err(remove_error) = adapter.remove_device(device.address()).await
                             {
                                 println!("    Could not remove device: {}", remove_error);
                             }

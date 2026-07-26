@@ -160,7 +160,10 @@ fn start_wifi_direct<T: UI>(ssid: &str, password: &str, ui: &T) -> Result<Window
         })
     } else {
         Err(FCError {
-            message: format!("Failed to start WiFi Direct AP. {}", WIFI_DIRECT_FAILURE_HINT),
+            message: format!(
+                "Failed to start WiFi Direct AP. {}",
+                WIFI_DIRECT_FAILURE_HINT
+            ),
         })
     }
 }

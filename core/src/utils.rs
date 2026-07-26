@@ -196,7 +196,10 @@ mod selection_tests {
     fn selected_files_are_flat() {
         let root = make_tree("files");
         assert_eq!(
-            names(vec![root.join("loose.txt"), root.join("Photos").join("a.jpg")]),
+            names(vec![
+                root.join("loose.txt"),
+                root.join("Photos").join("a.jpg")
+            ]),
             vec!["a.jpg", "loose.txt"]
         );
         fs::remove_dir_all(&root).unwrap();
@@ -241,7 +244,11 @@ mod selection_tests {
     fn names_are_relative_and_slash_separated() {
         let root = make_tree("separators");
         for file in expand_selection(vec![root.join("Photos"), root.join("loose.txt")]) {
-            assert!(!file.name.starts_with('/'), "leading slash in {}", file.name);
+            assert!(
+                !file.name.starts_with('/'),
+                "leading slash in {}",
+                file.name
+            );
             assert!(!file.name.contains('\\'), "backslash in {}", file.name);
             assert!(
                 crate::receiving::sanitize_relative_filename(&file.name).is_ok(),

@@ -170,9 +170,8 @@ pub async fn negotiate_bluetooth<T: UI>(
         'pairing: loop {
             // if we're looking for Pin or PairSuccess, process_bluetooth_message() will bail when it sees AlreadyPaired
             println!("waiting for callback...");
-            let msg =
-                process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui)
-                    .await?;
+            let msg = process_bluetooth_message(BluetoothMessage::Pin("".to_string()), &mut rx, ui)
+                .await?;
 
             // wait to pair
             if msg != BluetoothMessage::AlreadyPaired {
@@ -182,7 +181,10 @@ pub async fn negotiate_bluetooth<T: UI>(
             // discover service and characteristics once paired
             let mut last_error = None;
             for attempt in 1..=ENUMERATION_ATTEMPTS {
-                println!("before get_services_and_characteristics, attempt {}", attempt);
+                println!(
+                    "before get_services_and_characteristics, attempt {}",
+                    attempt
+                );
                 let start = time::Instant::now();
                 match central.get_services_and_characteristics().await {
                     Ok(()) => {

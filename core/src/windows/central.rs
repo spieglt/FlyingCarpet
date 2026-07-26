@@ -400,7 +400,11 @@ impl BluetoothCentral {
         // database was ever read.
         let status = result.Status()?;
         let services = result.Services()?;
-        println!("got services: status {:?}, count {}", status, services.Size()?);
+        println!(
+            "got services: status {:?}, count {}",
+            status,
+            services.Size()?
+        );
         if status != GattCommunicationStatus::Success {
             fc_error(&format!(
                 "Could not read the peer's Bluetooth services ({}). The link to the peer \
@@ -551,10 +555,7 @@ fn unpair(info: DeviceInformation) -> windows::core::Result<()> {
     // physical device (and keep showing it under Settings > Bluetooth). Re-read IsPaired so
     // the log says whether the bond this code path cares about is actually gone, instead of
     // just what the call returned.
-    let still_paired = info
-        .Pairing()
-        .and_then(|p| p.IsPaired())
-        .unwrap_or(false);
+    let still_paired = info.Pairing().and_then(|p| p.IsPaired()).unwrap_or(false);
     println!(
         "Unpairing result: {:?}, still paired afterward: {}",
         status, still_paired

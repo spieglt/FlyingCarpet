@@ -334,22 +334,16 @@ pub async fn start_transfer<T: UI>(
 
             // start hotspot or connect to peer's (the Noise handshake below uses the
             // already-derived PSK, not the password itself)
-            let peer_resource = match network::connect_to_peer(
-                peer,
-                mode.clone(),
-                ssid,
-                password,
-                interface,
-                ui,
-            )
-            .await
-            {
-                Ok(p) => p,
-                Err(e) => {
-                    ui.output(&format!("Error connecting to peer: {}", e));
-                    return None;
-                }
-            };
+            let peer_resource =
+                match network::connect_to_peer(peer, mode.clone(), ssid, password, interface, ui)
+                    .await
+                {
+                    Ok(p) => p,
+                    Err(e) => {
+                        ui.output(&format!("Error connecting to peer: {}", e));
+                        return None;
+                    }
+                };
 
             tokio::task::yield_now().await;
 
@@ -384,7 +378,10 @@ pub async fn start_transfer<T: UI>(
     // already large or one the peer is actively waiting on.
     if let Err(e) = tcp.set_nodelay(true) {
         // Not fatal: this costs throughput, not correctness.
-        ui.output(&format!("Couldn't disable Nagle on the TCP connection: {}", e));
+        ui.output(&format!(
+            "Couldn't disable Nagle on the TCP connection: {}",
+            e
+        ));
     }
 
     // The confirm functions only need to know whether we joined the peer's network (guest
@@ -849,8 +846,8 @@ mod transfer_tests {
                 .await
                 .unwrap();
             enc.write_u64(1).await.unwrap(); // file count, as the orchestrator does
-            // sent under a folder-relative name, as a "send folder" selection produces,
-            // so the receiver's directory recreation is covered end to end
+                                             // sent under a folder-relative name, as a "send folder" selection produces,
+                                             // so the receiver's directory recreation is covered end to end
             sending::send_file(&src2, "album/photo.bin", &mut enc, &TestUi)
                 .await
                 .unwrap();

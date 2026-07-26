@@ -50,8 +50,7 @@ use super::SERVICE_UUID;
 const BOND_PSM: u16 = 0x0083;
 use crate::{
     bluetooth::{
-        NO_SSID, OS, OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID,
-        SSID_CHARACTERISTIC_UUID,
+        NO_SSID, OS, OS_CHARACTERISTIC_UUID, PASSWORD_CHARACTERISTIC_UUID, SSID_CHARACTERISTIC_UUID,
     },
     network::is_hosting,
     utils::{generate_password, get_key_and_ssid},
@@ -107,7 +106,10 @@ pub async fn find_characteristics<T: UI>(
             ui.output("Bonding over Bluetooth LE...");
             let socket = Socket::<SeqPacket>::new_seq_packet()?;
             socket.bind(SocketAddr::new(Address::any(), AddressType::LePublic, 0))?;
-            socket.set_security(Security { level: SecurityLevel::High, key_size: 16 })?;
+            socket.set_security(Security {
+                level: SecurityLevel::High,
+                key_size: 16,
+            })?;
             let target = SocketAddr::new(addr, AddressType::LePublic, BOND_PSM);
             match timeout(Duration::from_secs(60), socket.connect(target)).await {
                 Ok(Ok(_)) => println!("    LE bonding socket connected"),
@@ -281,13 +283,23 @@ async fn ensure_le_link(device: &Device) {
         return;
     }
     let target = SocketAddr::new(device.address(), addr_type, BOND_PSM);
-    println!("    Raising LE link to {} ({:?})...", device.address(), addr_type);
+    println!(
+        "    Raising LE link to {} ({:?})...",
+        device.address(),
+        addr_type
+    );
     match timeout(Duration::from_secs(15), socket.connect(target)).await {
         Ok(Ok(_)) => println!("    LE link socket connected"),
-        Ok(Err(e)) => println!("    LE link socket refused: {} (expected; the link is the point)", e),
+        Ok(Err(e)) => println!(
+            "    LE link socket refused: {} (expected; the link is the point)",
+            e
+        ),
         Err(_) => println!("    LE link socket timed out"),
     }
-    println!("    connected over LE afterward: {:?}", device.is_connected().await);
+    println!(
+        "    connected over LE afterward: {:?}",
+        device.is_connected().await
+    );
 }
 
 // Connect and ask BlueZ to resolve the peer's GATT database, then report whether our service
@@ -570,8 +582,7 @@ pub async fn exchange_info<T: UI>(
             if attempts >= 30 {
                 return Err(bluer::Error {
                     kind: ErrorKind::Failed,
-                    message: "Peer never provided its Wi-Fi password over Bluetooth."
-                        .to_string(),
+                    message: "Peer never provided its Wi-Fi password over Bluetooth.".to_string(),
                 });
             }
             ui.output("Waiting for peer's Wi-Fi password...");
