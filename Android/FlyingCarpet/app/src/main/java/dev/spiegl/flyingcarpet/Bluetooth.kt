@@ -191,7 +191,8 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             {
                 return
             }
-            if (characteristic == null) {
+            // device is nullable as of the SDK 37 stubs, and sendResponse requires it non-null
+            if (device == null || characteristic == null) {
                 return
             }
             when (characteristic.uuid) {
@@ -253,7 +254,7 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
             {
                 return
             }
-            if (characteristic == null) {
+            if (device == null || characteristic == null) {
                 return
             }
             when (characteristic.uuid) {
