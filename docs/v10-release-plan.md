@@ -136,7 +136,7 @@ protection), and declining now aborts the transfer cleanly instead of hanging.
 **Send Folder is consistent everywhere**
 
 Sending a folder now recreates that folder inside the destination the receiving device
-chose, with the contents inside it, on all five platforms. Previously only macOS did this —
+chose, with the contents inside, on all five platforms. Previously only macOS did this —
 everywhere else the folder's contents were dumped loose into the destination. Sending
 individual files is unchanged: they still arrive flat.
 

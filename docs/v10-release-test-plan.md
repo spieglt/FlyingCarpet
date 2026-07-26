@@ -254,7 +254,7 @@ Each row has a specific repro that previously failed — test the repro, not jus
 ### Send Folder — retest on all five (behavior changed; previously inconsistent)
 
 Every platform now sends a chosen folder so the **receiver recreates that folder inside the
-destination they picked, with the contents inside it**. Before this change only macOS did
+destination they picked, with the contents inside**. Before this change only macOS did
 that; Windows, Linux, Android, and iOS dumped the contents loose into the destination, and
 Android→desktop failed outright for any folder with sub-folders. Rationale, the old
 per-platform behavior, and the fixes: `docs/send-folder-behavior.md`.

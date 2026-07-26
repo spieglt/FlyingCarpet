@@ -677,7 +677,7 @@ INSTRUCTIONS
 
 Turn Bluetooth on or off on both devices. If one side fails to initialize Bluetooth or has it turned off, the other side must disable the "Use Bluetooth" switch in Flying Carpet.
 
-Select Sending on one device and Receiving on the other. If not using Bluetooth, select the operating system of the other device. Click the "Start Transfer" button on each device. On the sending device, select the files or folder to send. On the receiving device, select the folder in which to receive files. (To send a folder, check "Send Folder" before clicking "Start Transfer", or drag the folder onto the window. A folder you send is recreated inside the destination folder on the receiving device, with its contents inside it.)
+Select Sending on one device and Receiving on the other. If not using Bluetooth, select the operating system of the other device. Click the "Start Transfer" button on each device. On the sending device, select the files or folder to send. On the receiving device, select the folder in which to receive files. (To send a folder, check "Send Folder" before clicking "Start Transfer", or drag the folder onto the window. A folder you send is recreated inside the destination folder on the receiving device, with its contents inside.)
 
 If using Bluetooth, confirm the 6-digit PIN on each side. The WiFi connection will be configured automatically. If not using Bluetooth, you will need to scan a QR code or type in a password.
 

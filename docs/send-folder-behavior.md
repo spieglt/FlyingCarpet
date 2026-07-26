@@ -5,7 +5,7 @@ Audited and fixed 2026-07-24, branch `shared-network` (both repos).
 ## The rule, as of now
 
 **Selecting a folder recreates that folder inside the destination the receiver chose, with
-its contents inside it. Selecting individual files puts those files loose in the
+its contents inside. Selecting individual files puts those files loose in the
 destination.** All five platforms behave this way.
 
 Implemented uniformly as: **every top-level selection is named relative to its own parent
