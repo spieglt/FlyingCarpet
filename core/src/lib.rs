@@ -78,21 +78,6 @@ impl AsyncWrite for TransferStream {
 }
 
 const CHUNKSIZE: usize = 1_000_000; // 1 MB
-
-// TEMPORARY (2026-07-25): lets one build try several chunk sizes, to separate a fixed
-// per-chunk cost from a per-byte rate limit. Clamped to 5,000,000 because every receiver --
-// Rust, Swift and Kotlin -- rejects a larger chunk as a malformed header (MAX_CHUNK_BYTES),
-// and that is also what Apple and Android senders already use.
-pub(crate) fn chunksize() -> usize {
-    static SIZE: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-    *SIZE.get_or_init(|| {
-        std::env::var("FC_CHUNKSIZE")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            .map(|v| v.clamp(64 * 1024, 5_000_000))
-            .unwrap_or(CHUNKSIZE)
-    })
-}
                                     // v10 is a breaking change: shared network mode and its new protocol are not compatible
                                     // with v9 or earlier. See docs/shared-network-crypto.md.
 const MAJOR_VERSION: u64 = 10;
