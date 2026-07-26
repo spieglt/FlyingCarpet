@@ -723,6 +723,14 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             } else {
                 client = Socket(peerIP, 3290)
             }
+            // The send loop writes an 8-byte chunk length and then the chunk body, so the
+            // length reaches the wire as its own small segment. Nagle holds a sub-MSS
+            // segment until the peer ACKs what's in flight, and a receiver taking a file
+            // body has nothing to send back, so that ACK waits out its delayed-ACK timer
+            // (200ms on Windows). That is one stall per chunk: measured on the Rust side
+            // 2026-07-25 at 38.8mbps where SMB moved the same file between the same two
+            // machines at ~600mbps. Nothing here benefits from Nagle's coalescing.
+            client.tcpNoDelay = true
             client.sendBufferSize = chunkSize * 2
             client.receiveBufferSize = chunkSize * 2
             inputStream = client.getInputStream()

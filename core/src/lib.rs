@@ -78,6 +78,21 @@ impl AsyncWrite for TransferStream {
 }
 
 const CHUNKSIZE: usize = 1_000_000; // 1 MB
+
+// TEMPORARY (2026-07-25): lets one build try several chunk sizes, to separate a fixed
+// per-chunk cost from a per-byte rate limit. Clamped to 5,000,000 because every receiver --
+// Rust, Swift and Kotlin -- rejects a larger chunk as a malformed header (MAX_CHUNK_BYTES),
+// and that is also what Apple and Android senders already use.
+pub(crate) fn chunksize() -> usize {
+    static SIZE: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *SIZE.get_or_init(|| {
+        std::env::var("FC_CHUNKSIZE")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .map(|v| v.clamp(64 * 1024, 5_000_000))
+            .unwrap_or(CHUNKSIZE)
+    })
+}
                                     // v10 is a breaking change: shared network mode and its new protocol are not compatible
                                     // with v9 or earlier. See docs/shared-network-crypto.md.
 const MAJOR_VERSION: u64 = 10;
@@ -371,6 +386,21 @@ pub async fn start_transfer<T: UI>(
             (peer_resource, stream, role)
         }
     };
+
+    // Turn off Nagle for the whole transfer. The send loop writes an 8-byte chunk length
+    // and then the chunk body, and the length lands on the wire as its own 26-byte segment
+    // (8 bytes + a 2-byte Noise frame header + a 16-byte tag). Nagle holds a sub-MSS
+    // segment until the peer ACKs what's already in flight, and during a file body the
+    // receiver has nothing to send back, so that ACK waits out the peer's delayed-ACK timer
+    // -- 200ms on Windows. One stall per chunk, and at CHUNKSIZE=1MB that is 4,500 stalls
+    // for a 4.5GB file: measured 2026-07-25 at 38.8mbps where SMB moved the same file
+    // between the same two machines at ~600mbps. Nothing about the transfer is
+    // latency-sensitive enough to want Nagle's coalescing; every write here is either
+    // already large or one the peer is actively waiting on.
+    if let Err(e) = tcp.set_nodelay(true) {
+        // Not fatal: this costs throughput, not correctness.
+        ui.output(&format!("Couldn't disable Nagle on the TCP connection: {}", e));
+    }
 
     // The confirm functions only need to know whether we joined the peer's network (guest
     // sends first) or are hosting; capture that before peer_resource moves into the state.
