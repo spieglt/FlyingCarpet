@@ -1,22 +1,27 @@
 use crate::{fc_error, FCError, InterfaceInfo, Mode, Peer, PeerResource, WiFiInterface, UI};
-use regex::Regex;
 use std::env::current_exe;
 use std::ffi::{c_void, CString};
-use std::os::windows::process::CommandExt;
 use std::sync::mpsc;
+use std::thread;
 use std::time::Duration;
-use std::{process, thread};
 use wifidirect_legacy_ap::WlanHostedNetworkHelper;
-use windows::core::{GUID, HSTRING, PCSTR, PCWSTR, PSTR};
-use windows::Win32::Foundation::{GetLastError, ERROR_SUCCESS, HANDLE, WIN32_ERROR};
+use windows::core::{IUnknown, Interface, GUID, HSTRING, PCSTR, PCWSTR, PSTR, VARIANT};
+use windows::Win32::Foundation::{GetLastError, ERROR_SUCCESS, HANDLE, VARIANT_TRUE, WIN32_ERROR};
 use windows::Win32::NetworkManagement::IpHelper;
 use windows::Win32::NetworkManagement::WiFi::{
     self, WLAN_INTERFACE_INFO, WLAN_INTERFACE_INFO_LIST,
 };
-use windows::Win32::System::Com::CoInitialize;
+use windows::Win32::NetworkManagement::WindowsFirewall::{
+    INetFwPolicy2, INetFwRule, INetFwRules, NetFwPolicy2, NET_FW_ACTION_BLOCK,
+};
+use windows::Win32::System::Com::{
+    CoCreateInstance, CoInitialize, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+};
 use windows::Win32::System::Diagnostics::Debug::{
     self, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_IGNORE_INSERTS,
 };
+use windows::Win32::System::Ole::IEnumVARIANT;
+use windows::Win32::System::Variant::{VARENUM, VT_DISPATCH, VT_UNKNOWN};
 use windows::Win32::UI::Shell::ShellExecuteA;
 use windows::Win32::UI::WindowsAndMessaging::{GetDesktopWindow, SW_HIDE};
 
@@ -813,43 +818,106 @@ pub async fn ensure_firewall_rules<T: UI>(ui: &T) -> Result<(), FCError> {
     Ok(())
 }
 
-/// Returns true only if an enabled rule with this name exists for *this* executable's path.
-/// Matching by name alone isn't enough: an installed copy of Flying Carpet leaves rules with
-/// the same name but a different program path, which don't allow this binary's traffic.
+/// Returns true only if an enabled *allow* rule with this name exists for *this*
+/// executable's path. Matching by name alone isn't enough: an installed copy of Flying
+/// Carpet leaves rules with the same name but a different program path, which don't allow
+/// this binary's traffic.
+///
+/// Uses the Windows Firewall COM API rather than parsing `netsh advfirewall firewall show
+/// rule`. **netsh renders its output in the system's display language.** On a Japanese
+/// install the two lines this used to match read `有効: はい` and `操作: 許可`, not
+/// `Enabled: Yes` and `Action: Allow`, so every lookup reported the rule missing, the app
+/// re-added it, and the user got a UAC prompt on *every* transfer (issue #129) — on every
+/// non-English Windows, not just Japanese. The same output is also written in the console's
+/// OEM codepage (CP932, CP1252, …) rather than UTF-8, so `from_utf8_lossy` mangled any
+/// non-ASCII install path and the program-path check could never match it either.
+///
+/// COM returns typed properties, so nothing here depends on the display language or the
+/// console codepage. Reading the policy does **not** require elevation — only writing does,
+/// which is why `add_firewall_rule` still shells out to an elevated `netsh`.
 fn check_for_firewall_rule(rule_name: &str, program_path: &str) -> Result<bool, FCError> {
-    // No embedded quotes: process::Command already passes this as one argument, and
-    // netsh would otherwise search for a rule whose name literally contains quotes
-    // (which made rule names with spaces, like the UDP rule, look permanently missing).
-    let name = format!("name={}", rule_name);
-    const CREATE_NO_WINDOW: u32 = 0x08000000; // https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
-    let mut command = process::Command::new("netsh");
-    let command = command
-        .args(vec![
-            "advfirewall",
-            "firewall",
-            "show",
-            "rule",
-            &name,
-            "verbose",
-        ])
-        .creation_flags(CREATE_NO_WINDOW);
-    match command.output() {
-        Ok(output) => {
-            let output_string = String::from_utf8_lossy(&output.stdout).to_string();
-            let regex = Regex::new(r"Action:\s+Block")?;
-            if regex.is_match(&output_string) {
+    unsafe {
+        // Initialize the apartment but deliberately don't tear it down, matching
+        // run_shell_execute above. This runs on a tokio worker thread we don't own, so
+        // CoUninitialize here could pull COM out from under something else still using it;
+        // a leaked apartment reference on a pooled thread is the cheaper mistake. Already
+        // being initialized (S_FALSE) or initialized in another mode (RPC_E_CHANGED_MODE)
+        // are both fine — COM is usable either way, so the result is ignored.
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+        let policy: INetFwPolicy2 = CoCreateInstance(&NetFwPolicy2, None, CLSCTX_INPROC_SERVER)?;
+        let rules: INetFwRules = policy.Rules()?;
+
+        // Enumerate rather than calling INetFwRules::Item(name): rule names are not unique,
+        // and a duplicate is exactly the case that matters here — an installed copy leaves a
+        // rule with our name pointing at a different binary. Item() would hand back an
+        // arbitrary one of them, so a false positive (thinking we're covered when the
+        // matching rule belongs to another path) is a real possibility.
+        let enumerator: IEnumVARIANT = rules._NewEnum()?.cast()?;
+        let wanted_path = program_path.to_lowercase();
+        let mut found = false;
+        loop {
+            // Fresh each iteration so the previous VARIANT is dropped (VariantClear) before
+            // the next one is fetched into it.
+            let mut item = [VARIANT::default()];
+            let mut fetched = 0u32;
+            // Next returns S_FALSE, not an error, once the collection runs out, so the
+            // fetched count is what ends the loop.
+            if enumerator.Next(&mut item, &mut fetched).is_err() || fetched == 0 {
+                break;
+            }
+            let Some(rule) = variant_to_firewall_rule(&item[0]) else {
+                continue;
+            };
+            if rule.Name().map(|n| n.to_string()) != Ok(rule_name.to_string()) {
+                continue;
+            }
+            // ApplicationName is the `program=` the rule was created with. A rule without
+            // one (a port-only rule) isn't ours, whoever else's it is.
+            let Ok(application) = rule.ApplicationName() else {
+                continue;
+            };
+            if application.to_string().to_lowercase() != wanted_path {
+                continue;
+            }
+            if rule.Action() == Ok(NET_FW_ACTION_BLOCK) {
                 fc_error("a Windows Firewall rule is blocking Flying Carpet connections. Please delete or modify the rule to allow incoming connections on TCP port 3290.")?;
             }
-            if !Regex::new(r"Enabled:\s+Yes")?.is_match(&output_string) {
-                return Ok(false);
+            if rule.Enabled() == Ok(VARIANT_TRUE) {
+                found = true;
             }
-            // verbose output includes a "Program:" line per rule; require our own path
-            Ok(output_string
-                .to_lowercase()
-                .contains(&program_path.to_lowercase()))
         }
-        Err(e) => Err(e)?,
+        Ok(found)
     }
+}
+
+/// Pulls the `INetFwRule` out of one element of an `IEnumVARIANT` over `INetFwRules`.
+/// Returns None for anything that isn't an interface pointer, so a malformed element skips
+/// that rule instead of failing the whole check.
+///
+/// Reaches into the VARIANT by offset because windows-rs 0.58 exposes no accessor that
+/// works here: `TryFrom<&VARIANT> for IUnknown` accepts only `VT_UNKNOWN`, and the
+/// enumerator hands back `VT_DISPATCH`. The alternative, `VARIANT::as_raw()`, returns a
+/// `windows_core::imp` type — a doc(hidden), hand-pruned binding set that would break on the
+/// windows-rs bump tracked in `docs/post-v10-maintenance.md` §1. These offsets instead come
+/// from the Win32 `VARIANT` ABI, which is frozen: `vt` at 0, then three reserved `u16`, then
+/// the union at 8 (the union is 8-byte aligned on both 32- and 64-bit because it contains an
+/// `i64`). `pdispVal` and `punkVal` are the same pointer in that union, and `IDispatch`
+/// derives from `IUnknown`, so one path covers both tags.
+unsafe fn variant_to_firewall_rule(variant: &VARIANT) -> Option<INetFwRule> {
+    let base = variant as *const VARIANT as *const u8;
+    let tag = VARENUM(*(base as *const u16));
+    if tag != VT_DISPATCH && tag != VT_UNKNOWN {
+        return None;
+    }
+    let interface_ptr = *(base.add(8) as *const *mut c_void);
+    if interface_ptr.is_null() {
+        return None;
+    }
+    // Borrowed, not owned: the VARIANT still holds this reference and releases it on drop,
+    // so this must not AddRef. `cast` does its own AddRef for the value it returns.
+    let unknown: &IUnknown = Interface::from_raw_borrowed(&interface_ptr)?;
+    unknown.cast::<INetFwRule>().ok()
 }
 
 fn add_firewall_rule(add_tcp: bool, add_udp: bool) -> Option<String> {
@@ -977,6 +1045,23 @@ mod test {
         std::thread::sleep(std::time::Duration::from_secs(2));
         let rule_present = super::check_for_firewall_rule(&file_name, &path_string).unwrap();
         assert!(rule_present);
+    }
+
+    // Read-only, so it needs no elevation and changes nothing — safe in normal runs, unlike
+    // the manual test above. Exercises the whole COM path (CoCreateInstance on NetFwPolicy2,
+    // the INetFwRules enumeration, the VARIANT unpacking) and asserts that a rule nothing
+    // could have registered reads as absent. A bad CLSID, a missing windows-rs feature, or a
+    // wrong VARIANT offset surfaces here rather than as a UAC prompt on every transfer.
+    // Regression guard for #129: the netsh version this replaced answered "absent" for every
+    // rule on non-English Windows, so it could never have failed a test like this one.
+    #[test]
+    fn firewall_rule_lookup_runs() {
+        let found = super::check_for_firewall_rule(
+            "Flying Carpet rule that does not exist",
+            r"C:\nonexistent\flying-carpet.exe",
+        )
+        .expect("firewall rule lookup failed");
+        assert!(!found, "a rule that cannot exist was reported present");
     }
 
     #[test]
