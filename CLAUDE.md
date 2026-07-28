@@ -15,7 +15,7 @@ When touching the protocol (discovery bytes, version/mode preamble, Noise handsh
 ### Where code lives vs. where binaries ship (don't conflate these)
 
 - **The Rust code builds for Windows and Linux only.** `core/src/` has just `windows/` and `linux/`; `lib.rs` cfg-selects `network`/`bluetooth` on those two `target_os` values, and there is no `target_os = "macos"` anywhere in `core/`. A Tauri/`wry`/`webkit2gtk` change therefore affects **two** desktop platforms, not three — macOS is served by the Swift app in `Apple/`, which shares no code with `core/`.
-- **macOS and iOS binaries are released from this repo's Releases page** (and the App Store for iOS). `README.md` documenting a macOS `.dmg` download is **correct, not stale** — don't "fix" it, and don't infer from it that the Rust code targets macOS.
+- **The macOS binary is released from this repo's Releases page** as a **`.zip` of the `.app`** (`macOS_FlyingCarpet_<version>.zip`) — *not* a `.dmg`. The `.dmg` format ended at v8.0.1; v9.0.0 switched to `.zip`. Don't infer from a macOS binary existing that the Rust code targets macOS — it's built from `Apple/macOS/`. There is also a Homebrew **cask** (`brew install flying-carpet`), which is maintained outside this repo.
 - `tauri.conf.json` still lists `icons/icon.icns` — genuinely stale, intentionally left alone. Not evidence of macOS support either.
 - The Swift code was developed in a separate `FlyingCarpetApple` repo and imported without history at the v10 release, so `git log` on `Apple/` starts at the import commit. Commit hashes cited for Swift changes in the older docs (e.g. `4c59af6` in `docs/bluetooth-field-guide.md`, `4a6b889`/`b7e9b59` in `ARCHITECTURE.md`) belong to that repo and won't resolve here.
 
