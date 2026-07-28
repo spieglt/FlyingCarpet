@@ -13,6 +13,15 @@
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="s" />
+    <!--
+      Android 17 blocks local network access by default for apps targeting SDK 37, and every
+      transfer this app performs is local-network traffic: the hotspot peer at the gateway
+      address, plus shared network mode's UDP discovery and TCP. Apps targeting 36 or lower got
+      an implicit grant via INTERNET, which is why this was not needed before the v10 targetSdk
+      bump (#137). Unknown permissions are ignored on older releases, so no maxSdkVersion guard
+      is wanted here; the runtime request is what has to be version-gated.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>

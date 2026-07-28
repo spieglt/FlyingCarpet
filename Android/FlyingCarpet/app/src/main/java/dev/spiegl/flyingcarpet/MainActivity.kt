@@ -48,6 +48,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bluetoothRequestPermissionLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var filePicker: ActivityResultLauncher<Array<String>>
     private lateinit var folderPicker: ActivityResultLauncher<Uri?>
+    private lateinit var localNetworkPermissionLauncher: ActivityResultLauncher<String>
     private lateinit var peerGroup: MaterialButtonToggleGroup
     private lateinit var peerInstruction: TextView
     private lateinit var connectionGroup: MaterialButtonToggleGroup
@@ -183,6 +184,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Deliberately not the launcher above: that one calls startHotspot() on grant, which is
+    // right for the nearby-devices permission it was written for and wrong here — this
+    // permission is needed by joining and shared network mode too, neither of which hosts a
+    // hotspot. Granting here just tells the user to press Start again.
+    private fun getLocalNetworkPermissionLauncher(): ActivityResultLauncher<String> {
+        return registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+            if (isGranted) {
+                viewModel.outputText("Local network permission granted. Start the transfer again.")
+            } else {
+                // Worth spelling out: a denial does not produce an error, it produces a TCP
+                // connect that times out a minute or two later (#137), so without this the
+                // user has no way to connect the symptom to the cause.
+                viewModel.outputText(
+                    "Android 17 and later require local network permission to reach the other device. "
+                            + "Without it a transfer will time out instead of failing immediately. "
+                            + "Start the transfer again to be asked, or grant it under "
+                            + "Settings > Apps > Flying Carpet > Permissions > Nearby devices."
+                )
+            }
+        }
+    }
+
     private fun getBarcodeLauncher(): ActivityResultLauncher<ScanOptions> {
         return registerForActivityResult(ScanContract()) { result ->
             if (result.contents == null) {
@@ -235,6 +258,7 @@ class MainActivity : AppCompatActivity() {
         // set up permissions request
         viewModel.wifiManager = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
         viewModel.requestPermissionLauncher = getRequestPermissionLauncher()
+        localNetworkPermissionLauncher = getLocalNetworkPermissionLauncher()
 
         viewModel.barcodeLauncher = getBarcodeLauncher()
         viewModel.displayQrCode = ::displayQrCode
@@ -300,6 +324,21 @@ class MainActivity : AppCompatActivity() {
         // start button
         val startButton = findViewById<Button>(id.startButton)
         startButton.setOnClickListener {
+
+            // Ask for local network access before touching any transfer state, so bailing out
+            // is a plain return rather than a half-started transfer to unwind. Checked here
+            // rather than in startHotspot() because that only covers the hosting path — joining
+            // a hotspot and shared network mode need this just as much, and shared network mode
+            // never calls startHotspot() at all. Literal 37 rather than a VERSION_CODES
+            // constant: the codename for a just-released API level is the part most likely to
+            // be wrong, and SDK_INT comparisons don't need it.
+            if (Build.VERSION.SDK_INT >= 37 && ActivityCompat.checkSelfPermission(
+                    this, Manifest.permission.ACCESS_LOCAL_NETWORK
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+                return@setOnClickListener
+            }
 
             // determine send/receive, peer, show file pickers, show or read qr code, or display wifi info
             // then start or join tcp server and start sending or receiving files
