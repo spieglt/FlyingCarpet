@@ -1,11 +1,11 @@
 use crate::{fc_error, FCError, InterfaceInfo, Mode, Peer, PeerResource, WiFiInterface, UI};
 use std::env::current_exe;
-use std::ffi::{c_void, CString};
+use std::ffi::c_void;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 use wifidirect_legacy_ap::WlanHostedNetworkHelper;
-use windows::core::{IUnknown, Interface, GUID, HSTRING, PCSTR, PCWSTR, PSTR, VARIANT};
+use windows::core::{IUnknown, Interface, GUID, HSTRING, PCWSTR, PWSTR, VARIANT};
 use windows::Win32::Foundation::{GetLastError, ERROR_SUCCESS, HANDLE, VARIANT_TRUE, WIN32_ERROR};
 use windows::Win32::NetworkManagement::IpHelper;
 use windows::Win32::NetworkManagement::WiFi::{
@@ -22,7 +22,7 @@ use windows::Win32::System::Diagnostics::Debug::{
 };
 use windows::Win32::System::Ole::IEnumVARIANT;
 use windows::Win32::System::Variant::{VARENUM, VT_DISPATCH, VT_UNKNOWN};
-use windows::Win32::UI::Shell::ShellExecuteA;
+use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{GetDesktopWindow, SW_HIDE};
 
 pub struct WindowsHotspot {
@@ -195,20 +195,46 @@ pub fn stop_hotspot(
     Ok("Hotspot stopped".to_string())
 }
 
+/// UTF-16 with the terminating NUL the `W` entry points expect. The returned buffer owns the
+/// characters, so it has to outlive the call that borrows a pointer into it.
+fn to_wide(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+/// Runs `program` through the shell, optionally elevated (the `runas` verb, i.e. a UAC prompt).
+///
+/// `ShellExecuteW`, not the `A` variant: `A` decodes its arguments with the system ANSI
+/// codepage (CP932 on a Japanese install, CP936 on a Chinese one), and the pointers it was
+/// handed were raw UTF-8 bytes. Any non-ASCII character in this executable's path — a user
+/// profile named in kanji, which is where the standalone .exe usually lives — reached netsh as
+/// mojibake, so the firewall rule was written for a program that doesn't exist. Those codepages
+/// are double-byte, so it can be worse than cosmetic: a lead byte consumes the byte after it,
+/// and an odd-length sequence can swallow the closing quote and break the command outright.
+///
+/// This is the write-side twin of the read-side bug fixed in c694e3e. With the check now
+/// reading rules correctly over COM, a mangled rule can never match the real path, so the two
+/// sides disagree forever: a UAC prompt on every single transfer, which is issue #129 again for
+/// anyone whose path isn't pure ASCII.
 fn run_shell_execute(
     program: &str,
     parameters: Option<&str>,
     as_admin: bool,
 ) -> Result<(), FCError> {
-    let mode = rust_to_pcstr(if as_admin { "runas" } else { "open" });
-    let program = rust_to_pcstr(program);
-    let parameters = match parameters {
-        Some(p) => rust_to_pcstr(p),
-        None => PCSTR::null(),
-    };
+    let mode = to_wide(if as_admin { "runas" } else { "open" });
+    let program = to_wide(program);
+    let parameters = parameters.map(to_wide);
     unsafe {
         CoInitialize(None).unwrap();
-        let res = ShellExecuteA(GetDesktopWindow(), mode, program, parameters, None, SW_HIDE);
+        let res = ShellExecuteW(
+            GetDesktopWindow(),
+            PCWSTR::from_raw(mode.as_ptr()),
+            PCWSTR::from_raw(program.as_ptr()),
+            parameters
+                .as_ref()
+                .map_or(PCWSTR::null(), |p| PCWSTR::from_raw(p.as_ptr())),
+            None,
+            SW_HIDE,
+        );
         let res = res.0 as isize;
         if res < 32 {
             let error_message = get_windows_error(GetLastError().0)?;
@@ -966,25 +992,34 @@ fn add_firewall_rule(add_tcp: bool, add_udp: bool) -> Option<String> {
     None
 }
 
+/// Looks up the system's text for a Win32 error code.
+///
+/// `FormatMessageW` for the same reason as `run_shell_execute`, in the other direction: the
+/// text comes back in the system's *display* language, and the `A` variant encodes it in the
+/// ANSI codepage. `PSTR::to_string` validates UTF-8, so on every non-English Windows this
+/// returned a UTF-8 decoding error in place of the actual message — including the one that
+/// matters most here, "the operation was cancelled by the user", when someone dismisses the
+/// firewall UAC prompt. Every caller in this file was affected, not just the firewall path.
 unsafe fn get_windows_error(err: u32) -> Result<String, FCError> {
     let err = WIN32_ERROR(err);
-    let msg_size = 1 << 10; // 1KB
-    let mut buffer = vec![0u8; msg_size];
-    let p_buffer: *mut u8 = &mut buffer[0];
-    let error_message = PSTR::from_raw(p_buffer);
-    let res = Debug::FormatMessageA(
+    let mut buffer = [0u16; 512]; // 1KB, as before
+    let len = Debug::FormatMessageW(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
         None,
         err.0,
         0,
-        error_message,
-        msg_size as u32,
+        PWSTR::from_raw(buffer.as_mut_ptr()),
+        buffer.len() as u32,
         None,
     );
-    if res == 0 {
+    if len == 0 {
         fc_error("Could not get error message from Windows")?;
     }
-    Ok(error_message.to_string()?)
+    // The count excludes the terminating NUL. System messages end in CRLF, which used to be
+    // interpolated into the middle of larger messages by several callers.
+    Ok(String::from_utf16_lossy(&buffer[..len as usize])
+        .trim_end()
+        .to_string())
 }
 
 pub(crate) fn is_hosting(peer: &Peer, mode: &Mode) -> bool {
@@ -996,10 +1031,6 @@ pub(crate) fn is_hosting(peer: &Peer, mode: &Mode) -> bool {
             Mode::Receive(_) => true,
         },
     }
-}
-
-pub fn rust_to_pcstr(s: &str) -> PCSTR {
-    PCSTR::from_raw(CString::new(s).unwrap().into_raw() as *const u8)
 }
 
 #[cfg(test)]
@@ -1054,6 +1085,38 @@ mod test {
     // wrong VARIANT offset surfaces here rather than as a UAC prompt on every transfer.
     // Regression guard for #129: the netsh version this replaced answered "absent" for every
     // rule on non-English Windows, so it could never have failed a test like this one.
+    // Guards the codepage half of #129 without needing elevation or a localized machine: runs
+    // an unelevated `cmd.exe` whose arguments contain non-ASCII characters and checks that what
+    // arrived on the other side was the path we asked for. The ShellExecuteA version this
+    // replaced handed raw UTF-8 bytes to an ANSI API, so the child saw them decoded in the
+    // system codepage and created a differently-named file — on an English machine (CP1252)
+    // just as surely as on the Japanese one in the issue.
+    #[test]
+    fn shell_execute_passes_non_ascii_arguments_intact() {
+        let dir = std::env::temp_dir().join("flying-carpet-shellexecute-test");
+        std::fs::create_dir_all(&dir).expect("couldn't create temp dir");
+        let marker = dir.join("日本語のパス.txt");
+        std::fs::remove_file(&marker).ok();
+
+        let parameters = format!("/C echo ok> \"{}\"", marker.display());
+        super::run_shell_execute("cmd.exe", Some(&parameters), false).expect("ShellExecute failed");
+
+        // ShellExecute returns as soon as the child is launched, not when it exits.
+        for _ in 0..50 {
+            if marker.exists() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let found = marker.exists();
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(
+            found,
+            "non-ASCII argument was mangled in transit: {} was never created",
+            marker.display()
+        );
+    }
+
     #[test]
     fn firewall_rule_lookup_runs() {
         let found = super::check_for_firewall_rule(
