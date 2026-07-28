@@ -49,6 +49,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var filePicker: ActivityResultLauncher<Array<String>>
     private lateinit var folderPicker: ActivityResultLauncher<Uri?>
     private lateinit var localNetworkPermissionLauncher: ActivityResultLauncher<String>
+    // true when the local network prompt was raised by the start button rather than at
+    // launch, so only that case tells the user to press Start again
+    private var localNetworkPromptedFromStart = false
     private lateinit var peerGroup: MaterialButtonToggleGroup
     private lateinit var peerInstruction: TextView
     private lateinit var connectionGroup: MaterialButtonToggleGroup
@@ -184,6 +187,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Literal 37 rather than a VERSION_CODES constant: the codename for a just-released API
+    // level is the part most likely to be wrong, and SDK_INT comparisons don't need it. Below
+    // 37 the permission does not exist and local network access is implicit via INTERNET.
+    private fun needsLocalNetworkPermission(): Boolean =
+        Build.VERSION.SDK_INT >= 37 && ActivityCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_LOCAL_NETWORK
+        ) != PackageManager.PERMISSION_GRANTED
+
+    // ACCESS_LOCAL_NETWORK rides along in the Bluetooth request rather than being asked for
+    // separately: two permission dialogs cannot be in flight at once, and it is in the same
+    // NEARBY_DEVICES group anyway, so this is one dialog rather than two. It still means the
+    // user is asked at launch instead of being interrupted by the start button.
+    private fun permissionsToRequest(): Array<String> =
+        if (needsLocalNetworkPermission()) {
+            permissions + Manifest.permission.ACCESS_LOCAL_NETWORK
+        } else {
+            permissions
+        }
+
     // Deliberately not the launcher above: that one calls startHotspot() on grant, which is
     // right for the nearby-devices permission it was written for and wrong here — this
     // permission is needed by joining and shared network mode too, neither of which hosts a
@@ -191,7 +213,13 @@ class MainActivity : AppCompatActivity() {
     private fun getLocalNetworkPermissionLauncher(): ActivityResultLauncher<String> {
         return registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (isGranted) {
-                viewModel.outputText("Local network permission granted. Start the transfer again.")
+                // Granted at launch is the normal path and needs no announcement; only a
+                // grant raised from the start button interrupted something worth resuming.
+                if (localNetworkPromptedFromStart) {
+                    viewModel.outputText("Local network permission granted. Start the transfer again.")
+                } else {
+                    Log.i("Flying Carpet", "Local network permission granted at launch")
+                }
             } else {
                 // Worth spelling out: a denial does not produce an error, it produces a TCP
                 // connect that times out a minute or two later (#137), so without this the
@@ -258,6 +286,12 @@ class MainActivity : AppCompatActivity() {
         // set up permissions request
         viewModel.wifiManager = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
         viewModel.requestPermissionLauncher = getRequestPermissionLauncher()
+        // Registered for the start-button fallback only. Deliberately *not* launched here:
+        // Android runs one permission request at a time, and bluetoothOnCreate() already
+        // raises one during onCreate. A second launch() in the same window is dropped and its
+        // callback fires synchronously with an empty result map — see the guard on the
+        // Bluetooth callback. ACCESS_LOCAL_NETWORK is asked for as part of that single
+        // request instead, via permissionsToRequest().
         localNetworkPermissionLauncher = getLocalNetworkPermissionLauncher()
 
         viewModel.barcodeLauncher = getBarcodeLauncher()
@@ -297,6 +331,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Print the greeting as a real line, the way the desktop does, rather than relying on
+        // the output box's android:hint. A hint only renders while the view is empty, and
+        // since 91e8005 startup emits "Bluetooth initialized" almost immediately, so on any
+        // device with Bluetooth on the greeting was overwritten before it could be read.
+        // Emitted before bluetoothOnCreate() below so it stays the first line, and only when
+        // the transcript is empty so a rotation (which replays the ViewModel's log) doesn't
+        // repeat it.
+        if (transcript.isEmpty()) {
+            viewModel.outputText(getString(R.string.welcome))
+        }
+
         // set up bluetooth
         bluetoothOnCreate()
 
@@ -325,17 +370,13 @@ class MainActivity : AppCompatActivity() {
         val startButton = findViewById<Button>(id.startButton)
         startButton.setOnClickListener {
 
-            // Ask for local network access before touching any transfer state, so bailing out
-            // is a plain return rather than a half-started transfer to unwind. Checked here
-            // rather than in startHotspot() because that only covers the hosting path — joining
-            // a hotspot and shared network mode need this just as much, and shared network mode
-            // never calls startHotspot() at all. Literal 37 rather than a VERSION_CODES
-            // constant: the codename for a just-released API level is the part most likely to
-            // be wrong, and SDK_INT comparisons don't need it.
-            if (Build.VERSION.SDK_INT >= 37 && ActivityCompat.checkSelfPermission(
-                    this, Manifest.permission.ACCESS_LOCAL_NETWORK
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
+            // Fallback for a denial at launch. Checked here rather than in startHotspot()
+            // because that only covers the hosting path — joining a hotspot and shared network
+            // mode need this just as much, and shared network mode never calls startHotspot()
+            // at all. Runs before any transfer state is touched, so bailing out is a plain
+            // return rather than a half-started transfer to unwind.
+            if (needsLocalNetworkPermission()) {
+                localNetworkPromptedFromStart = true
                 localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
                 return@setOnClickListener
             }
@@ -695,14 +736,19 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    // Logcat, not outputText: a raw permission constant is developer information, and this
+    // runs on every onResume as well as at startup, so on a first launch the transfer output
+    // opened with several lines of android.permission.* before the user had done anything.
+    // The user-facing half of this is the denial message in the request callback, which says
+    // what to do about it.
     private fun checkForBluetoothPermissions(): Boolean {
         for (permission in permissions) {
             if (ActivityCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-                viewModel.outputText("Missing permission: $permission")
+                Log.i("Flying Carpet", "Missing permission: $permission")
                 return false
             }
         }
-        viewModel.outputText("All permissions granted")
+        Log.i("Flying Carpet", "All permissions granted")
         return true
     }
 
@@ -711,10 +757,26 @@ class MainActivity : AppCompatActivity() {
         viewModel.bluetooth.bluetoothManager = bluetoothManager
 
         bluetoothRequestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results: Map<String, Boolean> ->
+            // An empty map means the request never reached the user: Android drops a
+            // permission request raised while another is already in flight, and dispatches
+            // the empty result synchronously, inside the launch() call. The loop below then
+            // never runs, allPermissionsGranted stays true, and initializeBluetooth() is
+            // re-entered — which finds the permissions still missing and launches again,
+            // recursing until the stack overflows. Cheap to hit: any second launch() during
+            // onCreate was enough. Bail instead; the switch stays tappable to retry (#101).
+            if (results.isEmpty()) {
+                Log.e("Bluetooth", "Permission request returned no results; not retrying")
+                return@registerForActivityResult
+            }
             var allPermissionsGranted = true
             for (result in results) {
-                viewModel.outputText("Have permission ${result.key}: ${result.value}")
-                if (!result.value) {
+                // one logcat line per permission rather than four constants in the output box;
+                // the single summary below is what the user needs
+                Log.i("Flying Carpet", "Have permission ${result.key}: ${result.value}")
+                // Only the Bluetooth permissions gate Bluetooth. ACCESS_LOCAL_NETWORK is in
+                // the same request but denying it must not disable BLE — it only affects
+                // whether a transfer can reach the peer, which the start button reports.
+                if (!result.value && result.key in permissions) {
                     allPermissionsGranted = false
                 }
             }
@@ -789,7 +851,7 @@ class MainActivity : AppCompatActivity() {
             viewModel.bluetooth.active = false
             bluetoothSwitch.isChecked = false
             applyConnectionModeUi()
-            bluetoothRequestPermissionLauncher.launch(permissions)
+            bluetoothRequestPermissionLauncher.launch(permissionsToRequest())
             return false
         }
         bluetoothPermissionsMissing = false
