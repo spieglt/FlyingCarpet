@@ -21,16 +21,40 @@ use windows::{
     Storage::Streams::DataWriter,
 };
 
+// E_ILLEGAL_METHOD_CALL: "a call to StopAdvertising can only be made on a service that is
+// already advertising". Not exported by the windows crate's Win32::Foundation constants.
+const E_ILLEGAL_METHOD_CALL: i32 = 0x8000_000E_u32 as i32;
+
 type CharacteristicReadHandler =
     TypedEventHandler<GattLocalCharacteristic, GattReadRequestedEventArgs>;
 type CharacteristicWriteHandler =
     TypedEventHandler<GattLocalCharacteristic, GattWriteRequestedEventArgs>;
+
+// Which event a token belongs to, since GattLocalCharacteristic has a separate remover per
+// event and the token alone doesn't say which one it came from.
+enum CharacteristicEvent {
+    Read,
+    Write,
+}
+
+struct CharacteristicHandler {
+    characteristic: GattLocalCharacteristic,
+    event: CharacteristicEvent,
+    token: EventRegistrationToken,
+}
 
 pub(crate) struct BluetoothPeripheral {
     tx: mpsc::Sender<BluetoothMessage>,
     service_provider: GattServiceProvider,
     // token for the AdvertisementStatusChanged handler, so stop_advertising() can remove it
     advertisement_status_token: Option<EventRegistrationToken>,
+    // Tokens for the six ReadRequested/WriteRequested handlers, paired with the characteristic
+    // each was registered on. WinRT offers no way to enumerate or clear a source's handlers,
+    // so the only way to unsubscribe is to keep the token next to its object. These used to be
+    // discarded at the registration site, which made them permanently unremovable: the
+    // provider and its characteristics were released with up to seven live registrations,
+    // whose closures own an mpsc::Sender and the ssid/password Arcs.
+    characteristic_tokens: Vec<CharacteristicHandler>,
     // ssid and password fields are set by main thread if we're hosting, so peer can read these.
     // if we're joining and peer is writing wifi info to us, we'll write those details back to
     // the main thread with tx.
@@ -54,6 +78,7 @@ impl BluetoothPeripheral {
             tx,
             service_provider,
             advertisement_status_token: None,
+            characteristic_tokens: Vec::new(),
             ssid: Arc::new(Mutex::new(None)),
             password: Arc::new(Mutex::new(None)),
         })
@@ -129,7 +154,12 @@ impl BluetoothPeripheral {
                 Ok(())
             },
         );
-        os_characteristic.ReadRequested(&os_read_callback)?;
+        let token = os_characteristic.ReadRequested(&os_read_callback)?;
+        self.characteristic_tokens.push(CharacteristicHandler {
+            characteristic: os_characteristic.clone(),
+            event: CharacteristicEvent::Read,
+            token,
+        });
 
         // OS write handler: send peer's OS back to main thread so that it can decide if we're starting or joining hotspot
         let os_write_tx = self.tx.clone();
@@ -151,7 +181,12 @@ impl BluetoothPeripheral {
                 Ok(())
             },
         );
-        os_characteristic.WriteRequested(&os_write_callback)?;
+        let token = os_characteristic.WriteRequested(&os_write_callback)?;
+        self.characteristic_tokens.push(CharacteristicHandler {
+            characteristic: os_characteristic.clone(),
+            event: CharacteristicEvent::Write,
+            token,
+        });
 
         // ssid read handler
         let callback_ssid = self.ssid.clone();
@@ -182,7 +217,12 @@ impl BluetoothPeripheral {
                 Ok(())
             },
         );
-        ssid_characteristic.ReadRequested(&ssid_read_callback)?;
+        let token = ssid_characteristic.ReadRequested(&ssid_read_callback)?;
+        self.characteristic_tokens.push(CharacteristicHandler {
+            characteristic: ssid_characteristic.clone(),
+            event: CharacteristicEvent::Read,
+            token,
+        });
 
         // ssid write handler
         let callback_tx = self.tx.clone();
@@ -205,7 +245,12 @@ impl BluetoothPeripheral {
                 Ok(())
             },
         );
-        ssid_characteristic.WriteRequested(&ssid_write_callback)?;
+        let token = ssid_characteristic.WriteRequested(&ssid_write_callback)?;
+        self.characteristic_tokens.push(CharacteristicHandler {
+            characteristic: ssid_characteristic.clone(),
+            event: CharacteristicEvent::Write,
+            token,
+        });
 
         // password read handler
         let callback_password = self.password.clone();
@@ -238,7 +283,12 @@ impl BluetoothPeripheral {
                 Ok(())
             },
         );
-        password_characteristic.ReadRequested(&password_read_callback)?;
+        let token = password_characteristic.ReadRequested(&password_read_callback)?;
+        self.characteristic_tokens.push(CharacteristicHandler {
+            characteristic: password_characteristic.clone(),
+            event: CharacteristicEvent::Read,
+            token,
+        });
 
         // password write handler
         let callback_tx = self.tx.clone();
@@ -261,7 +311,12 @@ impl BluetoothPeripheral {
                 Ok(())
             },
         );
-        password_characteristic.WriteRequested(&password_write_callback)?;
+        let token = password_characteristic.WriteRequested(&password_write_callback)?;
+        self.characteristic_tokens.push(CharacteristicHandler {
+            characteristic: password_characteristic.clone(),
+            event: CharacteristicEvent::Write,
+            token,
+        });
 
         Ok(())
     }
@@ -323,13 +378,45 @@ impl BluetoothPeripheral {
     // releasing the GattServiceProvider stops advertising, and the system holds a reference
     // to it to deliver GATT read/write requests, so dropping our reference may not bring the
     // refcount to zero. Stop explicitly rather than relying on that.
+    //
+    // The unsubscribe deliberately does not sit behind `?` on StopAdvertising: that failure is
+    // routine (see Drop), and skipping the removal left the handler registered on a provider
+    // that was about to be released. The central side already learned this — see the note on
+    // stop_watching() in central.rs, which unregisters "either way" for the same reason.
     pub fn stop_advertising(&mut self) -> Result<()> {
-        self.service_provider.StopAdvertising()?;
+        let stopped = self.service_provider.StopAdvertising();
         if let Some(token) = self.advertisement_status_token.take() {
-            self.service_provider
-                .RemoveAdvertisementStatusChanged(token)?;
+            if let Err(e) = self
+                .service_provider
+                .RemoveAdvertisementStatusChanged(token)
+            {
+                println!("Could not remove advertisement status handler: {}", e);
+            }
         }
-        Ok(())
+        stopped
+    }
+
+    /// Unsubscribes the ReadRequested/WriteRequested handlers registered in
+    /// `add_characteristics`.
+    ///
+    /// Separate from `stop_advertising` on purpose: that runs mid-transfer on the success path,
+    /// once the credentials have been exchanged, and the peer may still be reading. Tearing the
+    /// GATT handlers down there would answer those reads with nothing. This is teardown, so
+    /// only Drop calls it.
+    fn remove_characteristic_handlers(&mut self) {
+        for handler in self.characteristic_tokens.drain(..) {
+            let result = match handler.event {
+                CharacteristicEvent::Read => {
+                    handler.characteristic.RemoveReadRequested(handler.token)
+                }
+                CharacteristicEvent::Write => {
+                    handler.characteristic.RemoveWriteRequested(handler.token)
+                }
+            };
+            if let Err(e) = result {
+                println!("Could not remove characteristic handler: {}", e);
+            }
+        }
     }
 }
 
@@ -342,15 +429,20 @@ impl BluetoothPeripheral {
 // UUID -- a peer's central can then enumerate and read the stale one.
 impl Drop for BluetoothPeripheral {
     fn drop(&mut self) {
-        let status = self.service_provider.AdvertisementStatus();
-        if matches!(
-            status,
-            Ok(GattServiceProviderAdvertisementStatus::Started)
-                | Ok(GattServiceProviderAdvertisementStatus::StartedWithoutAllAdvertisementData)
-        ) {
-            if let Err(e) = self.stop_advertising() {
+        // No AdvertisementStatus() pre-check any more. It was a time-of-check/time-of-use gap —
+        // the system can abort the advertisement between the check and the call, so
+        // StopAdvertising still failed with E_ILLEGAL_METHOD_CALL — and worse, gating on it
+        // meant the handler unsubscribes below never ran unless we happened to observe
+        // "Started". Call unconditionally and treat "wasn't advertising" as success.
+        if let Err(e) = self.stop_advertising() {
+            if e.code().0 == E_ILLEGAL_METHOD_CALL {
+                // Nothing was advertising, which is all this teardown wanted. It printed as a
+                // scary line at the bottom of every transfer's terminal output.
+                println!("Advertisement was already stopped");
+            } else {
                 println!("Could not stop advertising on drop: {}", e);
             }
         }
+        self.remove_characteristic_handlers();
     }
 }
