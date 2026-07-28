@@ -287,3 +287,128 @@ this doc. What's still worth carrying:
   ~17 months behind the auto-updating rust-analyzer in the VS Code extension, breaking the
   proc-macro bridge ABI. Fixed by the toolchain upgrade; restart the server afterward. If it
   recurs, suspect toolchain/rust-analyzer skew before suspecting the code.
+
+---
+
+## 6. Windows code signing via SignPath Foundation
+
+Unsigned `.exe`/`.msi` means every Windows user meets the SmartScreen "Windows protected your
+PC" wall on download. It also has a second cost that only became obvious while fixing #129:
+the firewall rule prompt is a **UAC prompt on an unsigned binary**, so it says *Unknown
+publisher* rather than the author's name — on the one dialog we most want users to trust.
+
+**Route: SignPath Foundation**, which signs open-source projects for free using Sectigo
+certificates. Flying Carpet qualifies on every published condition: OSI-approved license with
+no commercial dual-licensing (GPL-3.0-only), public repository, actively maintained, and
+already shipping releases in the form to be signed.
+
+Alternatives, both rejected on cost/benefit rather than capability:
+
+- **Azure Trusted Signing** (rebranded Azure Artifact Signing in 2026), $9.99/mo for 5,000
+  signatures, open to verified US/CA/EU/UK businesses *and self-employed individuals*. The
+  disqualifier is that nothing is exportable: lose eligibility or leave Azure and signing
+  stops, with no certificate to carry elsewhere.
+- **A traditional OV certificate**, ~$200-400/yr, and since the 2023 CA/Browser Forum rules
+  the private key must live on a FIPS 140-2 Level 2 token or HSM — no more `.pfx` on disk.
+
+### Order of operations
+
+Apply to the Foundation **first**. The application requires a project that already publishes
+releases, and it issues the `organization-id`, `project-slug`, and `signing-policy-slug` that
+the workflow has to reference — so the workflow cannot be finished before acceptance.
+
+### Constraints that shape the CI design
+
+- **GitHub-hosted runners only.** For OSS projects, every job leading up to the signing
+  request must run on GitHub-hosted agents. Self-hosted is permitted only for non-OSS.
+- **Origin verification dislikes caches.** Build settings must be fully determined by config
+  under source control with no manual overrides in the job, and builds must not be
+  contaminated by previous builds' caches. So **no `Swatinem/rust-cache`** here. A cold
+  `cargo tauri build` on `windows-latest` runs ~20 minutes, which is acceptable for something
+  that only fires on a version tag. Confirm the exact caching stance against the assigned
+  policy.
+- **This repo has no CI at all** — `.github/` holds only `FUNDING.yml` — so this is the first
+  workflow, and nothing existing depends on it.
+
+### The Tauri wrinkle — decide this deliberately
+
+Windows bundling produces three signable artifacts, and the installers **embed** the app
+binary:
+
+1. `target/release/FlyingCarpet.exe` — the app binary
+2. `target/release/bundle/nsis/FlyingCarpet_<v>_x64-setup.exe` — renamed to `FlyingCarpet_<v>.exe`
+3. `target/release/bundle/msi/FlyingCarpet_<v>_x64_en-US.msi`
+
+Signing only the installers leaves the *installed* `FlyingCarpet.exe` unsigned, which means
+the firewall UAC prompt still reads "Unknown publisher" — i.e. the specific problem above goes
+unfixed. Doing it properly needs two signing requests: `tauri build --no-bundle`, sign the
+binary, drop it back into `target/release/`, then `tauri bundle` and sign the installers.
+Start with the one-request version to prove the pipeline, then add the second.
+
+### Workflow skeleton
+
+Only one secret to configure, `SIGNPATH_API_TOKEN`. Artifacts pass by ID, not by path.
+
+```yaml
+name: Sign Windows Release
+on:
+  push:
+    tags: ['v*']
+jobs:
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write   # attach assets to the release
+      actions: read     # SignPath reads the workflow run
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install tauri-cli --version "^2" --locked
+      - run: cargo tauri build
+        working-directory: "Flying Carpet"
+      - name: Stage artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp target/release/bundle/nsis/*.exe dist/
+          cp target/release/bundle/msi/*.msi  dist/
+      - id: unsigned
+        uses: actions/upload-artifact@v4
+        with: { name: unsigned-windows, path: dist/ }
+      - uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORG_ID }}
+          project-slug: flyingcarpet
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: windows-installers
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed/
+      - uses: softprops/action-gh-release@v2
+        with: { files: signed/* }
+```
+
+### Two things that will look like bugs and aren't
+
+- **The first runs appear to hang.** Foundation release-signing policies typically require a
+  human approver in the SignPath UI, and `wait-for-completion: true` blocks until that
+  happens.
+- **Asset names must be renamed.** Tauri emits `FlyingCarpet_<v>_x64-setup.exe`, but the
+  published asset is `FlyingCarpet_<v>.exe`. Without a rename step the download links and
+  release history go inconsistent.
+
+### Scope
+
+Windows only. Android already signs with the release keystore — its certificate
+(`b6b7891c…c211405`, `CN=Theron Spiegl`) was verified on 2026-07-27 to still match F-Droid's
+`AllowedAPKSigningKeys`, so developer verification did not disturb it. Apple has its own
+notarization path, and the `.deb`/`.AppImage` are unaffected.
+
+Separately noted while checking that: the release APK is signed with **v2 only** (no v3), so
+there is no `PROOF_OF_ROTATION` path — that keystore is permanent and unrecoverable-critical
+for both Play and F-Droid. Enabling v3 on a future release is a one-line `signingConfig`
+change but does not retroactively help published versions.
+
+References: `docs.signpath.io/trusted-build-systems/github`, `docs.signpath.io/origin-verification`,
+`signpath.org/terms.html`.
