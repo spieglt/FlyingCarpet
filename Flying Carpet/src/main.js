@@ -664,7 +664,7 @@ window.peerChange = peerChange;
 window.connectionModeChange = connectionModeChange;
 
 const aboutMessage = `https://flyingcarpet.spiegl.dev
-Version: 10.0.0
+Version: 10.0.1
 theron@spiegl.dev
 Copyright (c) 2026, Theron Spiegl
 All rights reserved.
