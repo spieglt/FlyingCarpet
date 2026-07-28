@@ -68,13 +68,34 @@ read happened (`PeerReadPassword` / `BluetoothMessage::Password`) immediately be
 sleeping. Worth checking whether the event already guarantees what the sleep is buying; if
 so these are free to delete.
 
-**Android's 1.6 s before `discoverServices()` deserves special mention** — its own comment
-says the delay was *not* the fix:
+**Android's 1.6 s before `discoverServices()` — this entry was wrong, corrected 2026-07-27.**
+
+The original claim here was that its own comment admitted the delay wasn't the fix:
 
 > `// this was the reason android couldn't connect to macOS? no, was the setLegacy(false).`
 
-That is a sleep whose author recorded, in the code, that it didn't solve the problem it was
-added for. It survived anyway.
+…and that it was therefore a sleep whose author recorded, in the code, that it didn't solve
+the problem it was added for.
+
+That reading was mistaken, and the comment invited it. 1600 ms is **Nordic's
+Android-BLE-Library constant**: after `onConnectionStateChange` on a *bonded* device their
+guidance is to wait ~1.6 s before `discoverServices()`, so the Service Changed indication and
+key exchange complete first — discover earlier and you can enumerate a stale GATT database.
+The value matches exactly and is near-certainly copied from there. The macOS note was
+answering a *different* question that happened to be asked on the same line; `setLegacy(false)`
+was the macOS fix and has nothing to do with the delay.
+
+So the delay has a real, documented rationale, and it is **not** superstition. It is still
+arguably removable — Nordic report the problem was primarily Android 6 and unnecessary by 7-8,
+while `minSdk` here is 29 — but that is a deliberate change needing its own device test
+(a first-time pairing against a bonded peer, the case the delay protects), not a cleanup.
+Flying Carpet bonds, and nothing in `Bluetooth.kt` invalidates the GATT cache, so the stale-
+database failure mode has no other mitigation. **Left in place**; the code comment now records
+all of this.
+
+Lesson worth keeping: a confusing comment adjacent to a magic number is enough to get the
+number itself convicted. Check whether a constant matches a known upstream value before
+calling it superstition.
 
 ### 2. Android sleeps on the Bluetooth callback thread — a real bug, not just a delay
 
@@ -101,6 +122,17 @@ didn't cross over. `Thread.sleep(1600)` before `discoverServices()` is in the sa
 context and has the same problem.
 
 This is the one item in the audit I'd call an outright defect rather than a smell.
+
+**Status: fixed in `5cec37c`** ("get off the binder thread"), which replaced both sleeps with
+`handler.postDelayed`. Note the defect was *sleeping on the binder thread*, not the existence
+of the 1.6 s wait — see the correction in section 1. The scheduled version keeps the wait and
+stops blocking other callbacks, which is the intended end state, not a compromise.
+
+One thing the move to `postDelayed` introduced: a check made when the runnable is *scheduled*
+is stale by the time it *fires*. `exchangeComplete` was tested before the 1600 ms delay but
+not inside it, so a discovery could still run against a peer that had torn its service down
+during the wait, producing a spurious "try unpairing" message in the transfer output. Fixed by
+re-checking inside the runnable. Worth remembering for any other sleep converted this way.
 
 ### 3. The end-of-transfer confirmation — 3 sites, and the code says so
 

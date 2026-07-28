@@ -642,21 +642,40 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                     bluetoothFailed()
                     return
                 }
-                outputText("Discovered ${gatt.services.size} services")
+                // Post-exchange this is the peer's teardown being observed, not progress worth
+                // reporting: BLE has nothing left to contribute and the user is watching for
+                // the Wi-Fi join. Keep it in logcat, out of the transfer output.
+                if (exchangeComplete || tearingDown) {
+                    Log.i("Bluetooth", "Discovered ${gatt.services.size} services")
+                } else {
+                    outputText("Discovered ${gatt.services.size} services")
+                }
                 val service = gatt.getService(SERVICE_UUID)
                 if (service == null) {
                     // Android caches the GATT database for bonded devices, and every peripheral
-                    // removes its service at teardown, so a stale cache lands exactly here.
-                    // Reaching this *after* the credential exchange means the opposite, though:
-                    // the peer really did remove its service, on purpose, and the transfer has
-                    // already moved to Wi-Fi. bluetoothFailed() is gated on exchangeComplete for
-                    // that case (MainViewModel), so getting here is genuinely a pre-exchange
-                    // failure and the unpair advice below applies.
-                    outputText(
-                        "Did not find the Flying Carpet service on the peer. If the other " +
-                        "device has started its transfer, try unpairing the two devices from " +
-                        "each other and running the transfer again."
-                    )
+                    // removes its service at teardown, so a stale cache lands exactly here and
+                    // the unpair advice is the right remedy.
+                    //
+                    // *After* the credential exchange it means the opposite: the peer removed
+                    // its service on purpose, the transfer has already moved to Wi-Fi, and
+                    // nothing is wrong. bluetoothFailed() has been gated on exchangeComplete for
+                    // that case, but the gate is downstream — this message printed first and
+                    // unconditionally, so the benign teardown still announced a failure, and it
+                    // landed in the gap between "Joining <ssid>" and the hotspot association
+                    // where the user has nothing else to look at. Reported as looking like a
+                    // failed transfer that then succeeded anyway.
+                    if (exchangeComplete || tearingDown) {
+                        Log.i(
+                            "Bluetooth",
+                            "Peer removed its Flying Carpet service after the exchange; expected"
+                        )
+                    } else {
+                        outputText(
+                            "Did not find the Flying Carpet service on the peer. If the other " +
+                            "device has started its transfer, try unpairing the two devices from " +
+                            "each other and running the transfer again."
+                        )
+                    }
                     bluetoothFailed()
                     return
                 }
@@ -747,15 +766,31 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
                         Log.i("Bluetooth", "Skipping rediscovery; credential exchange complete or transfer torn down")
                         return
                     }
-                    // this was the reason android couldn't connect to macOS? no, was the setLegacy(false). diagnosed by comparing nRF Connect logs from Flying Carpet pairings to nRF Connect pairings.
-                    // The settle delay is kept, but scheduled rather than slept: this
-                    // callback runs on the GATT binder thread, and sleeping there stalls
-                    // every other callback (including the disconnect that would explain a
-                    // failure) behind it. Only fire if this is still the live connection —
-                    // a link that dropped during the delay would otherwise produce a
-                    // spurious "could not start discovery" on a closed client.
+                    // 1600ms is Nordic's Android-BLE-Library constant: on a bonded device,
+                    // wait ~1.6s before discoverServices() so the Service Changed indication
+                    // and key exchange land first, or you enumerate a stale GATT database. We
+                    // bond and never invalidate the cache. Possibly removable (Nordic say it
+                    // was an Android 6 problem; minSdk is 29) — see
+                    // docs/hardcoded-delays-audit.md before touching it.
+                    //
+                    // Scheduled rather than slept: this callback runs on the GATT binder
+                    // thread, and sleeping there stalls every other callback behind it. Only
+                    // fire if this is still the live connection, or a link that dropped during
+                    // the delay produces a spurious "could not start discovery".
                     gatt?.let {
                         handler.postDelayed({
+                            // Re-check on fire, not just at schedule time: the exchange can
+                            // finish inside the 1600ms (~900ms observed) and the peer drops its
+                            // service when it does, so a stale discovery lands in the
+                            // service-missing branch and printed the "try unpairing" advice
+                            // mid-join.
+                            if (exchangeComplete || tearingDown) {
+                                Log.i(
+                                    "Bluetooth",
+                                    "Skipping scheduled discovery; exchange completed during the settle delay"
+                                )
+                                return@postDelayed
+                            }
                             if (bluetoothGatt === it) {
                                 startDiscovery(it, "connected")
                             }
