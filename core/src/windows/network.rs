@@ -15,7 +15,7 @@ use windows::Win32::NetworkManagement::WindowsFirewall::{
     INetFwPolicy2, INetFwRule, INetFwRules, NetFwPolicy2, NET_FW_ACTION_BLOCK,
 };
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitialize, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+    CoCreateInstance, CoInitialize, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
 };
 use windows::Win32::System::Diagnostics::Debug::{
     self, FORMAT_MESSAGE_FROM_SYSTEM, FORMAT_MESSAGE_IGNORE_INSERTS,
@@ -224,7 +224,12 @@ fn run_shell_execute(
     let program = to_wide(program);
     let parameters = parameters.map(to_wide);
     unsafe {
-        CoInitialize(None).unwrap();
+        // Not unwrapped: CoInitialize requests an STA, and the firewall lookup now puts a
+        // worker into an MTA, so on a thread that already ran the lookup this returns
+        // RPC_E_CHANGED_MODE and the old unwrap() would panic — trading the teardown hang for
+        // a crash on the first machine that needs a rule added. ShellExecuteW does not require
+        // that this call succeed; the apartment we end up in is good enough for it.
+        let _ = CoInitialize(None);
         let res = ShellExecuteW(
             GetDesktopWindow(),
             PCWSTR::from_raw(mode.as_ptr()),
@@ -863,13 +868,23 @@ pub async fn ensure_firewall_rules<T: UI>(ui: &T) -> Result<(), FCError> {
 /// which is why `add_firewall_rule` still shells out to an elevated `netsh`.
 fn check_for_firewall_rule(rule_name: &str, program_path: &str) -> Result<bool, FCError> {
     unsafe {
-        // Initialize the apartment but deliberately don't tear it down, matching
-        // run_shell_execute above. This runs on a tokio worker thread we don't own, so
-        // CoUninitialize here could pull COM out from under something else still using it;
-        // a leaked apartment reference on a pooled thread is the cheaper mistake. Already
-        // being initialized (S_FALSE) or initialized in another mode (RPC_E_CHANGED_MODE)
-        // are both fine — COM is usable either way, so the result is ignored.
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        // MULTITHREADED, emphatically not APARTMENTTHREADED. This runs inline on a tokio
+        // worker we don't own and deliberately never uninitializes, so whatever apartment is
+        // chosen here is what that pooled thread keeps for the rest of the process. An STA is
+        // thread-affine and services cross-thread calls through a Windows message pump, which
+        // a tokio worker never runs — so every WinRT object subsequently created on that
+        // worker (the WiFi Direct publisher, the GATT service provider) became callable only
+        // from that one thread. Teardown runs after an await and therefore often on a
+        // *different* worker, where stopping the hotspot marshals into a pump that will never
+        // run and blocks forever: the transfer task hangs in a synchronous call with no await
+        // left for cancel's abort() to land on, so Cancel Transfer never returns and the
+        // window won't close. In an MTA, objects are not thread-affine and no pump is needed.
+        //
+        // Already initialized (S_FALSE), or initialized in another mode
+        // (RPC_E_CHANGED_MODE), are both fine — COM is usable either way — so the result is
+        // ignored. Note RPC_E_CHANGED_MODE means we did *not* get an MTA, which is why
+        // run_shell_execute must not leave an STA on a shared worker either.
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
 
         let policy: INetFwPolicy2 = CoCreateInstance(&NetFwPolicy2, None, CLSCTX_INPROC_SERVER)?;
         let rules: INetFwRules = policy.Rules()?;
