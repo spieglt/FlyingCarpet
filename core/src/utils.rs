@@ -1,7 +1,6 @@
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use std::{
-    ffi::{c_char, CString},
     fs, io,
     path::{Path, PathBuf},
     process,
@@ -409,8 +408,4 @@ mod tests {
             Err(e) => println!("{}", e),
         }
     }
-}
-
-pub fn rust_to_c_string(s: &str) -> *const c_char {
-    CString::new(s).unwrap().into_raw()
 }
