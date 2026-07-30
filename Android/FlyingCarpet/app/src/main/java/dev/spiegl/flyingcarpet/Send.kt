@@ -87,7 +87,7 @@ private fun MainViewModel.checkForFileSending(file: DocumentFile): Boolean {
     val hasFileBytes = readNBytes(8, inputStream)
     val hasFile = ByteBuffer.wrap(hasFileBytes).long == 1L
     return if (hasFile) {
-        val localHash = hashFile(file)
+        val localHash = hashFile(file.uri)
         outputStream.write(localHash)
 
         // if receiving end's copy of the file doesn't match, we need to do the transfer, so we return true

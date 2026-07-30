@@ -1,5 +1,6 @@
 package dev.spiegl.flyingcarpet
 
+import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -30,6 +31,7 @@ suspend fun MainViewModel.receiveFile(lastFile: Boolean) {
 
     // detect if filename has folders in its path. if so, make them
     val destinationFolder = makeParentDirectories(filename)
+        ?: safCache?.rootDocumentFile()
         ?: DocumentFile.fromTreeUri(getApplication(), receiveDir)
         ?: throw Exception("Could not get DocumentFile from receiveDir.")
 
@@ -130,40 +132,46 @@ private fun MainViewModel.receiveFileDetails(): Pair<String, Long> {
 
 // returns true if we need the transfer, false if not
 private fun MainViewModel.checkForFileReceiving(filename: String, size: Long): Boolean {
-    // check if file by this name and size exists
-    var targetFile: DocumentFile? = DocumentFile.fromTreeUri(getApplication(), receiveDir)
-        ?: throw Exception("Error reading folder: $receiveDir")
-    val children = filename.split('/')
-    var fileExists = true
-    for (file in children) {
-        targetFile = targetFile?.findFile(file)
-        if (targetFile == null) {
-            fileExists = false
-            break
-        }
-    }
-    if (fileExists) {
-        // check size
-        // currentDir should now be the actual file, so we can get its size
-        if (targetFile != null && size == targetFile.length()) { // null check shouldn't be necessary since fileExists == true but cleaner than !!
-            // name and size both match, so we need to ask sending end for the hash and calculate it ourselves
-            outputStream.write(one)
-            val localHash = hashFile(targetFile)
-            val peerHash = readNBytes(32, inputStream)
-            var hashesMatch = true
-            for (i in 0 until 32) {
-                if (localHash[i] != peerHash[i]) {
-                    hashesMatch = false
-                }
+    // Does a file of this name and size already exist? Resolved against the cached directory
+    // listing; the equivalent findFile() walk cost a full directory enumeration per path
+    // component (see SafDirectoryCache).
+    val existing = resolveExistingFile(filename)
+    if (existing != null && existing.size == size) {
+        // name and size both match, so we need to ask sending end for the hash and calculate it ourselves
+        outputStream.write(one)
+        val localHash = hashFile(existing.uri)
+        val peerHash = readNBytes(32, inputStream)
+        var hashesMatch = true
+        for (i in 0 until 32) {
+            if (localHash[i] != peerHash[i]) {
+                hashesMatch = false
             }
-            outputStream.write(if (hashesMatch) { one } else { zero })
-            return !hashesMatch
-        } else {
-            outputStream.write(zero)
         }
-    } else {
-        // file doesn't exist so tell sending end we don't have it, we need the transfer, and return true
-        outputStream.write(zero)
+        outputStream.write(if (hashesMatch) { one } else { zero })
+        return !hashesMatch
     }
+    // either it doesn't exist or the size differs, so tell the sending end we need the
+    // transfer and return true
+    outputStream.write(zero)
     return true
+}
+
+// A file already at `filename` (relative, "/"-separated) under the receive directory, with
+// its size and URI, or null if there's nothing there.
+private class ExistingFile(val uri: Uri, val size: Long)
+
+private fun MainViewModel.resolveExistingFile(filename: String): ExistingFile? {
+    safCache?.let { cache ->
+        val entry = cache.resolve(filename) ?: return null
+        if (entry.isDirectory) return null
+        return ExistingFile(cache.documentUri(entry.documentId), entry.size)
+    }
+    // No cache outside a receive transfer: the original findFile() walk.
+    var target: DocumentFile? = DocumentFile.fromTreeUri(getApplication(), receiveDir)
+        ?: throw Exception("Error reading folder: $receiveDir")
+    for (component in filename.split('/')) {
+        target = target?.findFile(component) ?: return null
+    }
+    val found = target ?: return null
+    return ExistingFile(found.uri, found.length())
 }

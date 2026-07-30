@@ -3,6 +3,7 @@ package dev.spiegl.flyingcarpet
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
@@ -75,16 +76,41 @@ fun sanitizeRelativeFilename(filename: String): String {
 }
 
 fun MainViewModel.makeParentDirectories(filename: String): DocumentFile? {
-    var currentDir = DocumentFile.fromTreeUri(getApplication(), receiveDir)
     val childDirs = File(filename).parent?.split('/') ?: return null
-    for (dir in childDirs) {
-        if (currentDir == null) {
-            throw Exception("Could not make parent directories, couldn't get currentDir.")
+    val cache = safCache ?: run {
+        // No cache outside a receive transfer: the original findFile() walk.
+        var currentDir = DocumentFile.fromTreeUri(getApplication(), receiveDir)
+        for (dir in childDirs) {
+            if (currentDir == null) {
+                throw Exception("Could not make parent directories, couldn't get currentDir.")
+            }
+            currentDir = currentDir.findFile(dir) ?: currentDir.createDirectory(dir)
         }
-        val proposedDir = currentDir.findFile(dir)
-        currentDir = proposedDir ?: currentDir.createDirectory(dir)
+        return currentDir
     }
-    return currentDir
+    var dirId = cache.rootDocumentId
+    for (dir in childDirs) {
+        val existing = cache.child(dirId, dir)
+        if (existing != null && !existing.isDirectory) {
+            // The old walk descended into whatever findFile() returned, so a file sharing a
+            // folder's name became the destination directory and failed later, obscurely.
+            throw Exception("Cannot create folder \"$dir\": a file by that name already exists.")
+        }
+        dirId = existing?.documentId ?: run {
+            val parent = cache.documentFile(dirId)
+                ?: throw Exception("Could not make parent directories, couldn't get currentDir.")
+            val created = parent.createDirectory(dir)
+                ?: throw Exception("Could not create directory \"$dir\".")
+            val id = created.treeDocumentId()
+            cache.note(dirId, SafDirectoryCache.Entry(id, created.name ?: dir, 0, true))
+            id
+        }
+    }
+    // Throws rather than returning null on failure: the caller reads a null return as "this
+    // filename has no parent directories", and would silently write the file to the top of
+    // the receive directory instead of the folder it belongs in.
+    return cache.documentFile(dirId)
+        ?: throw Exception("Could not open the destination folder for \"$filename\".")
 }
 
 // returns an array of tuples where the first item is the file and the second item is the path
@@ -111,8 +137,7 @@ fun getFilesInDir(dir: DocumentFile, pathSoFar: String): Array<Pair<DocumentFile
     return allFiles
 }
 
-fun MainViewModel.hashFile(file: DocumentFile): ByteArray {
-    val uri = file.uri
+fun MainViewModel.hashFile(uri: Uri): ByteArray {
     val stream = getApplication<Application>().contentResolver.openInputStream(uri)
         ?: throw Exception("Could not open file to hash")
     val buffer = ByteArray(1_000_000)

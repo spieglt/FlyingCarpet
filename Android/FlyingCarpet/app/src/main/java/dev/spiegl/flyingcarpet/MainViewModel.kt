@@ -77,6 +77,9 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     var fileStreams: MutableList<InputStream> = mutableListOf()
     var filePaths: MutableList<String> = mutableListOf() // paths relative to root directory peer is sending to
     lateinit var receiveDir: Uri
+    // Per-transfer directory listing for the receive tree, replacing DocumentFile.findFile().
+    // Rebuilt at the start of each transfer so a folder changed between transfers is seen.
+    var safCache: SafDirectoryCache? = null
     lateinit var sendDir: Uri
     var sendFolder: Boolean = false
     private lateinit var server: ServerSocket // TCP listener, used to release port when transfer fails/ends/is cancelled
@@ -208,6 +211,13 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             outputStream = transport.output
         }
         outputText("Encrypted connection established.")
+        // Assigned unconditionally: a cache left over from a previous transfer must not
+        // survive into this one, whichever direction it runs in.
+        safCache = if (mode == Mode.Receiving && this::receiveDir.isInitialized) {
+            SafDirectoryCache(getApplication(), receiveDir)
+        } else {
+            null
+        }
         // send/receive
         if (mode == Mode.Sending) {
             // tell receiving end how many files we're sending
@@ -247,6 +257,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
     fun cleanUpTransfer() {
         transferIsRunning = false
+        safCache = null
         // cancel shared network discovery if it's running
         discoveryManager?.cancel()
         discoveryManager = null
@@ -844,12 +855,19 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         // work with the base name: destinationDir is already the file's parent
         // directory, and a "(n) name" alternative must not contain separators
         val base = filename.split("/").last()
+        val dirId = destinationDir.treeDocumentId()
+        val cache = safCache
+        // Answered from the cached directory listing: this loop used to cost one full
+        // directory enumeration per candidate name.
+        fun taken(name: String) = if (cache != null) {
+            cache.hasChild(dirId, name)
+        } else {
+            destinationDir.findFile(name) != null
+        }
         var newFileName = base
-        var fileHandle = destinationDir.findFile(newFileName)
         var i = 1
-        while (fileHandle != null) {
+        while (taken(newFileName)) {
             newFileName = "($i) $base"
-            fileHandle = destinationDir.findFile(newFileName)
             i++
         }
         return newFileName
@@ -858,6 +876,22 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     fun getOutputStreamForFile(destinationDir: DocumentFile, filename: String): OutputStream {
         val newFile =
             destinationDir.createFile("*/*", filename) ?: throw Exception("Could not create file URI")
+        // Record it so the collision loop sees it without re-querying. The name comes from
+        // the provider, not from `filename`, because the provider may not honour the
+        // requested display name exactly (it de-duplicates and can append an extension).
+        //
+        // Size is recorded as 0 and not corrected once the file is written, so within a
+        // single transfer a second file arriving at an already-received path is written as
+        // "(1) name" rather than being skipped as a duplicate. Only reachable by sending two
+        // files with the same relative path in one transfer; across transfers the cache is
+        // rebuilt from the directory, so the usual skip-if-identical still applies.
+        safCache?.let { cache ->
+            val created = newFile.treeDocumentId()
+            cache.note(
+                destinationDir.treeDocumentId(),
+                SafDirectoryCache.Entry(created, newFile.name ?: filename, 0, false),
+            )
+        }
         return getApplication<Application>().contentResolver.openOutputStream(newFile.uri)
             ?: throw Exception("Could not open output stream to new file")
     }
