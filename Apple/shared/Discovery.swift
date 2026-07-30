@@ -423,18 +423,35 @@ class DiscoveryService {
                     continue
                 }
 
-                print("[Discovery] Found valid peer at \(announcement.getIPString())")
+                // The announced IP is the peer's own idea of its address; the datagram
+                // source is where its packets actually come from. Trust the source when
+                // they disagree (e.g. the peer announced a VPN tun address): the
+                // announcement is already authenticated, and a redirected connection
+                // can't pass the Noise handshake anyway.
+                let announcedIP = announcement.getIPString()
+                var peerIP = announcedIP
+                if srcAddr.sin_family == sa_family_t(AF_INET) {
+                    let src = String(cString: inet_ntoa(srcAddr.sin_addr))
+                    if src != "0.0.0.0" { peerIP = src }
+                }
+                print("[Discovery] Found valid peer at \(announcedIP) (source \(peerIP))")
                 if role == .receiver {
                     // The receiver's completion signal is the sender's TCP connection,
                     // not discovery. Keep announcing so the sender can find us; this
                     // is informational only.
                     if !foundSender {
                         foundSender = true
-                        output("Found the sender at \(announcement.getIPString()). Waiting for it to connect...")
+                        if peerIP != announcedIP {
+                            output("Peer announced \(announcedIP) but its packets arrive from \(peerIP); using \(peerIP).")
+                        }
+                        output("Found the sender at \(peerIP). Waiting for it to connect...")
                     }
                     continue
                 }
-                return announcement.getIPString()
+                if peerIP != announcedIP {
+                    output("Peer announced \(announcedIP) but its packets arrive from \(peerIP); using \(peerIP).")
+                }
+                return peerIP
             } else if bytesRead < 0 && errno != EAGAIN && errno != EWOULDBLOCK {
                 throw DiscoveryError.networkError("recvfrom failed: \(String(cString: strerror(errno)))")
             }

@@ -124,7 +124,8 @@ data class DiscoveryAnnouncement(
     }
 }
 
-/// Returns the list of host IPs to scan, or null if the subnet is too large.
+/// Returns the list of host IPs to scan, or null if the subnet is too large or has no
+/// other host addresses (/31, /32).
 fun unicastScanTargets(localIp: InetAddress, prefixLength: Int): List<InetAddress>? {
     if (prefixLength > 30 || prefixLength <= 0) return null
 
@@ -155,28 +156,14 @@ fun unicastScanTargets(localIp: InetAddress, prefixLength: Int): List<InetAddres
     return targets
 }
 
-/// Gets the prefix length for the given local IP from NetworkInterface.
-fun getPrefixLength(localIp: InetAddress): Int {
-    try {
-        val networkInterface = NetworkInterface.getByInetAddress(localIp)
-        if (networkInterface != null) {
-            for (addr in networkInterface.interfaceAddresses) {
-                if (addr.address == localIp) {
-                    return addr.networkPrefixLength.toInt()
-                }
-            }
-        }
-    } catch (e: Exception) {
-        Log.w("Discovery", "Could not get prefix length: ${e.message}")
-    }
-    return 24 // default fallback
-}
-
 class DiscoveryManager(
     private val context: Context,
     private val key: ByteArray,
     private val role: DiscoveryRole,
     private val localIp: InetAddress,
+    // from the selected network's LinkAddress: NetworkInterface's prefix reporting is
+    // unreliable on Android, so don't re-derive it from the bare address
+    private val prefixLength: Int,
     private val outputText: (String) -> Unit
 ) {
     private val cancelled = AtomicBoolean(false)
@@ -249,10 +236,13 @@ class DiscoveryManager(
                 }
 
                 val unicastSender = launch {
-                    val prefixLength = getPrefixLength(localIp)
                     val targets = unicastScanTargets(localIp, prefixLength)
                     if (targets == null) {
-                        outputText("Subnet too large for unicast scan (/$prefixLength), relying on multicast only.")
+                        if (prefixLength > 30 || prefixLength <= 0) {
+                            outputText("No other hosts possible on a /$prefixLength network, relying on multicast only.")
+                        } else {
+                            outputText("Subnet too large for unicast scan (/$prefixLength), relying on multicast only.")
+                        }
                         return@launch
                     }
                     outputText("Scanning ${targets.size} addresses on the local /$prefixLength subnet...")
@@ -346,18 +336,30 @@ class DiscoveryManager(
                             continue
                         }
 
+                        // The announced IP is the peer's own idea of its address; the datagram
+                        // source is where its packets actually come from. Trust the source when
+                        // they disagree (e.g. the peer announced a VPN tun address): the
+                        // announcement is already authenticated, and a redirected connection
+                        // can't pass the Noise handshake anyway.
+                        val peerIp = (packet.address as? Inet4Address) ?: receivedIp
                         if (role == DiscoveryRole.RECEIVER) {
                             // The receiver's completion signal is the sender's TCP connection,
                             // not discovery. Keep announcing so the sender can find us; this
                             // is informational only.
                             if (!foundSender) {
                                 foundSender = true
-                                outputText("Found the sender at ${receivedIp.hostAddress}. Waiting for it to connect...")
+                                if (peerIp != receivedIp) {
+                                    outputText("Peer announced ${receivedIp.hostAddress} but its packets arrive from ${peerIp.hostAddress}; using ${peerIp.hostAddress}.")
+                                }
+                                outputText("Found the sender at ${peerIp.hostAddress}. Waiting for it to connect...")
                             }
                             continue
                         }
-                        outputText("Discovered peer at ${receivedIp.hostAddress}")
-                        result.complete(receivedIp as? Inet4Address)
+                        if (peerIp != receivedIp) {
+                            outputText("Peer announced ${receivedIp.hostAddress} but its packets arrive from ${peerIp.hostAddress}; using ${peerIp.hostAddress}.")
+                        }
+                        outputText("Discovered peer at ${peerIp.hostAddress}")
+                        result.complete(peerIp as? Inet4Address)
                         return@launch
                     }
                     result.complete(null)

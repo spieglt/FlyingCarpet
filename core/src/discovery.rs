@@ -246,7 +246,8 @@ impl DiscoveryAnnouncement {
 }
 
 /// Returns an iterator of host addresses in the subnet, excluding `local_ip`.
-/// Returns None if the subnet is too large (> MAX_UNICAST_SCAN_HOSTS) or too small.
+/// Returns None if the subnet is too large (> MAX_UNICAST_SCAN_HOSTS) or has no
+/// other host addresses (/31, /32).
 fn unicast_scan_targets(local_ip: Ipv4Addr, prefix_len: u8) -> Option<Vec<Ipv4Addr>> {
     if prefix_len > 30 || prefix_len == 0 {
         return None;
@@ -467,20 +468,43 @@ impl DiscoveryService {
                                     announcement.get_ip_address(),
                                     src_addr
                                 );
+                                // The announced IP is the peer's own idea of its address;
+                                // the datagram source is where its packets actually come
+                                // from. Trust the source when they disagree (e.g. the peer
+                                // announced a VPN tun address): the announcement is already
+                                // authenticated, and a redirected connection can't pass the
+                                // Noise handshake anyway.
+                                let announced_ip = announcement.get_ip_address();
+                                let peer_ip = match src_addr {
+                                    SocketAddr::V4(v4) => *v4.ip(),
+                                    _ => announced_ip,
+                                };
                                 if our_role == DiscoveryRole::Receiver {
                                     // The receiver's completion signal is the sender's TCP
                                     // connection, not discovery. Keep announcing so the
                                     // sender can find us; this is informational only.
                                     if !found_sender {
                                         found_sender = true;
+                                        if peer_ip != announced_ip {
+                                            ui.output(&format!(
+                                                "Peer announced {} but its packets arrive from {}; using {}.",
+                                                announced_ip, peer_ip, peer_ip
+                                            ));
+                                        }
                                         ui.output(&format!(
                                             "Found the sender at {}. Waiting for it to connect...",
-                                            announcement.get_ip_address()
+                                            peer_ip
                                         ));
                                     }
                                     continue;
                                 }
-                                let _ = tx.send(announcement.get_ip_address()).await;
+                                if peer_ip != announced_ip {
+                                    ui.output(&format!(
+                                        "Peer announced {} but its packets arrive from {}; using {}.",
+                                        announced_ip, peer_ip, peer_ip
+                                    ));
+                                }
+                                let _ = tx.send(peer_ip).await;
                                 break;
                             } else {
                                 println!(
@@ -568,8 +592,17 @@ impl DiscoveryService {
                     tokio::time::sleep(Duration::from_millis(DISCOVERY_INTERVAL_MS)).await;
                 }
             });
+        } else if self.prefix_len > 30 || self.prefix_len == 0 {
+            // unicast_scan_targets' degenerate case: a /31 or /32 has no other hosts
+            ui.output(&format!(
+                "No other hosts possible on a /{} network, relying on multicast only.",
+                self.prefix_len
+            ));
         } else {
-            ui.output("Subnet too large for unicast scan, relying on multicast only.");
+            ui.output(&format!(
+                "Subnet too large for unicast scan (/{}), relying on multicast only.",
+                self.prefix_len
+            ));
         }
 
         // Wait for peer discovery. There's deliberately no timeout: the user may start

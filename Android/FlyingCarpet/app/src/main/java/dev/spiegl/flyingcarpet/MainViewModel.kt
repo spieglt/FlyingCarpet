@@ -399,7 +399,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     private suspend fun findPeerOnSharedNetwork() {
         val connectivityManager = application
             .getSystemService(AppCompatActivity.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val (network, localIp) = getSharedNetworkAndIp(connectivityManager)
+        val (network, localIp, prefixLength) = getSharedNetworkAndIp(connectivityManager)
             ?: throw Exception(
                 "No network connection. Shared Network mode requires both devices to be "
                         + "connected to the same network. Connect to WiFi (or wired Ethernet) "
@@ -409,7 +409,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
         // cellular because the local network has no internet access
         connectivityManager.bindProcessToNetwork(network)
         boundToWifiNetwork = true
-        outputText("Local IP: ${localIp.hostAddress}")
+        outputText("Local IP: ${localIp.hostAddress}/$prefixLength")
 
         // Receiver is TCP server (consistent with hotspot same-platform convention where the
         // receiver hosts). Bind the listener *before* discovery so it's ready when the sender
@@ -424,7 +424,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
 
         val role = if (mode == Mode.Sending) DiscoveryRole.SENDER else DiscoveryRole.RECEIVER
         val discovery =
-            DiscoveryManager(getApplication(), deriveDiscoveryKey(psk), role, localIp, ::outputText)
+            DiscoveryManager(getApplication(), deriveDiscoveryKey(psk), role, localIp, prefixLength, ::outputText)
         discoveryManager = discovery
         if (mode == Mode.Receiving) {
             // The sender discovers us and connects, and it stops announcing as soon as it
@@ -453,11 +453,14 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
     }
 
     // Prefer WiFi, but accept Ethernet (e.g. USB-C adapters) so wired devices work too.
-    private fun getSharedNetworkAndIp(connectivityManager: ConnectivityManager): Pair<Network, Inet4Address>? {
-        var wired: Pair<Network, Inet4Address>? = null
+    // A VPN network inherits its underlying network's transports, so TRANSPORT_WIFI alone
+    // also matches a VPN whose tun address the peer can't reach: require NOT_VPN.
+    private fun getSharedNetworkAndIp(connectivityManager: ConnectivityManager): Triple<Network, Inet4Address, Int>? {
+        var wired: Triple<Network, Inet4Address, Int>? = null
         @Suppress("DEPRECATION")
         for (network in connectivityManager.allNetworks) {
             val capabilities = connectivityManager.getNetworkCapabilities(network) ?: continue
+            if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)) continue
             val isWifi = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
             val isEthernet = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
             if (!isWifi && !isEthernet) continue
@@ -465,8 +468,8 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             for (linkAddress in linkProperties.linkAddresses) {
                 val address = linkAddress.address
                 if (address is Inet4Address && !address.isLoopbackAddress && !address.isLinkLocalAddress) {
-                    if (isWifi) return Pair(network, address)
-                    if (wired == null) wired = Pair(network, address)
+                    if (isWifi) return Triple(network, address, linkAddress.prefixLength)
+                    if (wired == null) wired = Triple(network, address, linkAddress.prefixLength)
                 }
             }
         }
