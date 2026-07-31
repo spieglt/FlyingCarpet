@@ -131,6 +131,8 @@ In shared network mode, the receiving device displays a password: enter it on th
 
 TROUBLESHOOTING
 
+Disable any VPN on both devices.
+
 Android devices must be kept awake with Flying Carpet in the foreground for the duration of the transfer, or the WiFi connection may drop.
 
 If using Bluetooth fails, try manually unpairing the devices from one another and starting a new transfer.

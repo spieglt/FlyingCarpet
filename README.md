@@ -65,6 +65,8 @@ That builds the Windows and Linux desktop app. The Android and Apple apps are se
 
 + Disables your wireless internet connection while in use. (Does not apply in shared network mode, or to Windows or Android when hosting the hotspot.)
 
++ VPN should be disabled on both devices.
+
 + macOS sometimes switches back to a wireless network with internet connectivity during particularly long transfers.
 
 + The Android version requires at least Android 10/API level 29. The Android version does not work on some Xiaomi, MIUI, or HarmonyOS devices, and possibly other Android-like OSes. I don't own these devices and so can't test, but it seems like this is due to lack of support for the [LocalOnlyHotspot](https://developer.android.com/develop/connectivity/wifi/localonlyhotspot) API. It has been confirmed to work on at least one Xiaomi phone.

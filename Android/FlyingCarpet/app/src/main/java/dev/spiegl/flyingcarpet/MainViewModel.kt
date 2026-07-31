@@ -316,6 +316,7 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             Log.i("Flying Carpet", "connectToPeer() replayed after hotspot start; ignoring")
             return
         }
+        warnIfVpnActive()
         ssid = ""
         password = ""
         if (connectionMode == ConnectionMode.SharedNetwork) {
@@ -449,6 +450,28 @@ class MainViewModel(private val application: Application) : AndroidViewModel(app
             val peer = discovery.discoverPeer() ?: throw Exception("Discovery cancelled.")
             discoveryManager = null
             peerIP = peer
+        }
+    }
+
+    // Checked for both modes, not just shared network: a VPN captures the local traffic
+    // either way, and lockdown ("Block connections without VPN") is suspected of breaking
+    // hotspot mode too, since a hotspot gives the VPN client no route to its server and
+    // lockdown then drops everything, LAN included (#138, unconfirmed). Warn rather than
+    // refuse — a split tunnel that excludes the local network is fine — because the symptom
+    // otherwise is a silent wait until the connect attempts time out (#124).
+    private fun warnIfVpnActive() {
+        val connectivityManager = application
+            .getSystemService(AppCompatActivity.CONNECTIVITY_SERVICE) as ConnectivityManager
+        @Suppress("DEPRECATION")
+        val vpnActive = connectivityManager.allNetworks.any { network ->
+            connectivityManager.getNetworkCapabilities(network)
+                ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+        }
+        if (vpnActive) {
+            outputText(
+                "A VPN is active on this device. Flying Carpet needs direct access to the "
+                    + "local network, so if the transfer doesn't connect, turn the VPN off and try again."
+            )
         }
     }
 

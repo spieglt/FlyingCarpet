@@ -685,6 +685,8 @@ If prompted to join a WiFi network or modify WiFi settings, say Allow. On Window
 
 TROUBLESHOOTING
 
+Disable any VPN on both devices.
+
 If using Bluetooth fails, try manually unpairing the devices from one another and starting a new transfer.
 
 If sending from macOS to Linux, you must first initiate pairing from the macOS System Settings > Bluetooth menu. Otherwise, disable Bluetooth on both sides and enter the password manually when prompted.
