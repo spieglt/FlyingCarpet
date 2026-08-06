@@ -453,18 +453,20 @@ class MainActivity : AppCompatActivity() {
         // sending folder checkbox
         val sendFolderCheckBox = findViewById<CheckBox>(id.sendFolderCheckBox)
 
-        // send button
-        val sendButton = findViewById<Button>(id.sendButton)
-        sendButton.setOnClickListener {
-            startButton.text = getString(R.string.selectFiles)
-            sendFolderCheckBox.visibility = View.VISIBLE
-        }
-
-        // receive button
-        val receiveButton = findViewById<Button>(id.receiveButton)
-        receiveButton.setOnClickListener {
-            startButton.text = getString(R.string.selectFolder)
-            sendFolderCheckBox.visibility = View.GONE
+        // send/receive. A checked listener rather than a click listener on each button:
+        // onRestoreInstanceState reselects the mode with modeGroup.check(), which fires this
+        // but not a click, so after a rotation the label stayed at the layout's "Select Files"
+        // while Receive was checked.
+        val modeGroup = findViewById<MaterialButtonToggleGroup>(id.modeGroup)
+        modeGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            if (checkedId == id.sendButton) {
+                startButton.text = getString(R.string.selectFiles)
+                sendFolderCheckBox.visibility = View.VISIBLE
+            } else {
+                startButton.text = getString(R.string.selectFolder)
+                sendFolderCheckBox.visibility = View.GONE
+            }
         }
 
         // about button
@@ -828,7 +830,15 @@ class MainActivity : AppCompatActivity() {
             // initializeBluetooth() if granted. keep the switch enabled so the user
             // can re-trigger the request by tapping it after a denial (#101).
         } else {
-            viewModel.outputText("Device can't use Bluetooth")
+            // Bluetooth merely being switched off arrives here by the same route as a device
+            // with no BLE support — openGattServer() returns null either way — and "can't use"
+            // reads as a hardware verdict, so name which one it is.
+            val adapter = viewModel.bluetooth.bluetoothManager.adapter
+            if (adapter != null && !adapter.isEnabled) {
+                viewModel.outputText("Bluetooth is turned off. Turn it on and restart Flying Carpet to use it.")
+            } else {
+                viewModel.outputText("Device can't use Bluetooth")
+            }
             bluetoothSwitch.isChecked = false
             setBluetoothSwitchEnabled(false)
         }
