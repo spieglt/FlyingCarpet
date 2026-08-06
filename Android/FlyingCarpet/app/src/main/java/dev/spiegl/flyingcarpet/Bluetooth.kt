@@ -31,6 +31,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -108,8 +109,17 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         // the leftover pre-bond client received iOS's teardown Service Changed right after
         // this method had cleared exchangeComplete, re-discovered, found the service gone,
         // and turned the Bluetooth switch off via bluetoothFailed().
-        if (this::bluetoothLeScanner.isInitialized) {
-            bluetoothLeScanner.stopScan(leScanCallback)
+        // Stop on the stored scanner, not a freshly fetched one: stopScan() matches the callback
+        // against the instance that started the scan. Guard on adapter state instead, because
+        // unlike stopAdvertising() below, stopScan() throws IllegalStateException("BT Adapter is
+        // not turned ON") when Bluetooth has been switched off since the scan started; the catch
+        // covers it going off between the check and the call.
+        if (this::bluetoothLeScanner.isInitialized && bluetoothManager.adapter?.isEnabled == true) {
+            try {
+                bluetoothLeScanner.stopScan(leScanCallback)
+            } catch (e: IllegalStateException) {
+                Log.i("Bluetooth", "Bluetooth turned off during teardown: $e")
+            }
         }
         bluetoothReceiver.closeAllConnections()
         // peripheral. adapter and bluetoothLeAdvertiser are null when Bluetooth is off or
@@ -361,12 +371,32 @@ class Bluetooth(val application: Application, private val delegate: BluetoothDel
         return true
     }
 
+    // The master toggle, not the permission: the app can hold ACCESS_FINE_LOCATION and still
+    // get nothing back from a scan while location is switched off system-wide.
+    private fun locationEnabled(): Boolean {
+        val locationManager =
+            application.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        return locationManager?.isLocationEnabled ?: true
+    }
+
     fun scan() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
             && ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
         {
             outputText("Missing permission BLUETOOTH_SCAN")
             return
+        }
+        // Before API 31 a scan needs the system location toggle on, not just the location
+        // permission, and with it off startScan() reports success and delivers nothing: no
+        // results, no onScanFailed, so the peer is simply never found. API 31+ is exempt via
+        // neverForLocation on BLUETOOTH_SCAN, and telling those users to switch location on
+        // would be asking for something the app doesn't need.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && !locationEnabled()) {
+            outputText(
+                "Location is turned off. This version of Android requires it to find Bluetooth " +
+                    "devices. Turn it on, or turn Bluetooth off here and use the QR code or " +
+                    "password instead."
+            )
         }
         val scanFilter = ScanFilter.Builder()
             .setServiceUuid(ParcelUuid(SERVICE_UUID))
