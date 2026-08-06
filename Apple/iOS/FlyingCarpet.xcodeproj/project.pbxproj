@@ -510,6 +510,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Flying Carpet needs Bluetooth permissions to find and negotiate the WiFi connection with the other device";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Scan the QR code on the other device.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Flying Carpet transfers your files directly to the other device over the local network.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
@@ -546,6 +547,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Flying Carpet needs Bluetooth permissions to find and negotiate the WiFi connection with the other device";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Scan the QR code on the other device.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Flying Carpet transfers your files directly to the other device over the local network.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
