@@ -71,7 +71,11 @@ That builds the Windows and Linux desktop app. The Android and Apple apps are se
 
 + The Android version requires at least Android 10/API level 29. The Android version does not work on some Xiaomi, MIUI, or HarmonyOS devices, and possibly other Android-like OSes. I don't own these devices and so can't test, but it seems like this is due to lack of support for the [LocalOnlyHotspot](https://developer.android.com/develop/connectivity/wifi/localonlyhotspot) API. It has been confirmed to work on at least one Xiaomi phone.
 
-+ Requires Windows 10 or later.
++ Android requires location permission to host WiFi hotspots and scan for Bluetooth devices. Camera access is required to scan QR codes. No location or camera data is collected.
+
++ On iOS, Flying Carpet asks for camera access to scan QR codes, Bluetooth to exchange WiFi details in hotspot mode, and local network access.
+
++ Requires Windows 10 or later. The first run adds inbound Windows Firewall rules for TCP and UDP port 3290, which requires a UAC prompt.
 
 + The Linux version was developed and tested on Linux Mint. I mainly intend for it to run on Debian-based distributions. I will try to help troubleshoot others if I can, but I may not be able to as I don't have access to spare machines. There has been at least one [issue](https://github.com/spieglt/FlyingCarpet/issues/64) running on Fedora, possibly related to SELinux but I don't really know.
 
