@@ -16,6 +16,8 @@ Or search the App Store for "Flying Carpet File Transfer".
 
 ### Linux, macOS, and Windows versions are available on the [releases](https://github.com/spieglt/FlyingCarpet/releases/latest) page. Installers and standalone executable versions available.
 
+On Windows, you can also run `winget install spieglt.FlyingCarpet` in PowerShell.
+
 # Flying Carpet
 
 Send and receive files between Android, iOS, Linux, macOS, and Windows: either over ad hoc WiFi with one device acting as hotspot, or over a network shared by both devices. No internet or cell connection required, just two devices with WiFi or ethernet (and optionally Bluetooth) chips (in close range if using hotspot mode).
