@@ -1,20 +1,21 @@
 name: Linux Release
 
-# Builds the .AppImage and .deb on Ubuntu 22.04 and attaches them to the GitHub release for
-# the given tag.
+# Builds the .AppImage, .deb and .rpm on Ubuntu 22.04 and attaches them to the GitHub
+# release for the given tag.
 #
 # Why 22.04: an AppImage bundles the build machine's GTK/WebKitGTK/etc. but uses the
 # running system's glibc, so everything in it must be built against the oldest glibc it
 # should run on. 22.04 (glibc 2.35) is the oldest supported Ubuntu LTS, the oldest with
 # webkit2gtk-4.1 (Tauri v2), and what the AppImage catalog tests on. v10.0.5, built on
-# Mint 22 / Ubuntu 24.04, required glibc 2.39 and wouldn't start there.
+# Mint 22 / Ubuntu 24.04, required glibc 2.39 and wouldn't start there. The .deb and .rpm
+# don't bundle libraries, but their binary is the same one, with the same glibc floor.
 #
 # It runs in an ubuntu:22.04 container rather than on GitHub's ubuntu-22.04 runner image,
 # so it keeps working after that image is retired.
 #
 # If the tag exists, that commit is built. Otherwise the commit this was run from is built
-# and the release creates the tag there. If the release already exists, the new AppImage
-# and .deb replace its same-named assets; otherwise a new release is created.
+# and the release creates the tag there. If the release already exists, the new files
+# replace its same-named assets; otherwise a new release is created.
 
 on:
   workflow_dispatch:
@@ -94,7 +95,7 @@ jobs:
 
       - name: Build
         working-directory: Flying Carpet
-        run: cargo tauri build --bundles deb,appimage
+        run: cargo tauri build --bundles deb,rpm,appimage
 
       # Guards the reason this workflow exists, in case the container image is ever bumped.
       - name: Check glibc requirement
@@ -114,6 +115,7 @@ jobs:
           path: |
             target/release/bundle/appimage/*.AppImage
             target/release/bundle/deb/*.deb
+            target/release/bundle/rpm/*.rpm
           if-no-files-found: error
 
   release:
@@ -136,9 +138,9 @@ jobs:
 
       - name: Create or update release
         run: |
-          files=(dist/appimage/*.AppImage dist/deb/*.deb)
+          files=(dist/appimage/*.AppImage dist/deb/*.deb dist/rpm/*.rpm)
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG exists; replacing its AppImage and .deb"
+            echo "Release $TAG exists; replacing its AppImage, .deb and .rpm"
             gh release upload "$TAG" "${files[@]}" --clobber
           else
             draft=()

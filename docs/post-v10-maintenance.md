@@ -328,7 +328,7 @@ the workflow has to reference — so the workflow cannot be finished before acce
   that only fires on a version tag. Confirm the exact caching stance against the assigned
   policy.
 - **The only other workflow is `linux-release.yml`** (manually triggered, builds the Linux
-  `.AppImage` and `.deb`), so nothing existing depends on this one.
+  `.AppImage`, `.deb` and `.rpm`), so nothing existing depends on this one.
 
 ### The Tauri wrinkle — decide this deliberately
 

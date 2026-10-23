@@ -32,7 +32,7 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 
 ## Use:
 
-**Linux:** Download the `.AppImage` file from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page for a standalone version, or if you're on a Debian-based distribution, download the `.deb` file and install it with `dpkg`. Both need Ubuntu 22.04 or newer, or another distribution with glibc 2.35 or later.
+**Linux:** Download the `.AppImage` file from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page for a standalone version, or if you're on a Debian-based distribution, download the `.deb` file and install it with `dpkg`. On Fedora or another RPM-based distribution, use the `.rpm`. All three need Ubuntu 22.04 or newer, or another distribution with glibc 2.35 or later.
 
 **macOS:** Download the `.zip` file from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page. Double-click to unzip it and drag the `.app` bundle inside to your Applications folder. Or if you use Homebrew, run `brew install flying-carpet`.
 
@@ -55,7 +55,7 @@ sudo apt install build-essential curl wget file pkg-config libwebkit2gtk-4.1-dev
 
 + Run `cargo tauri dev` to run a development version or `cargo tauri build` to create release artifacts.
 
-+ The released Linux `.AppImage` and `.deb` are built by the manually triggered [Linux Release](.github/workflows/linux-release.yml) GitHub Actions workflow, in an Ubuntu 22.04 container. They use the system's glibc, so a build made on a newer distribution won't start on older ones.
++ The released Linux `.AppImage`, `.deb` and `.rpm` are built by the manually triggered [Linux Release](.github/workflows/linux-release.yml) GitHub Actions workflow, in an Ubuntu 22.04 container. They use the system's glibc, so a build made on a newer distribution won't start on older ones.
 
 That builds the Windows and Linux desktop app. The Android and Apple apps are separate builds from the same repo:
 
