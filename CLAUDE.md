@@ -33,6 +33,7 @@ Rust is a Cargo **workspace** (`core` + `Flying Carpet/src-tauri`):
 
 - `cargo test` — run all Rust tests (includes the Noise/discovery known-answer vectors in `core/src/noise.rs` and `core/src/discovery.rs`). `cargo build` to compile.
 - Desktop app: `cargo tauri dev` (run) / `cargo tauri build` (release). Needs the Tauri CLI and the Linux deps listed in `README.md`.
+- **Linux release binaries come from `.github/workflows/linux-release.yml`** (manually triggered, takes a version tag), which builds the `.AppImage` + `.deb` in an `ubuntu:22.04` container and attaches them to that tag's release. Don't ship a Linux build made on a newer distro: the AppImage uses the host system's glibc, and v10.0.5, built on Mint 22, required glibc 2.39 and failed the AppImage catalog test.
 - Android: from `Android/FlyingCarpet/`, `./gradlew assembleDebug` / `./gradlew test`. **Set `JAVA_HOME` to the Android Studio JBR** (the bundled JDK) or Gradle fails.
 - Apple: **macOS only**, and outside the Cargo workspace — `cargo build` never touches it. From `Apple/`, `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project <iOS|macOS>/FlyingCarpet.xcodeproj -scheme "FlyingCarpet" build`. `DEVELOPMENT_TEAM` is blank in both projects, so signing fails until you set your team in Xcode or pass `DEVELOPMENT_TEAM=YOURTEAMID`. Details in `Apple/CLAUDE.md`.
 

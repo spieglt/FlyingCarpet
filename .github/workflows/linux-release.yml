@@ -1,0 +1,148 @@
+name: Linux Release
+
+# Builds the .AppImage and .deb on Ubuntu 22.04 and attaches them to the GitHub release for
+# the given tag.
+#
+# Why 22.04: an AppImage bundles the build machine's GTK/WebKitGTK/etc. but uses the
+# running system's glibc, so everything in it must be built against the oldest glibc it
+# should run on. 22.04 (glibc 2.35) is the oldest supported Ubuntu LTS, the oldest with
+# webkit2gtk-4.1 (Tauri v2), and what the AppImage catalog tests on. v10.0.5, built on
+# Mint 22 / Ubuntu 24.04, required glibc 2.39 and wouldn't start there.
+#
+# It runs in an ubuntu:22.04 container rather than on GitHub's ubuntu-22.04 runner image,
+# so it keeps working after that image is retired.
+#
+# If the tag exists, that commit is built. Otherwise the commit this was run from is built
+# and the release creates the tag there. If the release already exists, the new AppImage
+# and .deb replace its same-named assets; otherwise a new release is created.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag, e.g. v10.0.6 (must match the version in tauri.conf.json)'
+        required: true
+        type: string
+      draft:
+        description: 'Create the release as a draft (no effect if the release already exists)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ubuntu:22.04
+    env:
+      TAG: ${{ inputs.tag }}
+      DEBIAN_FRONTEND: noninteractive
+      # No FUSE in a container, so linuxdeploy (itself an AppImage) has to extract itself.
+      APPIMAGE_EXTRACT_AND_RUN: 1
+    outputs:
+      sha: ${{ steps.ref.outputs.sha }}
+      version: ${{ steps.ref.outputs.version }}
+    steps:
+      - name: Validate tag
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag must look like v10.0.6, got '$TAG'"
+            exit 1
+          fi
+
+      # Installed before checkout so it can clone with git (needed for the tag lookup).
+      # webkit2gtk-4.1 must come from jammy-updates: the release pocket's 2.36 is older
+      # than the 2.40 that wry requires.
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y build-essential ca-certificates curl wget file git jq pkg-config \
+            libwebkit2gtk-4.1-dev libdbus-1-dev librsvg2-dev libglib2.0-bin
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve commit and check version
+        id: ref
+        run: |
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            git checkout --detach "refs/tags/$TAG"
+            echo "Tag $TAG exists; building it"
+          else
+            echo "Tag $TAG doesn't exist yet; building $GITHUB_SHA, where the release will create it"
+          fi
+          version=$(jq -r .version "Flying Carpet/src-tauri/tauri.conf.json")
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::tauri.conf.json is at version $version, which doesn't match $TAG"
+            exit 1
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # 2.11.4 is the first CLI whose AppImages include a .DirIcon, which the AppImage
+      # catalog requires.
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.11.4" --locked
+
+      - name: Build
+        working-directory: Flying Carpet
+        run: cargo tauri build --bundles deb,appimage
+
+      # Guards the reason this workflow exists, in case the container image is ever bumped.
+      - name: Check glibc requirement
+        run: |
+          appdir=target/release/bundle/appimage/FlyingCarpet.AppDir
+          newest=$( { find "$appdir" -type f -exec objdump -T {} + 2>/dev/null || true; } \
+            | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sed 's/GLIBC_//' | sort -Vu | tail -1)
+          echo "Newest glibc version required: $newest"
+          if [ "$(printf '%s\n' "$newest" 2.35 | sort -V | tail -1)" != 2.35 ]; then
+            echo "::error::The AppImage requires glibc $newest; it must run on Ubuntu 22.04's 2.35"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-bundles
+          path: |
+            target/release/bundle/appimage/*.AppImage
+            target/release/bundle/deb/*.deb
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ inputs.tag }}
+      DRAFT: ${{ inputs.draft }}
+      SHA: ${{ needs.build.outputs.sha }}
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-bundles
+          path: dist
+
+      - name: Create or update release
+        run: |
+          files=(dist/appimage/*.AppImage dist/deb/*.deb)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists; replacing its AppImage and .deb"
+            gh release upload "$TAG" "${files[@]}" --clobber
+          else
+            draft=()
+            [ "$DRAFT" = true ] && draft=(--draft)
+            gh release create "$TAG" "${files[@]}" --target "$SHA" \
+              --title "Flying Carpet $VERSION" --notes "Linux only." "${draft[@]}"
+          fi

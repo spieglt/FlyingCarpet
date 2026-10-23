@@ -32,7 +32,7 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 
 ## Use:
 
-**Linux:** Download the `.AppImage` file from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page for a standalone version, or if you're on a Debian-based distribution, download the `.deb` file and install it with `dpkg`.
+**Linux:** Download the `.AppImage` file from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page for a standalone version, or if you're on a Debian-based distribution, download the `.deb` file and install it with `dpkg`. Both need Ubuntu 22.04 or newer, or another distribution with glibc 2.35 or later.
 
 **macOS:** Download the `.zip` file from the [releases](https://github.com/spieglt/FlyingCarpet/releases) page. Double-click to unzip it and drag the `.app` bundle inside to your Applications folder. Or if you use Homebrew, run `brew install flying-carpet`.
 
@@ -48,12 +48,14 @@ Don't have a flash drive? Don't have access to a wireless network? Need to move 
 
 + Run `cargo install tauri-cli` to install Tauri.
 
-+ For Linux, install dependencies. Ubuntu 20 example:
++ For Linux, install dependencies. Ubuntu 22.04 or newer (Tauri v2 needs `webkit2gtk-4.1`, which Ubuntu 20.04 doesn't have):
 ```
-sudo apt install libsoup2.4* libjavascriptcoregtk* libgdk-pixbuf2.0* librust-pango-sys-dev libgdk3.0* librust-atk-dev librust-atk-sys-dev librust-gdk* libwebkit2gtk* librsvg2-dev
+sudo apt install build-essential curl wget file pkg-config libwebkit2gtk-4.1-dev libdbus-1-dev librsvg2-dev
 ```
 
 + Run `cargo tauri dev` to run a development version or `cargo tauri build` to create release artifacts.
+
++ The released Linux `.AppImage` and `.deb` are built by the manually triggered [Linux Release](.github/workflows/linux-release.yml) GitHub Actions workflow, in an Ubuntu 22.04 container. They use the system's glibc, so a build made on a newer distribution won't start on older ones.
 
 That builds the Windows and Linux desktop app. The Android and Apple apps are separate builds from the same repo:
 
