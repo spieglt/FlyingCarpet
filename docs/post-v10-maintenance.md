@@ -327,8 +327,8 @@ the workflow has to reference — so the workflow cannot be finished before acce
   `cargo tauri build` on `windows-latest` runs ~20 minutes, which is acceptable for something
   that only fires on a version tag. Confirm the exact caching stance against the assigned
   policy.
-- **This repo has no CI at all** — `.github/` holds only `FUNDING.yml` — so this is the first
-  workflow, and nothing existing depends on it.
+- **The only other workflow is `linux-release.yml`** (manually triggered, builds the Linux
+  `.AppImage`, `.deb` and `.rpm`), so nothing existing depends on this one.
 
 ### The Tauri wrinkle — decide this deliberately
 
