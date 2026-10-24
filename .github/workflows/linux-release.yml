@@ -93,9 +93,12 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.11.4" --locked
 
+      # cd rather than working-directory: in a container job the runner passes that to
+      # `docker exec` unquoted, so the space splits it ("No such container: Carpet").
       - name: Build
-        working-directory: Flying Carpet
-        run: cargo tauri build --bundles deb,rpm,appimage
+        run: |
+          cd "Flying Carpet"
+          cargo tauri build --bundles deb,rpm,appimage
 
       # Guards the reason this workflow exists, in case the container image is ever bumped.
       - name: Check glibc requirement
