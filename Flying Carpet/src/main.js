@@ -120,7 +120,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // have Enter start/cancel transfer
   document.getElementById('mainContainer').addEventListener("keyup", event => {
-    if (event.key !== "Enter") {
+    if (event.key !== "Enter" || event.target.closest('button, a')) {
       return;
     }
     if (startButton.style.display != 'none' && !startButton.disabled) {
@@ -210,6 +210,34 @@ function output(msg) {
   outputBox.scrollTop = outputBox.scrollHeight;
 }
 
+let openPrompt = (overlay, control) => {
+  let previousFocus = document.activeElement;
+  let mainContainer = document.getElementById('mainContainer');
+  mainContainer.inert = true;
+  overlay.style.display = 'flex';
+  overlay.onkeydown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      document.getElementById('promptCancel').click();
+    } else if (event.key === 'Enter' && event.target === control) {
+      event.preventDefault();
+      document.getElementById('promptOk').click();
+    } else if (event.key === 'Tab') {
+      let controls = [control, document.getElementById('promptCancel'), document.getElementById('promptOk')];
+      let index = controls.indexOf(document.activeElement);
+      event.preventDefault();
+      controls[(index + (event.shiftKey ? 2 : 1)) % controls.length].focus();
+    }
+  };
+  control.focus();
+  return () => {
+    overlay.style.display = 'none';
+    overlay.onkeydown = null;
+    mainContainer.inert = false;
+    previousFocus.focus();
+  };
+}
+
 // in-page replacement for window.prompt(), whose title shows the webview origin.
 // resolves to the entered string, or null if cancelled.
 let showPrompt = (message) => {
@@ -220,25 +248,15 @@ let showPrompt = (message) => {
     let cancelButton = document.getElementById('promptCancel');
     document.getElementById('promptMessage').innerText = message;
     input.value = '';
+    let close = openPrompt(overlay, input);
     let finish = (value) => {
-      overlay.style.display = 'none';
+      close();
       okButton.onclick = null;
       cancelButton.onclick = null;
-      input.onkeydown = null;
       resolve(value);
     };
     okButton.onclick = () => finish(input.value);
     cancelButton.onclick = () => finish(null);
-    input.onkeydown = (event) => {
-      event.stopPropagation();
-      if (event.key === 'Enter') {
-        finish(input.value);
-      } else if (event.key === 'Escape') {
-        finish(null);
-      }
-    };
-    overlay.style.display = 'flex';
-    input.focus();
   });
 }
 
@@ -261,27 +279,17 @@ let showSelect = (message, options) => {
       option.innerText = options[i];
       select.appendChild(option);
     }
+    let close = openPrompt(overlay, select);
     let finish = (value) => {
-      overlay.style.display = 'none';
+      close();
       input.style.display = '';
       select.style.display = 'none';
       okButton.onclick = null;
       cancelButton.onclick = null;
-      select.onkeydown = null;
       resolve(value);
     };
     okButton.onclick = () => finish(parseInt(select.value));
     cancelButton.onclick = () => finish(null);
-    select.onkeydown = (event) => {
-      event.stopPropagation();
-      if (event.key === 'Enter') {
-        finish(parseInt(select.value));
-      } else if (event.key === 'Escape') {
-        finish(null);
-      }
-    };
-    overlay.style.display = 'flex';
-    select.focus();
   });
 }
 
@@ -304,6 +312,7 @@ async function startTransfer(filesSelected) {
     return;
   }
   transferState = 'starting';
+  document.body.dataset.transfer = 'starting';
   try {
     await beginTransfer(filesSelected);
   } finally {
@@ -311,6 +320,7 @@ async function startTransfer(filesSelected) {
     // disableUi(), so hand the UI back
     if (transferState === 'starting') {
       transferState = 'idle';
+      document.body.dataset.transfer = 'idle';
     }
   }
 }
@@ -493,6 +503,7 @@ async function cancelTransfer() {
     return;
   }
   transferState = 'cancelling';
+  document.body.dataset.transfer = 'cancelling';
   // the transfer can take a while to come out of a blocking wifi or bluetooth call, so say so
   // and stop taking clicks rather than letting them pile up
   cancelButton.disabled = true;
@@ -590,6 +601,23 @@ let checkStatus = () => {
     peerBox.style.display = '';
     startButton.disabled = !(selectedMode && selectedPeer);
   }
+  syncSchematic();
+}
+
+let syncSchematic = () => {
+  let data = document.body.dataset;
+  data.mode = selectedMode || 'none';
+  data.link = connectionMode;
+  if (connectionMode === 'shared_network') {
+    data.peer = 'auto';
+    data.pairing = 'password';
+  } else if (usingBluetooth) {
+    data.peer = 'auto';
+    data.pairing = 'ble';
+  } else {
+    data.peer = selectedPeer || 'none';
+    data.pairing = 'manual';
+  }
 }
 
 let needPassword = async () => {
@@ -620,6 +648,7 @@ let needPassword = async () => {
 
 let enableUi = async () => {
   transferState = 'idle';
+  document.body.dataset.transfer = 'idle';
   // show start button
   startButton.style.display = '';
   // hide cancel button
@@ -634,11 +663,12 @@ let enableUi = async () => {
     document.getElementById(radioButtons[i]).disabled = false;
   }
   // replace logo
-  document.getElementById('qrcode').innerHTML = '<img src="assets/icon1024.png" style="width: 150px; height: 150px;">'
+  document.getElementById('qrcode').innerHTML = '<img src="assets/icon1024.png" alt="Flying Carpet">'
 }
 
 let disableUi = async () => {
   transferState = 'running';
+  document.body.dataset.transfer = 'running';
   // hide start button
   startButton.style.display = 'none';
   // show cancel button
