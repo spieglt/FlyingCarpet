@@ -5,102 +5,168 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Flying Carpet</title>
     <script type="module" src="/main.js" defer></script>
-    <!-- <script type="module" src="/deps/bootstrap.bundle.min.js" defer></script> -->
-    <link rel="stylesheet" href="/deps/bootstrap.min.css">
     <link rel="stylesheet" href="style.css" />
   </head>
 
-  <body style="height: 100%;">
-    <div class="verticalContainer" id="mainContainer" style="height: 100%;">
+  <body style="height: 100%;" data-mode="none" data-peer="none" data-link="hotspot" data-pairing="manual" data-transfer="idle">
+    <main class="sheet" id="mainContainer">
 
-      <!-- top bar -->
-      <div class="horizontalContainer" style="flex-grow: 0; margin: 10px;">
-        <div>
-          <h1 style="font-size: 40px; margin-bottom: 0px; padding-bottom: 0px;"><b>Flying Carpet</b></h1>
-          <small style="margin-top: 0px; padding-top: 0px;">Version 10</small>
-          <small style="margin-top: 0px; padding-top: 0px; color: blue; float: right; cursor: pointer;" id="aboutButton">
-            About
-          </small>
+      <header class="masthead">
+        <div class="masthead-main">
+          <h1 class="wordmark">Flying Carpet</h1>
+          <p class="tagline">Encrypted file transfer between two devices over Wi-Fi. No router, no internet.</p>
+          <dl class="title-block">
+            <div class="tb-cell"><dt>Version</dt><dd>10.0.6</dd></div>
+            <div class="tb-cell"><dt>Port</dt><dd>3290</dd></div>
+            <div class="tb-cell"><dt>License</dt><dd>GPL-3.0</dd></div>
+            <div class="tb-cell tb-cell--action"><dt>Manual</dt><dd><button type="button" class="about-link" id="aboutButton">About</button></dd></div>
+          </dl>
         </div>
-        <div id="qrcode" style="width: 150px; height: 150px;">
-          <img src="assets/icon1024.png" style="width: 150px; height: 150px;">
+        <figure class="pairing">
+          <div id="qrcode" class="qr-window">
+            <img src="assets/icon1024.png" alt="Flying Carpet">
+          </div>
+          <figcaption class="mono">
+            <span class="cap-idle">App mark</span>
+            <span class="cap-live">Scan to pair</span>
+          </figcaption>
+        </figure>
+      </header>
+
+      <figure class="link-figure">
+        <svg viewBox="0 0 552 66" role="img" aria-label="Link schematic: this device and the peer device, connected directly over encrypted Wi-Fi on port 3290">
+          <rect class="fig-frame" x="0.5" y="10.5" width="120" height="30"></rect>
+          <text class="fig-text" x="60.5" y="29.5" text-anchor="middle">THIS DEVICE</text>
+          <text class="fig-meta fig-var v-mode-none" x="60.5" y="60" text-anchor="middle">ROLE UNSET</text>
+          <text class="fig-meta fig-var v-mode-send" x="60.5" y="60" text-anchor="middle">SENDER</text>
+          <text class="fig-meta fig-var v-mode-receive" x="60.5" y="60" text-anchor="middle">RECEIVER</text>
+
+          <rect class="fig-frame" x="431.5" y="10.5" width="120" height="30"></rect>
+          <text class="fig-text" x="491.5" y="29.5" text-anchor="middle">PEER DEVICE</text>
+          <text class="fig-meta fig-var v-peer-none" x="491.5" y="60" text-anchor="middle">OS UNSET</text>
+          <text class="fig-meta fig-var v-peer-auto" x="491.5" y="60" text-anchor="middle">AUTO-DETECT</text>
+          <text class="fig-meta fig-var v-peer-android" x="491.5" y="60" text-anchor="middle">ANDROID</text>
+          <text class="fig-meta fig-var v-peer-ios" x="491.5" y="60" text-anchor="middle">IOS</text>
+          <text class="fig-meta fig-var v-peer-linux" x="491.5" y="60" text-anchor="middle">LINUX</text>
+          <text class="fig-meta fig-var v-peer-mac" x="491.5" y="60" text-anchor="middle">MACOS</text>
+          <text class="fig-meta fig-var v-peer-windows" x="491.5" y="60" text-anchor="middle">WINDOWS</text>
+
+          <line class="fig-line" x1="121" y1="25.5" x2="431" y2="25.5"></line>
+          <line class="fig-tick" x1="198.5" y1="22" x2="198.5" y2="29"></line>
+          <line class="fig-tick" x1="276" y1="22" x2="276" y2="29"></line>
+          <line class="fig-tick" x1="353.5" y1="22" x2="353.5" y2="29"></line>
+          <line class="fig-signal" x1="128" y1="25.5" x2="424" y2="25.5"></line>
+          <polygon class="fig-tip fig-var v-dir-send" points="424,21.5 431,25.5 424,29.5"></polygon>
+          <polygon class="fig-tip fig-var v-dir-receive" points="128,21.5 121,25.5 128,29.5"></polygon>
+
+          <text class="fig-text fig-var v-link-hotspot" x="276" y="15" text-anchor="middle">HOTSPOT · AD HOC WI-FI</text>
+          <text class="fig-text fig-var v-link-shared_network" x="276" y="15" text-anchor="middle">SHARED NETWORK · LAN</text>
+          <text class="fig-meta" x="276" y="43" text-anchor="middle">NOISE ENCRYPTED · PORT 3290</text>
+          <text class="fig-meta fig-var v-pairing-ble" x="276" y="60" text-anchor="middle">PAIRING: BLUETOOTH</text>
+          <text class="fig-meta fig-var v-pairing-manual" x="276" y="60" text-anchor="middle">PAIRING: QR CODE OR PASSWORD</text>
+          <text class="fig-meta fig-var v-pairing-password" x="276" y="60" text-anchor="middle">PAIRING: PASSWORD</text>
+        </svg>
+        <figcaption class="mono">Link schematic, drawn from the settings below</figcaption>
+      </figure>
+
+      <section class="console" aria-label="Transfer settings">
+
+        <div class="control-row">
+          <div class="row-label mono">File mode</div>
+          <div class="row-controls">
+            <div class="segmented" id="modeBox" role="group" aria-label="Mode selector">
+              <input class="seg-input" type="radio" name="moderadio" id="sendButton" autocomplete="off" onchange="modeChange('send')">
+              <label class="seg" for="sendButton">Send</label>
+
+              <input class="seg-input" type="radio" name="moderadio" id="receiveButton" autocomplete="off" onchange="modeChange('receive')">
+              <label class="seg" for="receiveButton">Receive</label>
+            </div>
+
+            <label class="check" id="sendFolderDiv" style="display: none;">
+              <input type="checkbox" id="sendFolderCheckbox">
+              <span class="check-box" aria-hidden="true"></span>
+              <span class="control-text">Send Folder</span>
+            </label>
+          </div>
         </div>
-      </div>
-      <div class="horizontalContainer" style="flex-grow: 0; margin: 10px;">
-        <div class="form-check form-switch" style="margin: 10px;">
-          <input class="form-check-input"  style="width: 40px; height: 20px; margin-right: 5px;" type="checkbox" role="switch" id="bluetoothSwitch" onchange="bluetoothChange()">
-          <label class="form-check-label" for="bluetoothSwitch">Use Bluetooth</label>
+
+        <div class="control-row">
+          <div class="row-label mono" id="connectionModeLabel">Connection</div>
+          <div class="row-controls">
+            <div class="segmented" id="connectionModeBox" role="group" aria-label="Connection mode selector">
+              <input class="seg-input" type="radio" name="connectionradio" id="hotspotButton" autocomplete="off" onchange="connectionModeChange('hotspot')" checked>
+              <label class="seg" for="hotspotButton">Hotspot</label>
+
+              <input class="seg-input" type="radio" name="connectionradio" id="sharedNetworkButton" autocomplete="off" onchange="connectionModeChange('shared_network')">
+              <label class="seg" for="sharedNetworkButton">Shared Network</label>
+            </div>
+          </div>
         </div>
-        <div class="form-check" style="margin: 10px; float: right; display: none" id="sendFolderDiv">
-          <input class="form-check-input" type="checkbox" value="" id="sendFolderCheckbox">
-          <label class="form-check-label" for="sendFolderCheckbox">Send Folder</label>
+
+        <div class="control-row">
+          <div class="row-label mono">Pairing</div>
+          <div class="row-controls">
+            <label class="switch">
+              <input type="checkbox" role="switch" id="bluetoothSwitch" onchange="bluetoothChange()">
+              <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+              <span class="control-text">Use Bluetooth</span>
+            </label>
+          </div>
         </div>
+
+        <div class="control-row" id="peerLabel">
+          <div class="row-label mono">Peer system</div>
+          <div class="row-controls">
+            <div class="segmented segmented--fill" id="peerBox" role="group" aria-label="Peer selector">
+              <input class="seg-input" type="radio" name="peerradio" id="androidButton" autocomplete="off" onchange="peerChange('android')">
+              <label class="seg" for="androidButton">Android</label>
+
+              <input class="seg-input" type="radio" name="peerradio" id="iosButton" autocomplete="off" onchange="peerChange('ios')">
+              <label class="seg" for="iosButton">iOS</label>
+
+              <input class="seg-input" type="radio" name="peerradio" id="linuxButton" autocomplete="off" onchange="peerChange('linux')">
+              <label class="seg" for="linuxButton">Linux</label>
+
+              <input class="seg-input" type="radio" name="peerradio" id="macButton" autocomplete="off" onchange="peerChange('mac')">
+              <label class="seg" for="macButton">macOS</label>
+
+              <input class="seg-input" type="radio" name="peerradio" id="windowsButton" autocomplete="off" onchange="peerChange('windows')">
+              <label class="seg" for="windowsButton">Windows</label>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <div class="action-bar">
+        <button type="button" id="startButton" class="action action--primary" onclick="startTransfer(false)" disabled>Select Files</button>
+        <button type="button" id="cancelButton" class="action action--cancel" onclick="cancelTransfer()" style="display: none;">Cancel Transfer</button>
       </div>
 
-      <!-- mode box -->
-      <label style="margin-left: 10px">Select File Mode</label>
-      <div class="btn-group" role="group" aria-label="Mode selector" id="modeBox" style="margin: 10px; margin-top: 0px;">
-        <input type="radio" class="btn-check" name="moderadio" id="sendButton" autocomplete="off" onchange="modeChange('send')">
-        <label class="btn btn-outline-primary" for="sendButton">Send</label>
+      <progress id="progressBar" value="0" max="100" style="display: none;"></progress>
 
-        <input type="radio" class="btn-check" name="moderadio" id="receiveButton" autocomplete="off" onchange="modeChange('receive')">
-        <label class="btn btn-outline-primary" for="receiveButton">Receive</label>
-      </div>
+      <section class="log" aria-label="Transmission log">
+        <header class="log-head mono">
+          <span>Transmission log</span>
+          <span class="log-state"></span>
+        </header>
+        <div id="outputBox" aria-live="polite">Welcome to Flying Carpet!<br>Once other options are selected, drag and drop can be used to start a transfer.</div>
+      </section>
 
-      <!-- connection mode box -->
-      <label id="connectionModeLabel" style="margin-left: 10px">Select Connection Mode</label>
-      <div class="btn-group" role="group" aria-label="Connection mode selector" id="connectionModeBox" style="margin: 10px; margin-top: 0px;">
-        <input type="radio" class="btn-check" name="connectionradio" id="hotspotButton" autocomplete="off" onchange="connectionModeChange('hotspot')" checked>
-        <label class="btn btn-outline-primary" for="hotspotButton">Hotspot</label>
-
-        <input type="radio" class="btn-check" name="connectionradio" id="sharedNetworkButton" autocomplete="off" onchange="connectionModeChange('shared_network')">
-        <label class="btn btn-outline-primary" for="sharedNetworkButton">Shared Network</label>
-      </div>
-
-      <!-- peer box -->
-      <label id="peerLabel" style="margin-left: 10px">Select Peer OS</label>
-      <div class="btn-group" role="group" aria-label="Peer selector" id="peerBox" style="margin: 10px; margin-top: 0px;">
-        <input type="radio" class="btn-check" name="peerradio" id="androidButton" autocomplete="off" onchange="peerChange('android')">
-        <label class="btn btn-outline-primary" for="androidButton">Android</label>
-
-        <input type="radio" class="btn-check" name="peerradio" id="iosButton" autocomplete="off" onchange="peerChange('ios')">
-        <label class="btn btn-outline-primary" for="iosButton">iOS</label>
-
-        <input type="radio" class="btn-check" name="peerradio" id="linuxButton" autocomplete="off" onchange="peerChange('linux')">
-        <label class="btn btn-outline-primary" for="linuxButton">Linux</label>
-
-        <input type="radio" class="btn-check" name="peerradio" id="macButton" autocomplete="off" onchange="peerChange('mac')">
-        <label class="btn btn-outline-primary" for="macButton">macOS</label>
-
-        <input type="radio" class="btn-check" name="peerradio" id="windowsButton" autocomplete="off" onchange="peerChange('windows')">
-        <label class="btn btn-outline-primary" for="windowsButton">Windows</label>
-      </div>
-
-      <!-- start/cancel buttons -->
-      <button type="button" id="startButton" class="btn btn-success" onclick="startTransfer(false)" style="margin: 10px; min-height: 25px;" disabled>Select Files</button>
-      <button type="button" id="cancelButton" class="btn btn-danger" onclick="cancelTransfer()" style="display: none; margin: 10px; min-height: 25px;">Cancel Transfer</button>
-
-      <!-- output box -->
-      <div id="outputBox" class="horizontalContainer" style="flex-grow: 9; flex-shrink: 9; overflow-y: auto; padding: 5px; margin-top: 5px;">
-        Welcome to Flying Carpet!<br>Once other options are selected, drag and drop can be used to start a transfer.
-      </div>
-
-      <!-- progress bar -->
-      <progress id="progressBar" value="0" max="100" style="display: none; appearance: none; width: 100%; margin-top: 5px; margin-bottom: 5px; padding-left: 5px; padding-right: 5px; height: 15px; min-height: 15px;"></progress>
-    </div>
+    </main>
 
     <!-- input dialog, used instead of window.prompt() because the webview's native prompt
          shows its origin (e.g. "127.0.0.1:1430 says:") in the title bar.
          kept outside mainContainer so its key events don't reach the Enter-to-start handler. -->
     <div id="promptOverlay">
-      <div id="promptCard">
-        <div id="promptMessage" style="white-space: pre-wrap; margin-bottom: 10px;"></div>
-        <input type="text" id="promptInput" class="form-control" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-bottom: 15px;">
+      <div id="promptCard" role="dialog" aria-modal="true" aria-labelledby="promptMessage">
+        <div id="promptMessage"></div>
+        <input type="text" id="promptInput" class="prompt-field" aria-labelledby="promptMessage" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
         <!-- dropdown variant, used by showSelect() (e.g. the network interface chooser) -->
-        <select id="promptSelect" class="form-select" style="margin-bottom: 15px; display: none;"></select>
-        <div style="display: flex; gap: 10px; justify-content: flex-end;">
-          <button type="button" id="promptCancel" class="btn btn-secondary">Cancel</button>
-          <button type="button" id="promptOk" class="btn btn-success">OK</button>
+        <select id="promptSelect" class="prompt-field" aria-labelledby="promptMessage" style="display: none;"></select>
+        <div class="prompt-actions">
+          <button type="button" id="promptCancel" class="action action--ghost">Cancel</button>
+          <button type="button" id="promptOk" class="action action--primary">OK</button>
         </div>
       </div>
     </div>

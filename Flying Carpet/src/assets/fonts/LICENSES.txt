@@ -1,0 +1,11 @@
+The fonts in this directory are redistributed unmodified from their upstream projects.
+
+NimbusSans-Regular.otf, NimbusSans-Bold.otf
+  URW++ base35 fonts, (c) URW++ Design & Development GmbH.
+  License: GNU AGPL v3 with Font Exception.
+  https://github.com/ArtifexSoftware/urw-base35-fonts
+
+DejaVuSansMono.ttf, DejaVuSansMono-Bold.ttf
+  DejaVu fonts, derived from Bitstream Vera. (c) 2003 Bitstream, Inc.; DejaVu changes are public domain.
+  License: Bitstream Vera Fonts license.
+  https://dejavu-fonts.github.io/License.html
